@@ -1,12 +1,7 @@
 use serde::{Deserialize, Serialize};
 use cdr_encoding_size::CdrEncodingSize;
 
-use rustdds::{
-  dds::traits::Key,
-  dds::data_types::GUID,
-};
-
-use rustdds::dds::data_types::DDSTimestamp as Timestamp;
+use rustdds::*;
 
 /// Analog of DDS GUID in ROS2 builtin datastructures
 #[derive(

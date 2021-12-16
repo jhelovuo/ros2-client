@@ -135,7 +135,7 @@ struct RosParticipantInner {
   node_writer: NoKeyDataWriter<ROSParticipantInfo>,
 
   domain_participant: DomainParticipant,
-  ros_discovery_topic: Topic,
+  #[allow(dead_code)] ros_discovery_topic: Topic,
   ros_discovery_publisher: Publisher,
   ros_discovery_subscriber: Subscriber,
 
@@ -342,7 +342,7 @@ pub struct RosNode {
 
   // builtin writers and readers
   rosout_writer: Option<NoKeyDataWriter<Log>>,
-  rosout_reader: Option<NoKeyDataReader<Log>>,
+  #[allow(dead_code)] rosout_reader: Option<NoKeyDataReader<Log>>,
   parameter_events_writer: NoKeyDataWriter<ParameterEvents>,
 }
 
