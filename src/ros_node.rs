@@ -8,23 +8,8 @@ use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
 
 
-use rustdds::{
-  dds::{
-    data_types::{GUID, DiscoveredTopicData},
-    No_Key_DataReader as NoKeyDataReader,
-    No_Key_DataWriter as NoKeyDataWriter,
-    Publisher, Subscriber,
-    qos::{QosPolicies,},
-    Topic, TopicKind,
-    traits::{ 
-      Key, Keyed,
-      serde_adapters::{no_key, with_key},
-      RTPSEntity,
-    },
-    error::{Error},
-    DomainParticipant,
-  },
-};
+use rustdds::*;
+
 use crate::{
   builtin_datatypes::{Gid, Log, NodeInfo, ParameterEvents, ROSParticipantInfo},
   builtin_topics,
@@ -44,13 +29,13 @@ pub struct RosParticipant {
 }
 
 impl RosParticipant {
-  pub fn new() -> Result<RosParticipant, Error> {
+  pub fn new() -> Result<RosParticipant, dds::Error> {
     Self::from_domain_participant(DomainParticipant::new(0)?)
   }
 
   pub fn from_domain_participant(
     domain_participant: DomainParticipant,
-  ) -> Result<RosParticipant, Error> {
+  ) -> Result<RosParticipant, dds::Error> {
     let i = RosParticipantInner::from_domain_participant(domain_participant)?;
     Ok(RosParticipant {
       inner: Arc::new(Mutex::new(i)),
@@ -62,7 +47,7 @@ impl RosParticipant {
     name: &str,
     namespace: &str,
     options: NodeOptions,
-  ) -> Result<RosNode, Error> {
+  ) -> Result<RosNode, dds::Error> {
     RosNode::new(name, namespace, options, self.clone())
   }
   pub fn handle_node_read(&mut self) -> Vec<ROSParticipantInfo> {
@@ -77,7 +62,7 @@ impl RosParticipant {
     self.inner.lock().unwrap().domain_participant.domain_id()
   }
 
-  pub fn discovered_topics(&self) -> Vec<DiscoveredTopicData> {
+  pub fn discovered_topics(&self) -> Vec<dds::DiscoveredTopicData> {
     self.domain_participant().discovered_topics()
   }
 
@@ -131,8 +116,8 @@ impl RosParticipant {
 struct RosParticipantInner {
   nodes: HashMap<String, NodeInfo>,
   external_nodes: HashMap<Gid, Vec<NodeInfo>>,
-  node_reader: NoKeyDataReader<ROSParticipantInfo>,
-  node_writer: NoKeyDataWriter<ROSParticipantInfo>,
+  node_reader: no_key::DataReaderCdr<ROSParticipantInfo>,
+  node_writer: no_key::DataWriterCdr<ROSParticipantInfo>,
 
   domain_participant: DomainParticipant,
   #[allow(dead_code)] ros_discovery_topic: Topic,
@@ -147,7 +132,7 @@ impl RosParticipantInner {
   // "new"
   pub fn from_domain_participant(
     domain_participant: DomainParticipant,
-  ) -> Result<RosParticipantInner, Error> {
+  ) -> Result<RosParticipantInner, dds::Error> {
     let ros_discovery_topic = domain_participant.create_topic(
       builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
       builtin_topics::ros_discovery::TYPE_NAME.to_string(),
@@ -341,9 +326,9 @@ pub struct RosNode {
   writers: HashSet<GUID>,
 
   // builtin writers and readers
-  rosout_writer: Option<NoKeyDataWriter<Log>>,
-  #[allow(dead_code)] rosout_reader: Option<NoKeyDataReader<Log>>,
-  parameter_events_writer: NoKeyDataWriter<ParameterEvents>,
+  rosout_writer: Option<no_key::DataWriterCdr<Log>>,
+  #[allow(dead_code)] rosout_reader: Option<no_key::DataReaderCdr<Log>>,
+  parameter_events_writer: no_key::DataWriterCdr<ParameterEvents>,
 }
 
 impl RosNode {
@@ -352,7 +337,7 @@ impl RosNode {
     namespace: &str,
     options: NodeOptions,
     ros_participant: RosParticipant,
-  ) -> Result<RosNode, Error> {
+  ) -> Result<RosNode, dds::Error> {
     let paramtopic = ros_participant.get_parameter_events_topic();
     let rosout_topic = ros_participant.get_rosout_topic();
 
@@ -498,9 +483,9 @@ impl RosNode {
     type_name: String,
     qos: &QosPolicies,
     topic_kind: TopicKind,
-  ) -> Result<Topic, Error> {
+  ) -> Result<Topic, dds::Error> {
     if name.is_empty() {
-      return Error::bad_parameter("Topic name must not be empty.");
+      return dds::Error::bad_parameter("Topic name must not be empty.");
     }
     // TODO: Implement the rest of the rules.
 
@@ -530,7 +515,7 @@ impl RosNode {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<RosSubscriber<D, DA>, Error> {
+  ) -> Result<RosSubscriber<D, DA>, dds::Error> {
     let sub = self
       .ros_participant
       .get_ros_discovery_subscriber()
@@ -551,7 +536,7 @@ impl RosNode {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<KeyedRosSubscriber<D, DA>, Error>
+  ) -> Result<KeyedRosSubscriber<D, DA>, dds::Error>
   where
     D: Keyed + DeserializeOwned + 'static,
     D::K: Key,
@@ -576,7 +561,7 @@ impl RosNode {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<RosPublisher<D, SA>, Error> {
+  ) -> Result<RosPublisher<D, SA>, dds::Error> {
     let p = self
       .ros_participant
       .get_ros_discovery_publisher()
@@ -597,7 +582,7 @@ impl RosNode {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<KeyedRosPublisher<D, SA>, Error>
+  ) -> Result<KeyedRosPublisher<D, SA>, dds::Error>
   where
     D: Keyed + Serialize,
     D::K: Key,

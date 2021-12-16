@@ -55,24 +55,24 @@ pub(crate) mod ros_node;
 
 pub use ros_node::*;
 
-pub type RosSubscriber<D, DA> = rustdds::dds::No_Key_DataReader<D, DA>;
 
-pub type KeyedRosSubscriber<D, DA> = rustdds::dds::With_Key_DataReader<D, DA>;
 
-pub type RosPublisher<D, SA> = rustdds::dds::No_Key_DataWriter<D, SA>;
+use rustdds::*;
 
-pub type KeyedRosPublisher<D, SA> = rustdds::dds::With_Key_DataWriter<D, SA>;
+pub type RosSubscriber<D, DA> = no_key::DataReader<D, DA>;
+
+pub type KeyedRosSubscriber<D, DA> = with_key::DataReader<D, DA>;
+
+pub type RosPublisher<D, SA> = no_key::DataWriter<D, SA>;
+
+pub type KeyedRosPublisher<D, SA> = with_key::DataWriter<D, SA>;
 
 // Short-hand notation for CDR serialization
 
-pub type RosSubscriberCdr<D> =
-  rustdds::dds::No_Key_DataReader<D, rustdds::serialization::CDRDeserializerAdapter<D>>;
+pub type RosSubscriberCdr<D> = no_key::DataReaderCdr<D>;
 
-pub type KeyedRosSubscriberCdr<D> =
-  rustdds::dds::With_Key_DataReader<D, rustdds::serialization::CDRDeserializerAdapter<D>>;
+pub type KeyedRosSubscriberCdr<D> =  with_key::DataReaderCdr<D>;
 
-pub type RosPublisherCdr<D> =
-  rustdds::dds::No_Key_DataWriter<D, rustdds::serialization::CDRSerializerAdapter<D>>;
+pub type RosPublisherCdr<D> = no_key::DataWriterCdr<D>;
 
-pub type KeyedRosPublisherCdr<D> =
-  rustdds::dds::With_Key_DataWriter<D, rustdds::serialization::CDRSerializerAdapter<D>>;
+pub type KeyedRosPublisherCdr<D> = with_key::DataWriterCdr<D>;

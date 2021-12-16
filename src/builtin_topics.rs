@@ -1,4 +1,5 @@
 use rustdds::*;
+use rustdds::policy::*;
 
 pub mod ros_discovery {
   use super::*;
