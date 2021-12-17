@@ -12,8 +12,8 @@ use crate::{
   gid::Gid,
   node_entities_info::NodeEntitiesInfo,
   ros_context::RosContext,
+  log::Log,
   parameters::*,
-  builtin_datatypes::{Log,},
   KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
 };
 

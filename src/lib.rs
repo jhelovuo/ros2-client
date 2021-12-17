@@ -47,7 +47,6 @@
 #[macro_use] extern crate lazy_static;
 
 /// Some builtin datatypes needed for ROS2 communication
-pub mod builtin_datatypes;
 /// Some convenience topic infos for ROS2 communication
 pub mod builtin_topics;
 
@@ -56,6 +55,7 @@ pub mod node_entities_info;
 pub mod ros_context;
 pub mod participant_entities_info;
 pub mod parameters;
+pub mod log;
 
 pub(crate) mod ros_node;
 

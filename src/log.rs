@@ -4,7 +4,9 @@ use rustdds::*;
 
 
 
-/// Rosout message structure, received from RosParticipant rosout reader
+/// Rosout message structure, received from RosParticipant
+///
+/// [Log](https://github.com/ros2/rcl_interfaces/blob/master/rcl_interfaces/msg/Log.msg)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Log {
   timestamp: Timestamp,
@@ -17,6 +19,13 @@ pub struct Log {
 }
 
 impl Log {
+  /// ROS2 logging severity level
+  pub const DEBUG:u8 = 10;
+  pub const INFO:u8 = 20;
+  pub const WARN:u8 = 30;
+  pub const ERROR:u8 = 40;
+  pub const FATAL:u8 = 50;
+
   /// Timestamp when rosout message was sent
   pub fn get_timestamp(&self) -> &Timestamp {
     &self.timestamp
