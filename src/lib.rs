@@ -9,7 +9,7 @@
 //! use rustdds::ros2::RosParticipant;
 //! use rustdds::ros2::NodeOptions;
 //! use rustdds::ros2::RosNode;
-//! use rustdds::ros2::builtin_datatypes::NodeInfo;
+//! use rustdds::ros2::builtin_datatypes::NodeEntitiesInfo;
 //! use rustdds::dds::qos::QosPolicies;
 //! use rustdds::serialization::CDRSerializerAdapter;
 //!
@@ -29,14 +29,14 @@
 //! // Creating some topic for RosNode
 //! let some_topic = ros_node.create_ros_topic(
 //!     "some_topic_name",
-//!     "NodeInfo".to_string(),
+//!     "NodeEntitiesInfo".to_string(),
 //!     &QosPolicies::builder().build(),
 //!     TopicKind::NoKey)
 //!   .unwrap();
 //!
 //! // declaring some writer that use non keyed types
 //! let some_writer = ros_node
-//!   .create_ros_nokey_publisher::<NodeInfo, CDRSerializerAdapter<_>>(
+//!   .create_ros_nokey_publisher::<NodeEntitiesInfo, CDRSerializerAdapter<_>>(
 //!     &some_topic, None)
 //!   .unwrap();
 //!
@@ -51,9 +51,11 @@ pub mod builtin_datatypes;
 /// Some convenience topic infos for ROS2 communication
 pub mod builtin_topics;
 
-pub mod gid;
-
-mod ros_context;
+mod gid;
+pub mod node_entities_info;
+pub mod ros_context;
+pub mod participant_entities_info;
+pub mod parameters;
 
 pub(crate) mod ros_node;
 

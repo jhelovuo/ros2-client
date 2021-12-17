@@ -1,20 +1,19 @@
 use std::{
-  collections::{HashMap, HashSet},
-  sync::{Arc, Mutex},
+  collections::{HashSet},
 };
 
-use log::{error, info};
-use mio::Evented;
-use serde::{de::DeserializeOwned, Serialize};
+#[allow(unused_imports)] use log::{error, warn, info, debug, trace};
 
+use serde::{de::DeserializeOwned, Serialize};
 
 use rustdds::*;
 
 use crate::{
   gid::Gid,
+  node_entities_info::NodeEntitiesInfo,
   ros_context::RosContext,
-  builtin_datatypes::{Log, NodeInfo, ParameterEvents, ROSParticipantInfo},
-  builtin_topics,
+  parameters::*,
+  builtin_datatypes::{Log,},
   KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
 };
 
@@ -39,8 +38,9 @@ impl NodeOptions {
 // ----------------------------------------------------------------------------------------------------
 
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
-/// parameter events topics internally. Should be constructed using
-/// [builder](struct.RosNodeBuilder.html).
+/// parameter events topics internally.
+///
+/// These are produced by a [`RosContext`](crate::ros_context::RosContext).
 pub struct RosNode {
   // node info
   name: String,
@@ -56,7 +56,7 @@ pub struct RosNode {
   // builtin writers and readers
   rosout_writer: Option<no_key::DataWriterCdr<Log>>,
   #[allow(dead_code)] rosout_reader: Option<no_key::DataReaderCdr<Log>>,
-  parameter_events_writer: no_key::DataWriterCdr<ParameterEvents>,
+  parameter_events_writer: no_key::DataWriterCdr<ParameterEvent>,
 }
 
 impl RosNode {
@@ -97,8 +97,8 @@ impl RosNode {
   }
 
   // Generates ROS2 node info from added readers and writers.
-  fn generate_node_info(&self) -> NodeInfo {
-    let mut node_info = NodeInfo::new(self.name.clone(), self.namespace.clone());
+  fn generate_node_info(&self) -> NodeEntitiesInfo {
+    let mut node_info = NodeEntitiesInfo::new(self.name.clone(), self.namespace.clone());
 
     node_info.add_writer(Gid::from_guid(self.parameter_events_writer.guid()));
     if let Some(row) = &self.rosout_writer {

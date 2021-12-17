@@ -1,25 +1,23 @@
 use std::{
-  collections::{HashMap, HashSet},
+  collections::{HashMap},
   sync::{Arc, Mutex},
 };
 
-use log::{error, info};
+#[allow(unused_imports)] use log::{error, warn, info, debug, trace};
 use mio::Evented;
-use serde::{de::DeserializeOwned, Serialize};
-
 
 use rustdds::*;
 
 use crate::{
   gid::Gid,
+  node_entities_info::NodeEntitiesInfo,
+  participant_entities_info::ParticipantEntitiesInfo,
   ros_node::{RosNode, NodeOptions, },
-  builtin_datatypes::{Log, NodeInfo, ParameterEvents, ROSParticipantInfo},
   builtin_topics,
-  KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
 };
 
 /// [RosContext] communicates with other 
-/// participants information in ROS2 network. It keeps track of [`NodeInfo`]s.
+/// participants information in ROS2 network. It keeps track of [`NodeEntitiesInfo`]s.
 /// Also acts as a wrapper for a RustDDS instance.
 #[derive(Clone)]
 pub struct RosContext {
@@ -48,7 +46,7 @@ impl RosContext {
   ) -> Result<RosNode, dds::Error> {
     RosNode::new(name, namespace, options, self.clone())
   }
-  pub fn handle_node_read(&mut self) -> Vec<ROSParticipantInfo> {
+  pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
     self.inner.lock().unwrap().handle_node_read()
   }
   /// Clears all nodes and updates our RosContextInfo to ROS2 network
@@ -64,24 +62,24 @@ impl RosContext {
     self.domain_participant().discovered_topics()
   }
 
-  pub fn add_node_info(&mut self, node_info: NodeInfo) {
+  pub fn add_node_info(&mut self, node_info: NodeEntitiesInfo) {
     self.inner.lock().unwrap().add_node_info(node_info);
   }
 
-  pub fn remove_node_info(&mut self, node_info: &NodeInfo) {
+  pub fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
     self.inner.lock().unwrap().remove_node_info(node_info);
   }
 
-  pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeInfo>> {
+  pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
     self.inner.lock().unwrap().external_nodes.clone()
   }
 
-  pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeInfo> {
+  pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeEntitiesInfo> {
     self.inner.lock().unwrap().nodes.clone()
   }
 
   /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ROSParticipantInfo {
+  pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
     self.inner.lock().unwrap().get_ros_participant_info()
   }
 
@@ -112,10 +110,10 @@ impl RosContext {
 }
 
 struct RosContextInner {
-  nodes: HashMap<String, NodeInfo>,
-  external_nodes: HashMap<Gid, Vec<NodeInfo>>,
-  node_reader: no_key::DataReaderCdr<ROSParticipantInfo>,
-  node_writer: no_key::DataWriterCdr<ROSParticipantInfo>,
+  nodes: HashMap<String, NodeEntitiesInfo>,
+  external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
+  node_reader: no_key::DataReaderCdr<ParticipantEntitiesInfo>,
+  node_writer: no_key::DataWriterCdr<ParticipantEntitiesInfo>,
 
   domain_participant: DomainParticipant,
   #[allow(dead_code)] ros_discovery_topic: Topic,
@@ -179,15 +177,15 @@ impl RosContextInner {
   }
 
   /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ROSParticipantInfo {
-    ROSParticipantInfo::new(
+  pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
+    ParticipantEntitiesInfo::new(
       Gid::from_guid(self.domain_participant.guid()),
       self.nodes.iter().map(|(_, p)| p.clone()).collect(),
     )
   }
 
-  // Adds new NodeInfo and updates our RosContextInfo to ROS2 network
-  fn add_node_info(&mut self, mut node_info: NodeInfo) {
+  // Adds new NodeEntitiesInfo and updates our RosContextInfo to ROS2 network
+  fn add_node_info(&mut self, mut node_info: NodeEntitiesInfo) {
     node_info.add_reader(Gid::from_guid(self.node_reader.guid()));
     node_info.add_writer(Gid::from_guid(self.node_writer.guid()));
 
@@ -195,8 +193,8 @@ impl RosContextInner {
     self.broadcast_node_infos();
   }
 
-  /// Removes NodeInfo and updates our RosContextInfo to ROS2 network
-  fn remove_node_info(&mut self, node_info: &NodeInfo) {
+  /// Removes NodeEntitiesInfo and updates our RosContextInfo to ROS2 network
+  fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
     self.nodes.remove(&node_info.get_full_name());
     self.broadcast_node_infos();
   }
@@ -219,8 +217,8 @@ impl RosContextInner {
     }
   }
 
-  /// Fetches all unread ROSParticipantInfos we have received
-  pub fn handle_node_read(&mut self) -> Vec<ROSParticipantInfo> {
+  /// Fetches all unread ParticipantEntitiesInfos we have received
+  pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
     let mut pts = Vec::new();
     while let Ok(Some(sample)) = self.node_reader.take_next_sample() {
       let rpi = sample.value();
@@ -238,10 +236,10 @@ impl RosContextInner {
   }
 
   //rustdds::ros2::ros_node::RosContextInner
-  //external_nodes: HashMap<Gid, Vec<NodeInfo, Global>, RandomState>
+  //external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo, Global>, RandomState>
 
   /*
-  pub fn get_all_discovered_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeInfo>> {
+  pub fn get_all_discovered_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
     //let mut pts = Vec::new();
     self.external_nodes.clone()
   }
