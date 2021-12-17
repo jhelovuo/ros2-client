@@ -12,285 +12,12 @@ use rustdds::*;
 
 use crate::{
   gid::Gid,
+  ros_context::RosContext,
   builtin_datatypes::{Log, NodeInfo, ParameterEvents, ROSParticipantInfo},
   builtin_topics,
   KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
 };
 
-// ----------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------
-
-/// [RosParticipant](struct.RosParticipant.html) sends and receives other
-/// participants information in ROS2 network
-#[derive(Clone)]
-pub struct RosParticipant {
-  inner: Arc<Mutex<RosParticipantInner>>,
-}
-
-impl RosParticipant {
-  pub fn new() -> Result<RosParticipant, dds::Error> {
-    Self::from_domain_participant(DomainParticipant::new(0)?)
-  }
-
-  pub fn from_domain_participant(
-    domain_participant: DomainParticipant,
-  ) -> Result<RosParticipant, dds::Error> {
-    let i = RosParticipantInner::from_domain_participant(domain_participant)?;
-    Ok(RosParticipant {
-      inner: Arc::new(Mutex::new(i)),
-    })
-  }
-  /// Create a new ROS2 node
-  pub fn new_ros_node(
-    &self,
-    name: &str,
-    namespace: &str,
-    options: NodeOptions,
-  ) -> Result<RosNode, dds::Error> {
-    RosNode::new(name, namespace, options, self.clone())
-  }
-  pub fn handle_node_read(&mut self) -> Vec<ROSParticipantInfo> {
-    self.inner.lock().unwrap().handle_node_read()
-  }
-  /// Clears all nodes and updates our RosParticipantInfo to ROS2 network
-  pub fn clear(&mut self) {
-    self.inner.lock().unwrap().clear();
-  }
-
-  pub fn domain_id(&self) -> u16 {
-    self.inner.lock().unwrap().domain_participant.domain_id()
-  }
-
-  pub fn discovered_topics(&self) -> Vec<dds::DiscoveredTopicData> {
-    self.domain_participant().discovered_topics()
-  }
-
-  pub fn add_node_info(&mut self, node_info: NodeInfo) {
-    self.inner.lock().unwrap().add_node_info(node_info);
-  }
-
-  pub fn remove_node_info(&mut self, node_info: &NodeInfo) {
-    self.inner.lock().unwrap().remove_node_info(node_info);
-  }
-
-  pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeInfo>> {
-    self.inner.lock().unwrap().external_nodes.clone()
-  }
-
-  pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeInfo> {
-    self.inner.lock().unwrap().nodes.clone()
-  }
-
-  /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ROSParticipantInfo {
-    self.inner.lock().unwrap().get_ros_participant_info()
-  }
-
-  fn get_parameter_events_topic(&self) -> Topic {
-    self
-      .inner
-      .lock()
-      .unwrap()
-      .ros_parameter_events_topic
-      .clone()
-  }
-
-  fn get_rosout_topic(&self) -> Topic {
-    self.inner.lock().unwrap().ros_rosout_topic.clone()
-  }
-
-  fn get_ros_discovery_publisher(&self) -> Publisher {
-    self.inner.lock().unwrap().ros_discovery_publisher.clone()
-  }
-
-  fn get_ros_discovery_subscriber(&self) -> Subscriber {
-    self.inner.lock().unwrap().ros_discovery_subscriber.clone()
-  }
-
-  fn domain_participant(&self) -> DomainParticipant {
-    self.inner.lock().unwrap().domain_participant.clone()
-  }
-}
-
-struct RosParticipantInner {
-  nodes: HashMap<String, NodeInfo>,
-  external_nodes: HashMap<Gid, Vec<NodeInfo>>,
-  node_reader: no_key::DataReaderCdr<ROSParticipantInfo>,
-  node_writer: no_key::DataWriterCdr<ROSParticipantInfo>,
-
-  domain_participant: DomainParticipant,
-  #[allow(dead_code)] ros_discovery_topic: Topic,
-  ros_discovery_publisher: Publisher,
-  ros_discovery_subscriber: Subscriber,
-
-  ros_parameter_events_topic: Topic,
-  ros_rosout_topic: Topic,
-}
-
-impl RosParticipantInner {
-  // "new"
-  pub fn from_domain_participant(
-    domain_participant: DomainParticipant,
-  ) -> Result<RosParticipantInner, dds::Error> {
-    let ros_discovery_topic = domain_participant.create_topic(
-      builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
-      builtin_topics::ros_discovery::TYPE_NAME.to_string(),
-      &builtin_topics::ros_discovery::QOS,
-      TopicKind::NoKey,
-    )?;
-
-    let ros_discovery_publisher = 
-      domain_participant.create_publisher(&builtin_topics::ros_discovery::QOS)?;
-    let ros_discovery_subscriber =
-      domain_participant.create_subscriber(&builtin_topics::ros_discovery::QOS)?;
-
-    let ros_parameter_events_topic = domain_participant.create_topic(
-      builtin_topics::parameter_events::TOPIC_NAME.to_string(),
-      builtin_topics::parameter_events::TYPE_NAME.to_string(),
-      &builtin_topics::parameter_events::QOS,
-      TopicKind::NoKey,
-    )?;
-
-    let ros_rosout_topic = domain_participant.create_topic(
-      builtin_topics::rosout::TOPIC_NAME.to_string(),
-      builtin_topics::rosout::TYPE_NAME.to_string(),
-      &builtin_topics::rosout::QOS,
-      TopicKind::NoKey,
-    )?;
-
-    let node_reader =
-      ros_discovery_subscriber.create_datareader_no_key(&ros_discovery_topic, None)?;
-
-    let node_writer =
-      ros_discovery_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?;
-
-    Ok(RosParticipantInner {
-      nodes: HashMap::new(),
-      external_nodes: HashMap::new(),
-      node_reader,
-      node_writer,
-
-      domain_participant,
-      ros_discovery_topic,
-      ros_discovery_publisher,
-      ros_discovery_subscriber,
-      ros_parameter_events_topic,
-      ros_rosout_topic,
-    })
-  }
-
-  /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ROSParticipantInfo {
-    ROSParticipantInfo::new(
-      Gid::from_guid(self.domain_participant.guid()),
-      self.nodes.iter().map(|(_, p)| p.clone()).collect(),
-    )
-  }
-
-  // Adds new NodeInfo and updates our RosParticipantInfo to ROS2 network
-  fn add_node_info(&mut self, mut node_info: NodeInfo) {
-    node_info.add_reader(Gid::from_guid(self.node_reader.guid()));
-    node_info.add_writer(Gid::from_guid(self.node_writer.guid()));
-
-    self.nodes.insert(node_info.get_full_name(), node_info);
-    self.broadcast_node_infos();
-  }
-
-  /// Removes NodeInfo and updates our RosParticipantInfo to ROS2 network
-  fn remove_node_info(&mut self, node_info: &NodeInfo) {
-    self.nodes.remove(&node_info.get_full_name());
-    self.broadcast_node_infos();
-  }
-
-  /// Clears all nodes and updates our RosParticipantInfo to ROS2 network
-  pub fn clear(&mut self) {
-    if !self.nodes.is_empty() {
-      self.nodes.clear();
-      self.broadcast_node_infos();
-    }
-  }
-
-  fn broadcast_node_infos(&self) {
-    match self
-      .node_writer
-      .write(self.get_ros_participant_info(), None)
-    {
-      Ok(_) => (),
-      Err(e) => error!("Failed to write into node_writer {:?}", e),
-    }
-  }
-
-  /// Fetches all unread ROSParticipantInfos we have received
-  pub fn handle_node_read(&mut self) -> Vec<ROSParticipantInfo> {
-    let mut pts = Vec::new();
-    while let Ok(Some(sample)) = self.node_reader.take_next_sample() {
-      let rpi = sample.value();
-      match self.external_nodes.get_mut(&rpi.guid()) {
-        Some(rpi2) => {
-          *rpi2 = rpi.nodes().clone();
-        }
-        None => {
-          self.external_nodes.insert(rpi.guid(), rpi.nodes().clone());
-        }
-      };
-      pts.push(rpi.clone());
-    }
-    pts
-  }
-
-  //rustdds::ros2::ros_node::RosParticipantInner
-  //external_nodes: HashMap<Gid, Vec<NodeInfo, Global>, RandomState>
-
-  /*
-  pub fn get_all_discovered_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeInfo>> {
-    //let mut pts = Vec::new();
-    self.external_nodes.clone()
-  }
-  */
-}
-
-impl Evented for RosParticipant {
-  fn register(
-    &self,
-    poll: &mio::Poll,
-    token: mio::Token,
-    interest: mio::Ready,
-    opts: mio::PollOpt,
-  ) -> std::io::Result<()> {
-    poll.register(
-      &self.inner.lock().unwrap().node_reader,
-      token,
-      interest,
-      opts,
-    )
-  }
-
-  fn reregister(
-    &self,
-    poll: &mio::Poll,
-    token: mio::Token,
-    interest: mio::Ready,
-    opts: mio::PollOpt,
-  ) -> std::io::Result<()> {
-    poll.reregister(
-      &self.inner.lock().unwrap().node_reader,
-      token,
-      interest,
-      opts,
-    )
-  }
-
-  fn deregister(&self, poll: &mio::Poll) -> std::io::Result<()> {
-    poll.deregister(&self.inner.lock().unwrap().node_reader)
-  }
-}
-
-// ----------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------
 
 /// Configuration of [RosNode](struct.RosNode.html)
 pub struct NodeOptions {
@@ -320,7 +47,7 @@ pub struct RosNode {
   namespace: String,
   options: NodeOptions,
 
-  ros_participant: RosParticipant,
+  ros_context: RosContext,
 
   // dynamic
   readers: HashSet<GUID>,
@@ -333,18 +60,18 @@ pub struct RosNode {
 }
 
 impl RosNode {
-  fn new(
+  pub(crate) fn new(
     name: &str,
     namespace: &str,
     options: NodeOptions,
-    ros_participant: RosParticipant,
+    ros_context: RosContext,
   ) -> Result<RosNode, dds::Error> {
-    let paramtopic = ros_participant.get_parameter_events_topic();
-    let rosout_topic = ros_participant.get_rosout_topic();
+    let paramtopic = ros_context.get_parameter_events_topic();
+    let rosout_topic = ros_context.get_rosout_topic();
 
     let rosout_writer = if options.enable_rosout {
       Some(
-        ros_participant
+        ros_context
           .get_ros_discovery_publisher()
           .create_datawriter_no_key(&rosout_topic, None)?,
       )
@@ -352,7 +79,7 @@ impl RosNode {
       None
     };
 
-    let parameter_events_writer = ros_participant
+    let parameter_events_writer = ros_context
       .get_ros_discovery_publisher()
       .create_datawriter_no_key(&paramtopic, None)?;
 
@@ -360,7 +87,7 @@ impl RosNode {
       name: String::from(name),
       namespace: String::from(namespace),
       options,
-      ros_participant,
+      ros_context,
       readers: HashSet::new(),
       writers: HashSet::new(),
       rosout_writer,
@@ -392,28 +119,28 @@ impl RosNode {
   fn add_reader(&mut self, reader: GUID) {
     self.readers.insert(reader);
     self
-      .ros_participant
+      .ros_context
       .add_node_info(self.generate_node_info());
   }
 
   pub fn remove_reader(&mut self, reader: &GUID) {
     self.readers.remove(reader);
     self
-      .ros_participant
+      .ros_context
       .add_node_info(self.generate_node_info());
   }
 
   fn add_writer(&mut self, writer: GUID) {
     self.writers.insert(writer);
     self
-      .ros_participant
+      .ros_context
       .add_node_info(self.generate_node_info());
   }
 
   pub fn remove_writer(&mut self, writer: &GUID) {
     self.writers.remove(writer);
     self
-      .ros_participant
+      .ros_context
       .add_node_info(self.generate_node_info());
   }
 
@@ -422,7 +149,7 @@ impl RosNode {
     self.readers.clear();
     self.writers.clear();
     self
-      .ros_participant
+      .ros_context
       .add_node_info(self.generate_node_info());
   }
 
@@ -445,7 +172,7 @@ impl RosNode {
   }
 
   pub fn get_domain_id(&self) -> u16 {
-    self.ros_participant.domain_id()
+    self.ros_context.domain_id()
   }
 
   /// Creates ROS2 topic and handles necessary conversions from DDS to ROS2
@@ -495,7 +222,7 @@ impl RosNode {
     oname.push_str(name_stripped);
     info!("Creating topic, DDS name: {}", oname);
     let topic = self
-      .ros_participant
+      .ros_context
       .domain_participant()
       .create_topic(oname, type_name, qos, topic_kind)?;
     info!("Created topic");
@@ -518,7 +245,7 @@ impl RosNode {
     qos: Option<QosPolicies>,
   ) -> Result<RosSubscriber<D, DA>, dds::Error> {
     let sub = self
-      .ros_participant
+      .ros_context
       .get_ros_discovery_subscriber()
       .create_datareader_no_key::<D, DA>(topic, qos)?;
     self.add_reader(sub.guid());
@@ -543,7 +270,7 @@ impl RosNode {
     D::K: Key,
   {
     let sub = self
-      .ros_participant
+      .ros_context
       .get_ros_discovery_subscriber()
       .create_datareader::<D, DA>(topic, qos)?;
     self.add_reader(sub.guid());
@@ -564,7 +291,7 @@ impl RosNode {
     qos: Option<QosPolicies>,
   ) -> Result<RosPublisher<D, SA>, dds::Error> {
     let p = self
-      .ros_participant
+      .ros_context
       .get_ros_discovery_publisher()
       .create_datawriter_no_key(topic, qos)?;
     self.add_writer(p.guid());
@@ -589,7 +316,7 @@ impl RosNode {
     D::K: Key,
   {
     let p = self
-      .ros_participant
+      .ros_context
       .get_ros_discovery_publisher()
       .create_datawriter(topic, qos)?;
     self.add_writer(p.guid());

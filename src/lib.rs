@@ -53,6 +53,8 @@ pub mod builtin_topics;
 
 pub mod gid;
 
+mod ros_context;
+
 pub(crate) mod ros_node;
 
 pub use ros_node::*;
