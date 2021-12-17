@@ -51,6 +51,8 @@ pub mod builtin_datatypes;
 /// Some convenience topic infos for ROS2 communication
 pub mod builtin_topics;
 
+pub mod gid;
+
 pub(crate) mod ros_node;
 
 pub use ros_node::*;

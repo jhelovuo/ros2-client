@@ -1,26 +1,8 @@
 use serde::{Deserialize, Serialize};
-use cdr_encoding_size::CdrEncodingSize;
 
 use rustdds::*;
-/// Analog of DDS GUID in ROS2 builtin datastructures
-#[derive(
-  Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, CdrEncodingSize,
-)]
-pub struct Gid {
-  data: [u8; 24],
-}
 
-impl Gid {
-  pub fn from_guid(guid: GUID) -> Gid {
-    let mut data: [u8; 24] = [0; 24];
-    data[..12].clone_from_slice(&guid.guid_prefix.entity_key);
-    data[12..15].clone_from_slice(&guid.entity_id.entity_key);
-    data[15..16].clone_from_slice(&[u8::from(guid.entity_id.entity_kind)]);
-    Gid { data }
-  }
-}
-
-impl Key for Gid {}
+use crate::gid::Gid;
 
 /// Information about the node in ROS2 network
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

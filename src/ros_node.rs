@@ -11,7 +11,8 @@ use serde::{de::DeserializeOwned, Serialize};
 use rustdds::*;
 
 use crate::{
-  builtin_datatypes::{Gid, Log, NodeInfo, ParameterEvents, ROSParticipantInfo},
+  gid::Gid,
+  builtin_datatypes::{Log, NodeInfo, ParameterEvents, ROSParticipantInfo},
   builtin_topics,
   KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
 };
