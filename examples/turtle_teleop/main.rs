@@ -116,7 +116,7 @@ fn ros2_loop(
       .build()
   };
 
-  let mut ros_context = RosContext::new().unwrap();
+  let mut ros_context = Context::new().unwrap();
 
   let mut ros_node = ros_context
     .new_ros_node(

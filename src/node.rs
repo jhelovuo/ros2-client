@@ -11,14 +11,14 @@ use rustdds::*;
 use crate::{
   gid::Gid,
   node_entities_info::NodeEntitiesInfo,
-  ros_context::RosContext,
+  context::Context,
   log::Log,
   parameters::*,
   KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
 };
 
 
-/// Configuration of [RosNode]
+/// Configuration of [Node]
 /// This is a builder-like struct.
 pub struct NodeOptions {
   #[allow(dead_code)] cli_args: Vec<String>,
@@ -61,14 +61,14 @@ impl NodeOptions {
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
 /// parameter events topics internally.
 ///
-/// These are produced by a [`RosContext`].
-pub struct RosNode {
+/// These are produced by a [`Context`].
+pub struct Node {
   // node info
   name: String,
   namespace: String,
   options: NodeOptions,
 
-  ros_context: RosContext,
+  ros_context: Context,
 
   // dynamic
   readers: HashSet<GUID>,
@@ -80,13 +80,13 @@ pub struct RosNode {
   parameter_events_writer: no_key::DataWriterCdr<ParameterEvent>,
 }
 
-impl RosNode {
+impl Node {
   pub(crate) fn new(
     name: &str,
     namespace: &str,
     options: NodeOptions,
-    ros_context: RosContext,
-  ) -> Result<RosNode, dds::Error> {
+    ros_context: Context,
+  ) -> Result<Node, dds::Error> {
     let paramtopic = ros_context.get_parameter_events_topic();
     let rosout_topic = ros_context.get_rosout_topic();
 
@@ -104,7 +104,7 @@ impl RosNode {
       .get_ros_discovery_publisher()
       .create_datawriter_no_key(&paramtopic, None)?;
 
-    Ok(RosNode {
+    Ok(Node {
       name: String::from(name),
       namespace: String::from(namespace),
       options,

@@ -12,31 +12,31 @@ use crate::{
   gid::Gid,
   node_entities_info::NodeEntitiesInfo,
   participant_entities_info::ParticipantEntitiesInfo,
-  ros_node::{RosNode, NodeOptions, },
+  node::{Node, NodeOptions, },
   builtin_topics,
 };
 
-/// [RosContext] communicates with other 
+/// [Context] communicates with other 
 /// participants information in ROS2 network. It keeps track of [`NodeEntitiesInfo`]s.
 /// Also acts as a wrapper for a RustDDS instance.
 ///
-/// RosContext is shut down by dropping it, and all of its RosNodes.
+/// Context is shut down by dropping it, and all of its RosNodes.
 /// There should be no need for `ok()` or `shutdown()` methods.
 #[derive(Clone)]
-pub struct RosContext {
-  inner: Arc<Mutex<RosContextInner>>,
+pub struct Context {
+  inner: Arc<Mutex<ContextInner>>,
 }
 
-impl RosContext {
-  pub fn new() -> Result<RosContext, dds::Error> {
+impl Context {
+  pub fn new() -> Result<Context, dds::Error> {
     Self::from_domain_participant(DomainParticipant::new(0)?)
   }
 
   pub fn from_domain_participant(
     domain_participant: DomainParticipant,
-  ) -> Result<RosContext, dds::Error> {
-    let i = RosContextInner::from_domain_participant(domain_participant)?;
-    Ok(RosContext {
+  ) -> Result<Context, dds::Error> {
+    let i = ContextInner::from_domain_participant(domain_participant)?;
+    Ok(Context {
       inner: Arc::new(Mutex::new(i)),
     })
   }
@@ -46,13 +46,13 @@ impl RosContext {
     name: &str,
     namespace: &str,
     options: NodeOptions,
-  ) -> Result<RosNode, dds::Error> {
-    RosNode::new(name, namespace, options, self.clone())
+  ) -> Result<Node, dds::Error> {
+    Node::new(name, namespace, options, self.clone())
   }
   pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
     self.inner.lock().unwrap().handle_node_read()
   }
-  /// Clears all nodes and updates our RosContextInfo to ROS2 network
+  /// Clears all nodes and updates our ContextInfo to ROS2 network
   pub fn clear(&mut self) {
     self.inner.lock().unwrap().clear();
   }
@@ -112,7 +112,7 @@ impl RosContext {
   }
 }
 
-struct RosContextInner {
+struct ContextInner {
   nodes: HashMap<String, NodeEntitiesInfo>,
   external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
   node_reader: no_key::DataReaderCdr<ParticipantEntitiesInfo>,
@@ -127,11 +127,11 @@ struct RosContextInner {
   ros_rosout_topic: Topic,
 }
 
-impl RosContextInner {
+impl ContextInner {
   // "new"
   pub fn from_domain_participant(
     domain_participant: DomainParticipant,
-  ) -> Result<RosContextInner, dds::Error> {
+  ) -> Result<ContextInner, dds::Error> {
     let ros_discovery_topic = domain_participant.create_topic(
       builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
       builtin_topics::ros_discovery::TYPE_NAME.to_string(),
@@ -164,7 +164,7 @@ impl RosContextInner {
     let node_writer =
       ros_discovery_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?;
 
-    Ok(RosContextInner {
+    Ok(ContextInner {
       nodes: HashMap::new(),
       external_nodes: HashMap::new(),
       node_reader,
@@ -187,7 +187,7 @@ impl RosContextInner {
     )
   }
 
-  // Adds new NodeEntitiesInfo and updates our RosContextInfo to ROS2 network
+  // Adds new NodeEntitiesInfo and updates our ContextInfo to ROS2 network
   fn add_node_info(&mut self, mut node_info: NodeEntitiesInfo) {
     node_info.add_reader(Gid::from_guid(self.node_reader.guid()));
     node_info.add_writer(Gid::from_guid(self.node_writer.guid()));
@@ -196,13 +196,13 @@ impl RosContextInner {
     self.broadcast_node_infos();
   }
 
-  /// Removes NodeEntitiesInfo and updates our RosContextInfo to ROS2 network
+  /// Removes NodeEntitiesInfo and updates our ContextInfo to ROS2 network
   fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
     self.nodes.remove(&node_info.get_full_name());
     self.broadcast_node_infos();
   }
 
-  /// Clears all nodes and updates our RosContextInfo to ROS2 network
+  /// Clears all nodes and updates our ContextInfo to ROS2 network
   pub fn clear(&mut self) {
     if !self.nodes.is_empty() {
       self.nodes.clear();
@@ -238,7 +238,7 @@ impl RosContextInner {
     pts
   }
 
-  //rustdds::ros2::ros_node::RosContextInner
+  //rustdds::ros2::ros_node::ContextInner
   //external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo, Global>, RandomState>
 
   /*
@@ -249,7 +249,7 @@ impl RosContextInner {
   */
 }
 
-impl Evented for RosContext {
+impl Evented for Context {
   fn register(
     &self,
     poll: &mio::Poll,

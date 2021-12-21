@@ -8,7 +8,7 @@
 //! use rustdds::dds::traits::RTPSEntity;
 //! use rustdds::ros2::RosParticipant;
 //! use rustdds::ros2::NodeOptions;
-//! use rustdds::ros2::RosNode;
+//! use rustdds::ros2::Node;
 //! use rustdds::ros2::builtin_datatypes::NodeEntitiesInfo;
 //! use rustdds::dds::qos::QosPolicies;
 //! use rustdds::serialization::CDRSerializerAdapter;
@@ -26,7 +26,7 @@
 //!   NodeOptions::new(false), // enable rosout?
 //!   ).unwrap();
 //!
-//! // Creating some topic for RosNode
+//! // Creating some topic for Node
 //! let some_topic = ros_node.create_ros_topic(
 //!     "some_topic_name",
 //!     "NodeEntitiesInfo".to_string(),
@@ -52,15 +52,15 @@ pub mod builtin_topics;
 
 mod gid;
 pub mod node_entities_info;
-pub mod ros_context;
+pub mod context;
 pub mod participant_entities_info;
 pub mod parameters;
 pub mod log;
 
-pub(crate) mod ros_node;
+pub(crate) mod node;
 
-pub use ros_node::*;
-pub use ros_context::*;
+pub use node::*;
+pub use context::*;
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {
