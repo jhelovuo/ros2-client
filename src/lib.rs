@@ -56,11 +56,13 @@ pub mod context;
 pub mod participant_entities_info;
 pub mod parameters;
 pub mod log;
+pub mod pubsub;
 
 pub(crate) mod node;
 
 pub use node::*;
 pub use context::*;
+pub use pubsub::*;
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {
