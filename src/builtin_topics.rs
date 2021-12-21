@@ -16,9 +16,9 @@ pub mod ros_discovery {
         .build();
   }
 
-  pub const TOPIC_NAME: &'static str = "ros_discovery_info";
+  pub const TOPIC_NAME: &str = "ros_discovery_info";
 
-  pub const TYPE_NAME: &'static str = "rmw_dds_common::msg::dds_::ParticipantEntitiesInfo_";
+  pub const TYPE_NAME: &str = "rmw_dds_common::msg::dds_::ParticipantEntitiesInfo_";
 }
 
 pub mod parameter_events {
@@ -33,9 +33,9 @@ pub mod parameter_events {
         .build();
   }
 
-  pub const TOPIC_NAME: &'static str = "rt/parameter_events";
+  pub const TOPIC_NAME: &str = "rt/parameter_events";
 
-  pub const TYPE_NAME: &'static str = "rcl_interfaces::msg::dds_::ParameterEvent_";
+  pub const TYPE_NAME: &str = "rcl_interfaces::msg::dds_::ParameterEvent_";
 }
 
 pub mod rosout {
@@ -53,7 +53,7 @@ pub mod rosout {
         .build();
   }
 
-  pub const TOPIC_NAME: &'static str = "rt/rosout";
+  pub const TOPIC_NAME: &str = "rt/rosout";
 
-  pub const TYPE_NAME: &'static str = "rcl_interfaces::msg::dds_::Log_";
+  pub const TYPE_NAME: &str = "rcl_interfaces::msg::dds_::Log_";
 }

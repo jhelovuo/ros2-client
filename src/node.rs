@@ -53,6 +53,11 @@ impl NodeOptions {
   }
 }
 
+impl Default for NodeOptions {
+  fn default() -> Self {
+    Self::new()
+  }
+}
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
@@ -77,7 +82,7 @@ pub struct Node {
   // builtin writers and readers
   rosout_writer: Option<no_key::DataWriterCdr<Log>>,
   #[allow(dead_code)] rosout_reader: Option<no_key::DataReaderCdr<Log>>,
-  parameter_events_writer: no_key::DataWriterCdr<ParameterEvent>,
+  parameter_events_writer: no_key::DataWriterCdr<raw::ParameterEvent>,
 }
 
 impl Node {
