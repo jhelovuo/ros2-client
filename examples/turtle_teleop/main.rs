@@ -1,25 +1,15 @@
-#![deny(clippy::all)]
-
 use std::time::Duration;
 
 use termion::raw::*;
 #[allow(unused_imports)]
-use log::{debug, error, info, warn};
+use ::log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
-use rustdds::{
-  dds::{
-    data_types::DDSDuration,
-    qos::{
-      policy::{Durability, History, Liveliness, Reliability},
-      QosPolicies, QosPolicyBuilder,
-    },
-    TopicKind,
-  },
-  ros2::{NodeOptions, RosParticipant},
-  serialization::{CDRDeserializerAdapter, CDRSerializerAdapter},
-};
+
+use rustdds::*;
+use ros2_client::*;
+use ros2_client::ros2;
 use ui::{RosCommand, UiController};
 
 // modules
@@ -115,24 +105,25 @@ fn ros2_loop(
 
   let qos: QosPolicies = {
     QosPolicyBuilder::new()
-      .durability(Durability::Volatile)
-      .liveliness(Liveliness::Automatic {
-        lease_duration: DDSDuration::DURATION_INFINITE,
+      .durability(policy::Durability::Volatile)
+      .liveliness(policy::Liveliness::Automatic {
+        lease_duration: ros2::Duration::DURATION_INFINITE,
       })
-      .reliability(Reliability::Reliable {
-        max_blocking_time: DDSDuration::from_millis(100),
+      .reliability(policy::Reliability::Reliable {
+        max_blocking_time: ros2::Duration::from_millis(100),
       })
-      .history(History::KeepLast { depth: 10 })
+      .history(policy::History::KeepLast { depth: 10 })
       .build()
   };
 
-  let mut ros_participant = RosParticipant::new().unwrap();
+  let mut ros_context = RosContext::new().unwrap();
 
-  let mut ros_node = ros_participant
+  let mut ros_node = ros_context
     .new_ros_node(
       "turtle_teleop",         // name
       "/ros2_demo",            // namespace
-      NodeOptions::new(false), // enable rosout
+      NodeOptions::new()
+        .enable_rosout(true),
     )
     .unwrap();
 
@@ -209,7 +200,7 @@ fn ros2_loop(
             match command {
               RosCommand::StopEventLoop => {
                 info!("Stopping main event loop");
-                ros_participant.clear();
+                ros_context.clear();
                 break 'event_loop;
               }
               RosCommand::TurtleCmdVel { twist } => {

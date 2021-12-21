@@ -60,8 +60,12 @@ pub mod log;
 pub(crate) mod ros_node;
 
 pub use ros_node::*;
+pub use ros_context::*;
 
-
+/// Module for stuff we do not want to export from top level;
+pub mod ros2 {
+  pub use rustdds::{Duration,Timestamp};
+}
 
 use rustdds::*;
 

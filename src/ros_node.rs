@@ -18,17 +18,38 @@ use crate::{
 };
 
 
-/// Configuration of [RosNode](struct.RosNode.html)
+/// Configuration of [RosNode]
+/// This is a builder-like struct.
 pub struct NodeOptions {
-  enable_rosout: bool,
+  #[allow(dead_code)] cli_args: Vec<String>,
+  #[allow(dead_code)] use_global_arguments: bool, // process-wide command line args
+  enable_rosout: bool, // use rosout topic for logging?
+  #[allow(dead_code)] start_parameter_services: bool,
+  #[allow(dead_code)] parameter_overrides: Vec<Parameter>,
+  #[allow(dead_code)] allow_undeclared_parameters: bool,
+  #[allow(dead_code)] automatically_declare_parameters_from_overrides: bool,
+  // The NodeOptions struct does not contain
+  // node_name, context, or namespace, because
+  // they ae always needed and have no reasonable default.
 }
 
 impl NodeOptions {
-  /// # Arguments
-  ///
-  /// * `enable_rosout` -  Wheter or not ros logging is enabled (rosout writer)
-  pub fn new(/* domain_id: u16, */ enable_rosout: bool) -> NodeOptions {
-    NodeOptions { enable_rosout }
+  /// Get a default NodeOptions
+  pub fn new() -> NodeOptions {
+    // These defaults are from rclpy reference
+    // https://docs.ros2.org/latest/api/rclpy/api/node.html
+    NodeOptions {
+      cli_args: Vec::new(),
+      use_global_arguments: true,
+      enable_rosout: true,
+      start_parameter_services: true,
+      parameter_overrides: Vec::new(),
+      allow_undeclared_parameters: false,
+      automatically_declare_parameters_from_overrides: false,
+    }
+  }
+  pub fn enable_rosout(self, enable:bool) -> NodeOptions {
+    NodeOptions{ enable_rosout: enable, .. self }
   }
 }
 
@@ -40,7 +61,7 @@ impl NodeOptions {
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
 /// parameter events topics internally.
 ///
-/// These are produced by a [`RosContext`](crate::ros_context::RosContext).
+/// These are produced by a [`RosContext`].
 pub struct RosNode {
   // node info
   name: String,

@@ -15,7 +15,7 @@ pub struct Gid {
 impl Gid {
   pub fn from_guid(guid: GUID) -> Gid {
     let mut data: [u8; 24] = [0; 24];
-    data[..12].clone_from_slice(guid.guid_prefix.as_slice());
+    data[..12].clone_from_slice(guid.prefix.as_ref());
     data[12..15].clone_from_slice(&guid.entity_id.entity_key);
     data[15] = u8::from(guid.entity_id.entity_kind);
     Gid { data }

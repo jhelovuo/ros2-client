@@ -19,6 +19,9 @@ use crate::{
 /// [RosContext] communicates with other 
 /// participants information in ROS2 network. It keeps track of [`NodeEntitiesInfo`]s.
 /// Also acts as a wrapper for a RustDDS instance.
+///
+/// RosContext is shut down by dropping it, and all of its RosNodes.
+/// There should be no need for `ok()` or `shutdown()` methods.
 #[derive(Clone)]
 pub struct RosContext {
   inner: Arc<Mutex<RosContextInner>>,
