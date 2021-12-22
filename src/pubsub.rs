@@ -4,7 +4,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 /// A ROS2 Publisher
 ///
-/// Corresponds to a simplified [`DataWriter`] in DDS
+/// Corresponds to a simplified [`DataWriter`](rustdds::no_key::DataWriter)in DDS
 pub struct Publisher<M:Serialize> {
 	datawriter: no_key::DataWriterCdr<M>,
 }
@@ -32,7 +32,7 @@ impl<M:Serialize> Publisher<M> {
 
 /// A ROS2 Subscription
 ///
-/// Corresponds to a (simplified) [`DataReader`] in DDS
+/// Corresponds to a (simplified) [`DataReader`](rustdds::no_key::DataReader) in DDS
 pub struct Subscription<M:DeserializeOwned> {
 	datareader: no_key::DataReaderCdr<M>
 }
