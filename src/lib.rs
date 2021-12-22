@@ -60,31 +60,15 @@ pub mod pubsub;
 
 pub(crate) mod node;
 
+// Re-exports from crate root to simplify usage
+#[doc(inline)]
 pub use node::*;
+#[doc(inline)]
 pub use context::*;
+#[doc(inline)]
 pub use pubsub::*;
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {
   pub use rustdds::{Duration,Timestamp};
 }
-
-use rustdds::*;
-
-pub type RosSubscriber<D, DA> = no_key::DataReader<D, DA>;
-
-pub type KeyedRosSubscriber<D, DA> = with_key::DataReader<D, DA>;
-
-pub type RosPublisher<D, SA> = no_key::DataWriter<D, SA>;
-
-pub type KeyedRosPublisher<D, SA> = with_key::DataWriter<D, SA>;
-
-// Short-hand notation for CDR serialization
-
-pub type RosSubscriberCdr<D> = no_key::DataReaderCdr<D>;
-
-pub type KeyedRosSubscriberCdr<D> =  with_key::DataReaderCdr<D>;
-
-pub type RosPublisherCdr<D> = no_key::DataWriterCdr<D>;
-
-pub type KeyedRosPublisherCdr<D> = with_key::DataWriterCdr<D>;

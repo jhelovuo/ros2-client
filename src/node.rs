@@ -14,7 +14,7 @@ use crate::{
   context::Context,
   log::Log,
   parameters::*,
-  KeyedRosPublisher, KeyedRosSubscriber, RosPublisher, RosSubscriber,
+  pubsub::{Publisher,Subscription},
 };
 
 
@@ -80,9 +80,10 @@ pub struct Node {
   writers: HashSet<GUID>,
 
   // builtin writers and readers
-  rosout_writer: Option<no_key::DataWriterCdr<Log>>,
-  #[allow(dead_code)] rosout_reader: Option<no_key::DataReaderCdr<Log>>,
-  parameter_events_writer: no_key::DataWriterCdr<raw::ParameterEvent>,
+  rosout_writer: Option<Publisher<Log>>,
+  #[allow(dead_code)] 
+  rosout_reader: Option<Subscription<Log>>,
+  parameter_events_writer: Publisher<raw::ParameterEvent>,
 }
 
 impl Node {
@@ -97,17 +98,14 @@ impl Node {
 
     let rosout_writer = if options.enable_rosout {
       Some(
-        ros_context
-          .get_ros_discovery_publisher()
-          .create_datawriter_no_key(&rosout_topic, None)?,
+        ros_context.create_publisher(&rosout_topic, None)?,
       )
     } else {
       None
     };
 
     let parameter_events_writer = ros_context
-      .get_ros_discovery_publisher()
-      .create_datawriter_no_key(&paramtopic, None)?;
+      .create_publisher(&paramtopic, None)?;
 
     Ok(Node {
       name: String::from(name),
@@ -262,47 +260,21 @@ impl Node {
   /// * `topic` - Reference to topic created with `create_ros_topic`.
   /// * `qos` - Should take [QOS](../dds/qos/struct.QosPolicies.html) and use if
   ///   it's compatible with topics QOS. `None` indicates the use of Topics QOS.
-  pub fn create_ros_nokey_subscriber<
+  pub fn create_subscription<
     D: DeserializeOwned + 'static,
     DA: no_key::DeserializerAdapter<D>,
   >(
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<RosSubscriber<D, DA>, dds::Error> {
+  ) -> Result<Subscription<D>, dds::Error> {
     let sub = self
-      .ros_context
-      .get_ros_discovery_subscriber()
-      .create_datareader_no_key::<D, DA>(topic, qos)?;
+      .ros_context.create_subscription(topic, qos)?;
     self.add_reader(sub.guid());
     Ok(sub)
   }
 
-  /// Creates ROS2 Subscriber to [Keyed](../dds/traits/trait.Keyed.html) topic.
-  ///
-  /// # Arguments
-  ///
-  /// * `topic` - Reference to topic created with `create_ros_topic`.
-  /// * `qos` - Should take [QOS](../dds/qos/struct.QosPolicies.html) and use it
-  ///   if it's compatible with topics QOS. `None` indicates the use of Topics
-  ///   QOS.
-  pub fn create_ros_subscriber<D, DA: with_key::DeserializerAdapter<D>>(
-    &mut self,
-    topic: &Topic,
-    qos: Option<QosPolicies>,
-  ) -> Result<KeyedRosSubscriber<D, DA>, dds::Error>
-  where
-    D: Keyed + DeserializeOwned + 'static,
-    D::K: Key,
-  {
-    let sub = self
-      .ros_context
-      .get_ros_discovery_subscriber()
-      .create_datareader::<D, DA>(topic, qos)?;
-    self.add_reader(sub.guid());
-    Ok(sub)
-  }
-
+  
   /// Creates ROS2 Publisher to no key topic.
   ///
   /// # Arguments
@@ -311,41 +283,15 @@ impl Node {
   /// * `qos` - Should take [QOS](../dds/qos/struct.QosPolicies.html) and use it
   ///   if it's compatible with topics QOS. `None` indicates the use of Topics
   ///   QOS.
-  pub fn create_ros_nokey_publisher<D: Serialize, SA: no_key::SerializerAdapter<D>>(
+  pub fn create_publisher<D: Serialize, SA: no_key::SerializerAdapter<D>>(
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<RosPublisher<D, SA>, dds::Error> {
+  ) -> Result<Publisher<D>, dds::Error> {
     let p = self
-      .ros_context
-      .get_ros_discovery_publisher()
-      .create_datawriter_no_key(topic, qos)?;
+      .ros_context.create_publisher(topic, qos)?;
     self.add_writer(p.guid());
     Ok(p)
   }
 
-  /// Creates ROS2 Publisher to [Keyed](../dds/traits/trait.Keyed.html) topic.
-  ///
-  /// # Arguments
-  ///
-  /// * `topic` - Reference to topic created with `create_ros_topic`.
-  /// * `qos` - Should take [QOS](../dds/qos/struct.QosPolicies.html) and use it
-  ///   if it's compatible with topics QOS. `None` indicates the use of Topics
-  ///   QOS.
-  pub fn create_ros_publisher<D, SA: with_key::SerializerAdapter<D>>(
-    &mut self,
-    topic: &Topic,
-    qos: Option<QosPolicies>,
-  ) -> Result<KeyedRosPublisher<D, SA>, dds::Error>
-  where
-    D: Keyed + Serialize,
-    D::K: Key,
-  {
-    let p = self
-      .ros_context
-      .get_ros_discovery_publisher()
-      .create_datawriter(topic, qos)?;
-    self.add_writer(p.guid());
-    Ok(p)
-  }
 }

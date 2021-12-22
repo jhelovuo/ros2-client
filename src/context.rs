@@ -5,6 +5,7 @@ use std::{
 
 #[allow(unused_imports)] use log::{error, warn, info, debug, trace};
 use mio::Evented;
+use serde::{de::DeserializeOwned, Serialize};
 
 use rustdds::*;
 
@@ -14,6 +15,7 @@ use crate::{
   participant_entities_info::ParticipantEntitiesInfo,
   node::{Node, NodeOptions, },
   builtin_topics,
+  pubsub::{Publisher,Subscription,},
 };
 
 /// [Context] communicates with other 
@@ -49,6 +51,26 @@ impl Context {
   ) -> Result<Node, dds::Error> {
     Node::new(name, namespace, options, self.clone())
   }
+
+  pub fn create_publisher<M>(&self, topic:&Topic, qos:Option<QosPolicies>) -> dds::Result<Publisher<M>> 
+  where M: Serialize
+  {
+    let datawriter = self
+      .get_ros_discovery_publisher()
+      .create_datawriter_no_key(topic,qos)?;
+
+    Ok(Publisher::new(datawriter))
+  }
+
+  pub fn create_subscription<M>(&self, topic:&Topic, qos:Option<QosPolicies>) -> dds::Result<Subscription<M>> 
+  where M: 'static + DeserializeOwned
+  {
+    let datareader = self
+      .get_ros_discovery_subscriber()
+      .create_datareader_no_key(topic,qos)?;
+    Ok(Subscription::new(datareader))
+  }
+
   pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
     self.inner.lock().unwrap().handle_node_read()
   }
@@ -99,17 +121,19 @@ impl Context {
     self.inner.lock().unwrap().ros_rosout_topic.clone()
   }
 
-  pub fn get_ros_discovery_publisher(&self) -> Publisher {
-    self.inner.lock().unwrap().ros_discovery_publisher.clone()
-  }
-
-  pub fn get_ros_discovery_subscriber(&self) -> Subscriber {
-    self.inner.lock().unwrap().ros_discovery_subscriber.clone()
-  }
-
   pub fn domain_participant(&self) -> DomainParticipant {
     self.inner.lock().unwrap().domain_participant.clone()
   }
+
+
+  fn get_ros_discovery_publisher(&self) -> rustdds::Publisher {
+    self.inner.lock().unwrap().ros_discovery_publisher.clone()
+  }
+
+  fn get_ros_discovery_subscriber(&self) -> rustdds::Subscriber {
+    self.inner.lock().unwrap().ros_discovery_subscriber.clone()
+  }
+
 }
 
 struct ContextInner {
@@ -120,8 +144,8 @@ struct ContextInner {
 
   domain_participant: DomainParticipant,
   #[allow(dead_code)] ros_discovery_topic: Topic,
-  ros_discovery_publisher: Publisher,
-  ros_discovery_subscriber: Subscriber,
+  ros_discovery_publisher: rustdds::Publisher,
+  ros_discovery_subscriber: rustdds::Subscriber,
 
   ros_parameter_events_topic: Topic,
   ros_rosout_topic: Topic,

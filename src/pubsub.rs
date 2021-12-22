@@ -12,8 +12,8 @@ pub struct Publisher<M:Serialize> {
 
 impl<M:Serialize> Publisher<M> {
 	// These must be ceated from Node
-	pub(crate) fn new() -> Publisher<M> {
-		todo!()
+	pub(crate) fn new(datawriter: no_key::DataWriterCdr<M>) -> Publisher<M> {
+		Publisher{ datawriter }
 	}
 
 	pub fn publish(&self, message:M) -> dds::Result<()> {
@@ -22,6 +22,10 @@ impl<M:Serialize> Publisher<M> {
 
 	pub fn assert_liveliness(&self) -> dds::Result<()> {
 		self.datawriter.assert_liveliness()
+	}
+
+	pub fn guid(&self) -> rustdds::GUID {
+		self.datawriter.guid()
 	}
 }
 // ----------------------------------------------------
@@ -39,8 +43,8 @@ pub struct Subscription<M:DeserializeOwned> {
 
 impl<M:'static + DeserializeOwned> Subscription<M> {
 	// These must be ceated from Node
-	pub(crate) fn new() -> Subscription<M> {
-		todo!()
+	pub(crate) fn new(datareader: no_key::DataReaderCdr<M>) -> Subscription<M> {
+		Subscription{ datareader }
 	}
 
 	pub fn take(&mut self) -> dds::Result<Option<(M,MessageInfo)>> {
@@ -51,6 +55,9 @@ impl<M:'static + DeserializeOwned> Subscription<M> {
 		}))
 	}
 
+	pub fn guid(&self) -> rustdds::GUID {
+		self.datareader.guid()
+	}
 }
 
 #[derive(Copy,Debug,Clone,)]
