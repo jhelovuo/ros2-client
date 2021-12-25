@@ -52,12 +52,15 @@ pub mod builtin_topics;
 
 mod gid;
 pub mod node_entities_info;
+#[doc(hidden)]
 pub mod context;
 pub mod participant_entities_info;
 pub mod parameters;
 pub mod log;
+#[doc(hidden)]
 pub mod pubsub;
 
+#[doc(hidden)]
 pub(crate) mod node;
 
 // Re-exports from crate root to simplify usage

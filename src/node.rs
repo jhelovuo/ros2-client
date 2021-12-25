@@ -185,13 +185,13 @@ impl Node {
     &self.namespace
   }
 
-  pub fn get_fully_qualified_name(&self) -> String {
+  pub fn fully_qualified_name(&self) -> String {
     let mut nn = self.name.clone();
     nn.push_str(&self.namespace);
     nn
   }
 
-  pub fn get_options(&self) -> &NodeOptions {
+  pub fn options(&self) -> &NodeOptions {
     &self.options
   }
 
@@ -260,10 +260,7 @@ impl Node {
   /// * `topic` - Reference to topic created with `create_ros_topic`.
   /// * `qos` - Should take [QOS](../dds/qos/struct.QosPolicies.html) and use if
   ///   it's compatible with topics QOS. `None` indicates the use of Topics QOS.
-  pub fn create_subscription<
-    D: DeserializeOwned + 'static,
-    DA: no_key::DeserializerAdapter<D>,
-  >(
+  pub fn create_subscription<D: DeserializeOwned + 'static>(
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
@@ -283,7 +280,7 @@ impl Node {
   /// * `qos` - Should take [QOS](../dds/qos/struct.QosPolicies.html) and use it
   ///   if it's compatible with topics QOS. `None` indicates the use of Topics
   ///   QOS.
-  pub fn create_publisher<D: Serialize, SA: no_key::SerializerAdapter<D>>(
+  pub fn create_publisher<D: Serialize>(
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,

@@ -138,14 +138,14 @@ fn ros2_loop(
 
   // The point here is to publish Twist for the turtle
   let turtle_cmd_vel_writer = ros_node
-    .create_ros_nokey_publisher::<Twist, CDRSerializerAdapter<Twist>>(&turtle_cmd_vel_topic, None)
+    .create_publisher::<Twist>(&turtle_cmd_vel_topic, None)
     .unwrap();
 
   // But here is how to read it also, if anyone is interested.
   // This should show what is the turle command in case someone else is
   // also issuing commands, i.e. there are two turtla controllers running.
   let mut turtle_cmd_vel_reader = ros_node
-    .create_ros_nokey_subscriber::<Twist, CDRDeserializerAdapter<_>>(&turtle_cmd_vel_topic, None)
+    .create_subscription::<Twist>(&turtle_cmd_vel_topic, None)
     .unwrap();
 
   let turtle_pose_topic = ros_node
@@ -157,7 +157,7 @@ fn ros2_loop(
     )
     .unwrap();
   let mut turtle_pose_reader = ros_node
-    .create_ros_nokey_subscriber::<Pose, CDRDeserializerAdapter<_>>(&turtle_pose_topic, None)
+    .create_subscription::<Pose>(&turtle_pose_topic, None)
     .unwrap();
 
   let poll = Poll::new().unwrap();
@@ -204,7 +204,7 @@ fn ros2_loop(
                 break 'event_loop;
               }
               RosCommand::TurtleCmdVel { twist } => {
-                match turtle_cmd_vel_writer.write(twist.clone(), None) {
+                match turtle_cmd_vel_writer.publish(twist.clone()) {
                   Ok(_) => {
                     info!("Wrote to ROS2 {:?}", twist);
                   }
@@ -219,13 +219,13 @@ fn ros2_loop(
           }
         }
         TURTLE_CMD_VEL_READER_TOKEN => {
-          while let Ok(Some(twist)) = turtle_cmd_vel_reader.take_next_sample() {
-            readback_sender.send(twist.value().clone()).unwrap();
+          while let Ok(Some(twist)) = turtle_cmd_vel_reader.take() {
+            readback_sender.send(twist.0).unwrap();
           }
         }
         TURTLE_POSE_READER_TOKEN => {
-          while let Ok(Some(pose)) = turtle_pose_reader.take_next_sample() {
-            pose_sender.send(pose.value().clone()).unwrap();
+          while let Ok(Some(pose)) = turtle_pose_reader.take() {
+            pose_sender.send(pose.0).unwrap();
           }
         }
         _ => {

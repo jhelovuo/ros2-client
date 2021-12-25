@@ -1,6 +1,14 @@
+use mio::Evented;
+use mio::Poll;
+use mio::Token;
+use mio::Ready;
+use mio::PollOpt;
+
 use rustdds::*;
 
 use serde::{Serialize, de::DeserializeOwned};
+
+use std::io;
 
 /// A ROS2 Publisher
 ///
@@ -59,6 +67,37 @@ impl<M:'static + DeserializeOwned> Subscription<M> {
 		self.datareader.guid()
 	}
 }
+
+
+impl<D> Evented for Subscription<D>
+where
+  D: DeserializeOwned,
+  {
+  // We just delegate all the operations to datareader, since it
+  // already implements Evented
+  fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+    self
+      .datareader
+      .register(poll, token, interest, opts)
+  }
+
+  fn reregister(
+    &self,
+    poll: &Poll,
+    token: Token,
+    interest: Ready,
+    opts: PollOpt,
+  ) -> io::Result<()> {
+    self
+      .datareader
+      .reregister(poll, token, interest, opts)
+  }
+
+  fn deregister(&self, poll: &Poll) -> io::Result<()> {
+    self.datareader.deregister(poll)
+  }
+}
+
 
 #[derive(Copy,Debug,Clone,)]
 pub struct MessageInfo {} // TODO
