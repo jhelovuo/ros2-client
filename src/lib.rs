@@ -59,6 +59,8 @@ pub mod parameters;
 pub mod log;
 #[doc(hidden)]
 pub mod pubsub;
+pub mod service;
+pub mod message;
 
 #[doc(hidden)]
 pub(crate) mod node;
