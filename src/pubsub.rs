@@ -19,7 +19,7 @@ pub struct Publisher<M:Serialize> {
 
 
 impl<M:Serialize> Publisher<M> {
-	// These must be ceated from Node
+	// These must be created from Node
 	pub(crate) fn new(datawriter: no_key::DataWriterCdr<M>) -> Publisher<M> {
 		Publisher{ datawriter }
 	}
@@ -50,7 +50,7 @@ pub struct Subscription<M:DeserializeOwned> {
 }
 
 impl<M:'static + DeserializeOwned> Subscription<M> {
-	// These must be ceated from Node
+	// These must be created from Node
 	pub(crate) fn new(datareader: no_key::DataReaderCdr<M>) -> Subscription<M> {
 		Subscription{ datareader }
 	}
