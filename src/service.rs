@@ -9,10 +9,42 @@ use rustdds::*;
 
 use serde::{Serialize, Deserialize,};
 
+#[derive(Clone,Copy,Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SequenceNumber {
+  number: i64,
+}
+
+impl SequenceNumber {
+  pub fn new() -> SequenceNumber { 
+    SequenceNumber{ number: 0 } 
+  }
+
+  pub fn from_high_low(high:i32, low:u32) -> SequenceNumber {
+    SequenceNumber { 
+      number: ((high as i64) << 32) + (low as i64)
+    }
+  }
+
+  pub fn high(&self) -> i32 {
+    (self.number >> 32) as i32
+  }
+
+  pub fn low(&self) -> u32 {
+    (self.number & 0xFFFF_FFFF) as u32
+  }
+
+  pub fn next(&self) -> SequenceNumber {
+    SequenceNumber{ number: self.number + 1 }
+  }
+
+}
+
+
+
 /// [Original](https://docs.ros2.org/foxy/api/rmw/structrmw__request__id__t.html)
 pub struct RmwRequestId {
   pub writer_guid: GUID,
-  pub sequence_number: i64, 
+  pub sequence_number: SequenceNumber, 
 }
 
 /// [original](https://docs.ros2.org/foxy/api/rmw/structrmw__service__info__t.html)
@@ -71,8 +103,10 @@ impl<S:Service> Server<S> {
         .map( |(rw, _message_info)| 
           ( RmwRequestId {
               writer_guid: rw.writer_guid,  
-              sequence_number: ((rw.sequence_number_high as i64) << 32) 
-                + (rw.sequence_number_low as i64),
+              sequence_number: 
+                SequenceNumber::from_high_low(
+                  rw.sequence_number_high, 
+                  rw.sequence_number_low),
             },
             rw.request
           ) 
@@ -84,8 +118,8 @@ impl<S:Service> Server<S> {
     self.response_sender.publish( 
       ResponseSerializationWrapper {
         writer_guid: id.writer_guid,
-        sequence_number_high: (id.sequence_number >> 32) as i32,
-        sequence_number_low: (id.sequence_number & 0xFFFF_FFFF) as u32,
+        sequence_number_high: id.sequence_number.high(),
+        sequence_number_low: id.sequence_number.low(),
         sample_rc: 0,
         response,
       }
@@ -123,9 +157,53 @@ impl<S:Service> Evented for Server<S> {
 // -------------------------------------------------------------------
 
 pub struct Client<S:Service> {
-  request_sender: Publisher<S::Request>,
-  response_receiver: Subscription<S::Response>,
+  request_sender: Publisher<RequestSerializationWrapper<S::Request>>,
+  response_receiver: Subscription<ResponseSerializationWrapper<S::Response>>,
+  sequence_number_counter: SequenceNumber,
 }
+
+impl<S:Service> Client<S> {
+  pub fn new()
+  {}
+
+  pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
+    let sn = self.sequence_number_counter;
+    self.sequence_number_counter = self.sequence_number_counter.next();
+    let writer_guid = self.request_sender.guid();
+
+    self.request_sender.publish( 
+      RequestSerializationWrapper {
+        writer_guid,
+        sequence_number_high: sn.high(),
+        sequence_number_low: sn.low() ,
+        instance_name: "".to_string(),
+        request,
+      }
+    )?;
+
+    Ok( RmwRequestId{writer_guid, sequence_number: sn} )
+  }
+
+  pub fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
+    where <S as Service>::Response: 'static
+  {
+    let rwo = self.response_receiver.take()?;
+    Ok( rwo
+        .map( |(rw, _message_info)| 
+          ( RmwRequestId {
+              writer_guid: rw.writer_guid,  
+              sequence_number: SequenceNumber::from_high_low(
+                rw.sequence_number_high, rw.sequence_number_low,
+                ),
+            },
+            rw.response
+          ) 
+        )
+      )
+  }
+
+}
+
 
 impl<S:Service> Evented for Client<S> {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
