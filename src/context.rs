@@ -43,7 +43,7 @@ impl Context {
     })
   }
   /// Create a new ROS2 node
-  pub fn new_ros_node(
+  pub fn new_node(
     &self,
     name: &str,
     namespace: &str,

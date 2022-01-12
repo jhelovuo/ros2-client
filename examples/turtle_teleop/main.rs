@@ -119,7 +119,7 @@ fn ros2_loop(
   let mut ros_context = Context::new().unwrap();
 
   let mut ros_node = ros_context
-    .new_ros_node(
+    .new_node(
       "turtle_teleop",         // name
       "/ros2_demo",            // namespace
       NodeOptions::new()
@@ -128,11 +128,10 @@ fn ros2_loop(
     .unwrap();
 
   let turtle_cmd_vel_topic = ros_node
-    .create_ros_topic(
+    .create_topic(
       "/turtle1/cmd_vel",
       String::from("geometry_msgs::msg::dds_::Twist_"),
       &qos,
-      TopicKind::NoKey,
     )
     .unwrap();
 
@@ -149,11 +148,10 @@ fn ros2_loop(
     .unwrap();
 
   let turtle_pose_topic = ros_node
-    .create_ros_topic(
+    .create_topic(
       "/turtle1/pose",
       String::from("turtlesim::msg::dds_::Pose_"),
       &qos,
-      TopicKind::NoKey,
     )
     .unwrap();
   let mut turtle_pose_reader = ros_node
