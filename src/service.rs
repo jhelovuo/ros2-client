@@ -4,6 +4,7 @@ use mio::{Evented, Poll, Token, PollOpt, Ready,};
 
 use crate::message::Message;
 use crate::pubsub::{Publisher,Subscription};
+use crate::node::Node;
 
 use rustdds::*;
 
@@ -91,9 +92,18 @@ pub struct Server<S:Service> {
 }
 
 
-impl<S:Service> Server<S> {
-  pub fn new()
-  {}
+impl<S: 'static + Service> Server<S> {
+  pub(crate) fn new(node: &mut Node, 
+    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Server<S>>
+  {
+
+    let request_receiver = node.create_subscription
+      ::<RequestSerializationWrapper<S::Request>>(request_topic, qos.clone())?;
+    let response_sender = node.create_publisher
+      ::<ResponseSerializationWrapper<S::Response>>(response_topic, qos)?;
+
+    Ok(Server { request_receiver, response_sender })
+  }
 
   pub fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>>
     where <S as Service>::Request: 'static
@@ -162,9 +172,18 @@ pub struct Client<S:Service> {
   sequence_number_counter: SequenceNumber,
 }
 
-impl<S:Service> Client<S> {
-  pub fn new()
-  {}
+impl<S: 'static + Service> Client<S> {
+  pub(crate) fn new(node: &mut Node, 
+    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S>>
+  {
+    let request_sender = node.create_publisher
+      ::<RequestSerializationWrapper<S::Request>>(request_topic, qos.clone())?;
+    let response_receiver = node.create_subscription
+      ::<ResponseSerializationWrapper<S::Response>>(response_topic, qos)?;
+
+    Ok( Client{ request_sender, response_receiver, 
+                sequence_number_counter: SequenceNumber::new(), })
+  }
 
   pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
     let sn = self.sequence_number_counter;

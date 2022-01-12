@@ -15,6 +15,7 @@ use crate::{
   log::Log,
   parameters::*,
   pubsub::{Publisher,Subscription},
+  service::{Service,Client,Server},
 };
 
 
@@ -209,8 +210,6 @@ impl Node {
   /// * `type_name` - What type the topic holds in string form
   /// * `qos` - Quality of Service parameters for the topic (not restricted only
   ///   to ROS2)
-  /// * `topic_kind` - Does the topic have a key (multiple DDS instances)? NoKey
-  ///   or WithKey
   ///
   ///  
   ///   [summary of all rules for topic and service names in ROS 2](https://design.ros2.org/articles/topic_and_service_names.html)
@@ -229,26 +228,19 @@ impl Node {
   ///   (/), i.e. ~/foo not ~foo
   /// * must have balanced curly braces ({}) when used, i.e. {sub}/foo but not
   ///   {sub/foo nor /foo}
-  pub fn create_ros_topic(
+  pub fn create_topic(
     &self,
     name: &str,
     type_name: String,
     qos: &QosPolicies,
-    topic_kind: TopicKind,
   ) -> Result<Topic, dds::Error> {
-    if name.is_empty() {
-      return dds::Error::bad_parameter("Topic name must not be empty.");
-    }
-    // TODO: Implement the rest of the rules.
-
-    let mut oname = "rt/".to_owned();
-    let name_stripped = name.strip_prefix('/').unwrap_or(name); // avoid double slash in name
-    oname.push_str(name_stripped);
+    let oname = Self::check_name_and_add_prefix("rt/".to_owned(), name)?;
     info!("Creating topic, DDS name: {}", oname);
     let topic = self
       .ros_context
       .domain_participant()
-      .create_topic(oname, type_name, qos, topic_kind)?;
+      .create_topic(oname, type_name, qos, TopicKind::NoKey)?;
+      // ROS2 does not use WithKey topics, so always NoKey
     info!("Created topic");
     Ok(topic)
   }
@@ -271,6 +263,15 @@ impl Node {
     Ok(sub)
   }
 
+  fn check_name_and_add_prefix(mut prefix: String , name: &str) -> Result<String, dds::Error> {
+    if name.is_empty() {
+      return dds::Error::bad_parameter("Topic name must not be empty.");
+    }
+    // TODO: Implement the rest of the ROS2 name rules.
+    // avoid double slash in name
+    prefix.push_str(name.strip_prefix('/').unwrap_or(name));
+    Ok(prefix)
+  }
   
   /// Creates ROS2 Publisher to no key topic.
   ///
@@ -289,6 +290,32 @@ impl Node {
       .ros_context.create_publisher(topic, qos)?;
     self.add_writer(p.guid());
     Ok(p)
+  }
+
+  pub fn create_client<S:Service+ 'static>(&mut self, 
+      service_name:&str, request_type_name: String, response_type_name: String, qos: QosPolicies) 
+    -> Result<Client<S>, dds::Error> 
+  {
+    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
+    let rs_name = Self::check_name_and_add_prefix("rs/".to_owned(), service_name)?;
+
+    let rq_topic = self.create_topic(&rq_name, request_type_name, &qos)?;
+    let rs_topic = self.create_topic(&rs_name, response_type_name, &qos)?;
+
+    Client::new(self, &rq_topic, &rs_topic, Some(qos))
+  }
+
+  pub fn create_server<S:Service+ 'static>(&mut self,
+   service_name:&str, request_type_name: String, response_type_name: String, qos: QosPolicies ) 
+    -> Result<Server<S>, dds::Error> 
+  {
+    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
+    let rs_name = Self::check_name_and_add_prefix("rs/".to_owned(), service_name)?;
+
+    let rq_topic = self.create_topic(&rq_name, request_type_name, &qos)?;
+    let rs_topic = self.create_topic(&rs_name, response_type_name, &qos)?;
+
+    Server::new(self, &rq_topic, &rs_topic, Some(qos))
   }
 
 }
