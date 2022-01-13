@@ -22,4 +22,6 @@ loggers:
     level: warn
   rustdds::dds::reader:
     level: info
+  rustdds::dds::writer:
+    level: info
     

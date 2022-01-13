@@ -18,6 +18,7 @@ mod ui;
 const TURTLE_CMD_VEL_READER_TOKEN: Token = Token(1);
 const ROS2_COMMAND_TOKEN: Token = Token(2);
 const TURTLE_POSE_READER_TOKEN: Token = Token(3);
+const RESET_CLIENT_TOKEN: Token = Token(4);
 
 // This corresponds to ROS2 message type
 // https://github.com/ros2/common_interfaces/blob/master/geometry_msgs/msg/Twist.msg
@@ -158,6 +159,37 @@ fn ros2_loop(
     .create_subscription::<Pose>(&turtle_pose_topic, None)
     .unwrap();
 
+  // Turtle has services, let's construct some clients.
+
+  pub struct EmptyService { }
+
+  impl Service for EmptyService {
+    type Request = ();
+    type Response = ();
+
+    fn request_type_name() -> String {
+      "std_srvs::src::Empty".to_owned()
+    }
+    fn response_type_name() -> String {
+      "std_srvs::src::Empty".to_owned()
+    }
+  }
+
+  let service_qos: QosPolicies = {
+    QosPolicyBuilder::new()
+      .reliability(policy::Reliability::Reliable {
+        max_blocking_time: ros2::Duration::from_millis(100),
+      })
+      .history(policy::History::KeepLast { depth: 1 })
+      .build()
+  };
+
+  let mut reset_client = 
+    ros_node
+      .create_client::<EmptyService>("/reset", service_qos)
+      .unwrap();
+
+
   let poll = Poll::new().unwrap();
 
   poll
@@ -181,6 +213,14 @@ fn ros2_loop(
     .register(
       &turtle_pose_reader,
       TURTLE_POSE_READER_TOKEN,
+      Ready::readable(),
+      PollOpt::edge(),
+    )
+    .unwrap();
+  poll
+    .register(
+      &reset_client,
+      RESET_CLIENT_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
@@ -213,6 +253,17 @@ fn ros2_loop(
                   }
                 }
               }
+              RosCommand::Reset => {
+                match reset_client.send_request( () ) {
+                  Ok(id) => {
+                    info!("Reset request sent {:?}", id);
+                  }
+                  Err(e) => {
+                    error!("Failed to send request: {:?}", e);
+                  }
+                }
+              }
+
             };
           }
         }
@@ -226,6 +277,12 @@ fn ros2_loop(
             pose_sender.send(pose.0).unwrap();
           }
         }
+        RESET_CLIENT_TOKEN => {
+          while let Ok(Some(id)) = reset_client.receive_response() {
+            info!("Turtle reset acknowledged: {:?}",id);
+          }
+        }
+
         _ => {
           error!("Unknown poll token {:?}", event.token())
         }

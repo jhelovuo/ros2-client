@@ -2,6 +2,9 @@ use std::io;
 
 use mio::{Evented, Poll, Token, PollOpt, Ready,};
 
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
+
 use crate::message::Message;
 use crate::pubsub::{Publisher,Subscription};
 use crate::node::Node;
@@ -43,6 +46,7 @@ impl SequenceNumber {
 
 
 /// [Original](https://docs.ros2.org/foxy/api/rmw/structrmw__request__id__t.html)
+#[derive(Clone,Copy,Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RmwRequestId {
   pub writer_guid: GUID,
   pub sequence_number: SequenceNumber, 
@@ -82,7 +86,9 @@ struct ResponseSerializationWrapper<R> {
 
 pub trait Service {
     type Request: Message;
-    type Response:Message;
+    type Response: Message;
+    fn request_type_name() -> String;
+    fn response_type_name() -> String;
 }
 
 
@@ -101,6 +107,7 @@ impl<S: 'static + Service> Server<S> {
       ::<RequestSerializationWrapper<S::Request>>(request_topic, qos.clone())?;
     let response_sender = node.create_publisher
       ::<ResponseSerializationWrapper<S::Response>>(response_topic, qos)?;
+    info!("Created new Server: requests={} response={}", request_topic.name(), response_topic.name());
 
     Ok(Server { request_receiver, response_sender })
   }
@@ -180,6 +187,7 @@ impl<S: 'static + Service> Client<S> {
       ::<RequestSerializationWrapper<S::Request>>(request_topic, qos.clone())?;
     let response_receiver = node.create_subscription
       ::<ResponseSerializationWrapper<S::Response>>(response_topic, qos)?;
+    info!("Created new Client: request topic={} response topic={}", request_topic.name(), response_topic.name());
 
     Ok( Client{ request_sender, response_receiver, 
                 sequence_number_counter: SequenceNumber::new(), })

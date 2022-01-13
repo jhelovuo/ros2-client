@@ -72,6 +72,8 @@ pub use node::*;
 pub use context::*;
 #[doc(inline)]
 pub use pubsub::*;
+#[doc(inline)]
+pub use service::*;
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {

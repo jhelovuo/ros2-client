@@ -12,6 +12,7 @@ use crate::{Pose, Twist, Vector3};
 pub enum RosCommand {
   StopEventLoop,
   TurtleCmdVel { twist: Twist },
+  Reset,
 }
 
 // Define turtle movement commands as Twist values
@@ -147,6 +148,10 @@ impl UiController {
                 debug!("Quit.");
                 self.send_command(RosCommand::StopEventLoop);
                 return; // stop loop
+              }
+              Key::Char('r') => {
+                debug!("Reset request");
+                self.send_command(RosCommand::Reset);
               }
               Key::Up => {
                 debug!("Move left.");

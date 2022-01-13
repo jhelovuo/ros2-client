@@ -292,28 +292,38 @@ impl Node {
     Ok(p)
   }
 
-  pub fn create_client<S:Service+ 'static>(&mut self, 
-      service_name:&str, request_type_name: String, response_type_name: String, qos: QosPolicies) 
+  pub fn create_client<S:Service+ 'static>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<Client<S>, dds::Error> 
   {
     let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
-    let rs_name = Self::check_name_and_add_prefix("rs/".to_owned(), service_name)?;
+    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), service_name)?;
 
-    let rq_topic = self.create_topic(&rq_name, request_type_name, &qos)?;
-    let rs_topic = self.create_topic(&rs_name, response_type_name, &qos)?;
+    let rq_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rq_name, S::request_type_name(), &qos, TopicKind::NoKey)?;
+    let rs_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
 
     Client::new(self, &rq_topic, &rs_topic, Some(qos))
   }
 
-  pub fn create_server<S:Service+ 'static>(&mut self,
-   service_name:&str, request_type_name: String, response_type_name: String, qos: QosPolicies ) 
+  pub fn create_server<S:Service+ 'static>(&mut self, service_name:&str, qos: QosPolicies ) 
     -> Result<Server<S>, dds::Error> 
   {
     let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
-    let rs_name = Self::check_name_and_add_prefix("rs/".to_owned(), service_name)?;
+    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), service_name)?;
 
-    let rq_topic = self.create_topic(&rq_name, request_type_name, &qos)?;
-    let rs_topic = self.create_topic(&rs_name, response_type_name, &qos)?;
+    let rq_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rq_name, S::request_type_name(), &qos, TopicKind::NoKey)?;
+    let rs_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
 
     Server::new(self, &rq_topic, &rs_topic, Some(qos))
   }
