@@ -72,10 +72,10 @@ pub struct RmwRequestId {
 // * RMW_Connext_MessageTypeSupport::serialize
 #[derive(Serialize,Deserialize)]
 struct RequestSerializationWrapper<R> {
-  writer_guid: GUID,
-  sequence_number_high: i32,
-  sequence_number_low: u32,
-  instance_name: String, // apparently, this is always sent as the empty string
+  //writer_guid: GUID,
+  //sequence_number_high: i32,
+  //sequence_number_low: u32,
+  //instance_name: String, // apparently, this is always sent as the empty string
   request: R,
 }
 
@@ -84,7 +84,7 @@ struct ResponseSerializationWrapper<R> {
   //writer_guid: GUID,
   //sequence_number_high: i32,
   //equence_number_low: u32,
-  sample_rc: u32, // apparently, this is always sent as 0. But what is it?
+  //sample_rc: u32, // apparently, this is always sent as 0. But what is it?
   response: R,
 }
 
@@ -122,16 +122,13 @@ impl<S: 'static + Service> Server<S> {
   {
     let rwo = self.request_receiver.take()?;
     Ok( rwo
-        .map( |(rw, _message_info)| 
-          ( RmwRequestId {
-              writer_guid: rw.writer_guid,  
-              sequence_number: 
-                SequenceNumber::from_high_low(
-                  rw.sequence_number_high, 
-                  rw.sequence_number_low),
-            },
-            rw.request
-          ) 
+        .map( |(rw, message_info)| {
+            let rmw_request_id = RmwRequestId {
+                  writer_guid: message_info.writer_guid,  
+                  sequence_number: SequenceNumber::from(message_info.sequence_number),
+                };
+            ( rmw_request_id , rw.request ) 
+          }
         )
       )
   }
@@ -142,7 +139,7 @@ impl<S: 'static + Service> Server<S> {
         // writer_guid: id.writer_guid,
         // sequence_number_high: id.sequence_number.high(),
         // sequence_number_low: id.sequence_number.low(),
-        sample_rc: 0,
+        //sample_rc: 0,
         response,
       }
     )
@@ -205,10 +202,10 @@ impl<S: 'static + Service> Client<S> {
 
     self.request_sender.publish( 
       RequestSerializationWrapper {
-        writer_guid,
-        sequence_number_high: sn.high(),
-        sequence_number_low: sn.low() ,
-        instance_name: "".to_string(),
+        //writer_guid,
+        //sequence_number_high: sn.high(),
+        //sequence_number_low: sn.low() ,
+        //instance_name: "".to_string(),
         request,
       }
     )?;

@@ -6,13 +6,14 @@ use mio::{unix::EventedFd, Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
 use termion::{event::Key, input::TermRead, AsyncReader};
 
-use crate::{Pose, Twist, Vector3};
+use crate::{Pose, Twist, Vector3, PenRequest};
 
 #[derive(Debug)]
 pub enum RosCommand {
   StopEventLoop,
   TurtleCmdVel { twist: Twist },
   Reset,
+  SetPen(PenRequest),
 }
 
 // Define turtle movement commands as Twist values
@@ -153,6 +154,17 @@ impl UiController {
                 debug!("Reset request");
                 self.send_command(RosCommand::Reset);
               }
+              Key::Char('p') => {
+                debug!("Pen request");
+                self.send_command(RosCommand::SetPen( PenRequest {
+                  r: 255,
+                  b: 0,
+                  g: 0,
+                  width: 3,
+                  off: 0, 
+                }));
+              }
+
               Key::Up => {
                 debug!("Move left.");
                 let twist = MOVE_FORWARD;

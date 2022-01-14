@@ -19,6 +19,7 @@ const TURTLE_CMD_VEL_READER_TOKEN: Token = Token(1);
 const ROS2_COMMAND_TOKEN: Token = Token(2);
 const TURTLE_POSE_READER_TOKEN: Token = Token(3);
 const RESET_CLIENT_TOKEN: Token = Token(4);
+const SET_PEN_CLIENT_TOKEN: Token = Token(4);
 
 // This corresponds to ROS2 message type
 // https://github.com/ros2/common_interfaces/blob/master/geometry_msgs/msg/Twist.msg
@@ -57,6 +58,17 @@ impl Vector3 {
     z: 0.0,
   };
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PenRequest {
+  pub r: u8,
+  pub g: u8,
+  pub b: u8,
+  pub width: u8,
+  pub off: u8,
+}
+
+impl Message for PenRequest {}
 
 fn main() {
   // Here is a fixed path, so this example must be started from
@@ -191,7 +203,29 @@ fn ros2_loop(
 
   let mut reset_client = 
     ros_node
-      .create_client::<EmptyService>("/reset", service_qos)
+      .create_client::<EmptyService>("/reset", service_qos.clone())
+      .unwrap();
+
+  // another client
+
+  // from https://docs.ros2.org/foxy/api/turtlesim/srv/SetPen.html
+  pub struct SetPenService {}
+
+
+  impl Service for SetPenService {
+    type Request = PenRequest;
+    type Response = ();
+    fn request_type_name() -> String {
+      "turtlesim::srv::dds_::SetPen_Request_".to_owned()
+    }
+    fn response_type_name() -> String {
+      "std_srvs::srv::dds_::Empty_Response_".to_owned()
+    }
+  }
+
+  let mut set_pen_client = 
+    ros_node
+      .create_client::<SetPenService>("turtle1/set_pen", service_qos)
       .unwrap();
 
 
@@ -226,6 +260,15 @@ fn ros2_loop(
     .register(
       &reset_client,
       RESET_CLIENT_TOKEN,
+      Ready::readable(),
+      PollOpt::edge(),
+    )
+    .unwrap();
+
+  poll
+    .register(
+      &set_pen_client,
+      SET_PEN_CLIENT_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
@@ -268,6 +311,16 @@ fn ros2_loop(
                   }
                 }
               }
+              RosCommand::SetPen( pen_request ) => {
+                match set_pen_client.send_request( pen_request.clone() ) {
+                  Ok(id) => {
+                    info!("set_pen request sent {:?} {:?}", id, pen_request);
+                  }
+                  Err(e) => {
+                    error!("Failed to send request: {:?}", e);
+                  }
+                }
+              }
 
             };
           }
@@ -285,6 +338,11 @@ fn ros2_loop(
         RESET_CLIENT_TOKEN => {
           while let Ok(Some(id)) = reset_client.receive_response() {
             info!("Turtle reset acknowledged: {:?}",id);
+          }
+        }
+        SET_PEN_CLIENT_TOKEN => {
+          while let Ok(Some(id)) = set_pen_client.receive_response() {
+            info!("set_pen acknowledged: {:?}",id);
           }
         }
 
