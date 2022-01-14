@@ -43,6 +43,11 @@ impl SequenceNumber {
 
 }
 
+impl From<i64> for SequenceNumber {
+  fn from(number:i64) -> SequenceNumber {
+    SequenceNumber{ number }
+  }
+}
 
 
 /// [Original](https://docs.ros2.org/foxy/api/rmw/structrmw__request__id__t.html)
@@ -76,9 +81,9 @@ struct RequestSerializationWrapper<R> {
 
 #[derive(Serialize,Deserialize)]
 struct ResponseSerializationWrapper<R> {
-  writer_guid: GUID,
-  sequence_number_high: i32,
-  sequence_number_low: u32,
+  //writer_guid: GUID,
+  //sequence_number_high: i32,
+  //equence_number_low: u32,
   sample_rc: u32, // apparently, this is always sent as 0. But what is it?
   response: R,
 }
@@ -134,9 +139,9 @@ impl<S: 'static + Service> Server<S> {
   pub fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
     self.response_sender.publish( 
       ResponseSerializationWrapper {
-        writer_guid: id.writer_guid,
-        sequence_number_high: id.sequence_number.high(),
-        sequence_number_low: id.sequence_number.low(),
+        // writer_guid: id.writer_guid,
+        // sequence_number_high: id.sequence_number.high(),
+        // sequence_number_low: id.sequence_number.low(),
         sample_rc: 0,
         response,
       }
@@ -216,15 +221,21 @@ impl<S: 'static + Service> Client<S> {
   {
     let rwo = self.response_receiver.take()?;
     Ok( rwo
-        .map( |(rw, _message_info)| 
-          ( RmwRequestId {
-              writer_guid: rw.writer_guid,  
-              sequence_number: SequenceNumber::from_high_low(
-                rw.sequence_number_high, rw.sequence_number_low,
-                ),
-            },
-            rw.response
-          ) 
+        .map( |(rw, message_info)| {
+            let request_id = 
+              // RmwRequestId {
+              //   writer_guid: rw.writer_guid,  
+              //   sequence_number: SequenceNumber::from_high_low(
+              //     rw.sequence_number_high, rw.sequence_number_low,
+              //     ),
+              // };
+              RmwRequestId {
+                writer_guid: message_info.writer_guid,  
+                sequence_number: SequenceNumber::from(message_info.sequence_number),
+              };
+
+            ( request_id, rw.response ) 
+          }
         )
       )
   }

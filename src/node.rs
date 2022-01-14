@@ -295,8 +295,12 @@ impl Node {
   pub fn create_client<S:Service+ 'static>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<Client<S>, dds::Error> 
   {
-    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
-    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), service_name)?;
+    // Add rq/ and rr/ prefixes as documented in
+    // https://design.ros2.org/articles/topic_and_service_names.html
+    // Where are the suffixes documented?
+    // And why "Reply" and not "Response" ?
+    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
+    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), &(service_name.to_owned() + "Reply"))?;
 
     let rq_topic = self
       .ros_context

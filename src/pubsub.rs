@@ -100,10 +100,16 @@ where
 
 
 #[derive(Copy,Debug,Clone,)]
-pub struct MessageInfo {} // TODO
+pub struct MessageInfo {
+	pub writer_guid : GUID,
+	pub sequence_number: i64,
+} // TODO
 
 impl From<&SampleInfo> for MessageInfo {
-	fn from(_sample_info:&SampleInfo) -> MessageInfo {
-		MessageInfo{}
+	fn from(sample_info:&SampleInfo) -> MessageInfo {
+		MessageInfo{
+			writer_guid: sample_info.publication_handle,
+			sequence_number: 0xdeadbeef, // TODO: implement
+		}
 	}
 } 

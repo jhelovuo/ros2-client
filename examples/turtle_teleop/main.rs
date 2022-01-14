@@ -167,11 +167,16 @@ fn ros2_loop(
     type Request = ();
     type Response = ();
 
+    // TODO: ROS2 seems to append _Request_ and  _Response_ to type names?
+    // TODO: What
+    // Where is this documented and who shoud do it?
+    // TODO: Where does the "dds_" name fragment come from?
+
     fn request_type_name() -> String {
-      "std_srvs::src::Empty".to_owned()
+      "std_srvs::srv::dds_::Empty_Request_".to_owned()
     }
     fn response_type_name() -> String {
-      "std_srvs::src::Empty".to_owned()
+      "std_srvs::srv::dds_::Empty_Response_".to_owned()
     }
   }
 
