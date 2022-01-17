@@ -6,6 +6,8 @@ use mio::{unix::EventedFd, Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
 use termion::{event::Key, input::TermRead, AsyncReader};
 
+use ctrlc::*;
+
 use crate::{Pose, Twist, Vector3, PenRequest};
 
 #[derive(Debug)]
@@ -83,6 +85,12 @@ impl UiController {
   }
 
   pub fn start(&mut self) {
+    ctrlc::set_handler(move || {
+        println!("Aborting");
+        std::process::abort();
+    }).expect("Error setting Ctrl-C handler");
+
+
     self
       .poll
       .register(
@@ -145,7 +153,7 @@ impl UiController {
             .unwrap();
             info!("key: {:?}", key);
             match key {
-              Key::Char('q') => {
+              Key::Char('q') | Key::Ctrl('c') => {
                 debug!("Quit.");
                 self.send_command(RosCommand::StopEventLoop);
                 return; // stop loop
