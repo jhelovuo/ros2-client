@@ -196,7 +196,7 @@ impl Node {
     &self.options
   }
 
-  pub fn get_domain_id(&self) -> u16 {
+  pub fn domain_id(&self) -> u16 {
     self.ros_context.domain_id()
   }
 
