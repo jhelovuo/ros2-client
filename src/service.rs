@@ -1,4 +1,5 @@
 use std::io;
+use std::convert::TryFrom;
 
 use mio::{Evented, Poll, Token, PollOpt, Ready,};
 
@@ -6,12 +7,14 @@ use mio::{Evented, Poll, Token, PollOpt, Ready,};
 use log::{debug, error, info, warn};
 
 use crate::message::Message;
-use crate::pubsub::{Publisher,Subscription};
+use crate::pubsub::{Publisher,Subscription, MessageInfo, };
 use crate::node::Node;
 
 use rustdds::*;
 
 use serde::{Serialize, Deserialize,};
+
+use concat_arrays::concat_arrays;
 
 #[derive(Clone,Copy,Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SequenceNumber {
@@ -66,28 +69,64 @@ pub struct RmwRequestId {
 //   pub request_id: RmwRequestId,
 // }
 
+
 // This is reverse-engineered from
-// https://github.com/ros2/rmw_connextdds/blob/master/rmw_connextdds_common/src/common/rmw_type_support.cpp
-// * RMW_Connext_RequestReplyMapping_Basic_serialize
-// * RMW_Connext_MessageTypeSupport::serialize
+// https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/rmw_node.cpp
+// https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/serdata.hpp
 #[derive(Serialize,Deserialize)]
-struct RequestSerializationWrapper<R> {
-  //writer_guid: GUID,
-  //sequence_number_high: i32,
-  //sequence_number_low: u32,
-  //instance_name: String, // apparently, this is always sent as the empty string
-  request: R,
+struct CycloneWrapper<R> {
+  guid_second_half: [u8;8], // CycolenDDS RMW only sends last 8 bytes of client GUID
+  sequence_number_high: i32,
+  sequence_number_low: u32,
+  response_or_request: R,  // ROS2 payload  
 }
 
-#[derive(Serialize,Deserialize)]
-struct ResponseSerializationWrapper<R> {
-  //writer_guid: GUID,
-  //sequence_number_high: i32,
-  //equence_number_low: u32,
-  //sample_rc: u32, // apparently, this is always sent as 0. But what is it?
-  response: R,
+fn cyclone_wrap<R>(r_id: RmwRequestId, response_or_request:R ) -> CycloneWrapper<R> {
+  let sn = r_id.sequence_number;
+
+  let mut guid_second_half = [0;8];
+  // writer_guid means client GUID (i.e. request writer)
+  guid_second_half.copy_from_slice( &r_id.writer_guid.to_bytes()[8..16] );
+
+  CycloneWrapper{
+    guid_second_half,
+    sequence_number_high: sn.high(),
+    sequence_number_low: sn.low(),
+    response_or_request,
+  }
 }
 
+fn cyclone_unwrap<R>(wrapped: CycloneWrapper<R> , metadata: MessageInfo, 
+                      my_guid_if_client:Option<GUID> ) -> (RmwRequestId, R) 
+{
+  let mut first_half = [0;8];
+ 
+  match my_guid_if_client {
+    Some(client_guid) => 
+      first_half.copy_from_slice( &client_guid.to_bytes().as_slice()[0..8]), 
+      // this seems a bit odd, but source is
+      // https://github.com/ros2/rmw_connextdds/blob/master/rmw_connextdds_common/src/common/rmw_impl.cpp
+      // function take_response()
+    None => 
+      first_half.copy_from_slice(&metadata.writer_guid.to_bytes().as_slice()[0..8]), 
+      // we are server, so writer is client
+  }
+
+  // This is received in the wrapper header
+  let mut second_half = [0;8];
+  second_half.copy_from_slice( &metadata.writer_guid.to_bytes()[8..16] );
+
+  let r_id = RmwRequestId {
+    writer_guid: GUID::from_bytes(concat_arrays!(first_half,second_half)),
+    sequence_number: SequenceNumber::
+      from_high_low(wrapped.sequence_number_high, wrapped.sequence_number_low),
+  };
+
+  ( r_id, wrapped.response_or_request )
+} 
+
+// --------------------------------------------
+// --------------------------------------------
 
 pub trait Service {
     type Request: Message;
@@ -98,8 +137,8 @@ pub trait Service {
 
 
 pub struct Server<S:Service> {
-  request_receiver: Subscription<RequestSerializationWrapper<S::Request>>,
-  response_sender: Publisher<ResponseSerializationWrapper<S::Response>>,
+  request_receiver: Subscription<CycloneWrapper<S::Request>>,
+  response_sender: Publisher<CycloneWrapper<S::Response>>,
 }
 
 
@@ -109,9 +148,9 @@ impl<S: 'static + Service> Server<S> {
   {
 
     let request_receiver = node.create_subscription
-      ::<RequestSerializationWrapper<S::Request>>(request_topic, qos.clone())?;
+      ::<CycloneWrapper<S::Request>>(request_topic, qos.clone())?;
     let response_sender = node.create_publisher
-      ::<ResponseSerializationWrapper<S::Response>>(response_topic, qos)?;
+      ::<CycloneWrapper<S::Response>>(response_topic, qos)?;
     info!("Created new Server: requests={} response={}", request_topic.name(), response_topic.name());
 
     Ok(Server { request_receiver, response_sender })
@@ -121,28 +160,12 @@ impl<S: 'static + Service> Server<S> {
     where <S as Service>::Request: 'static
   {
     let rwo = self.request_receiver.take()?;
-    Ok( rwo
-        .map( |(rw, message_info)| {
-            let rmw_request_id = RmwRequestId {
-                  writer_guid: message_info.writer_guid,  
-                  sequence_number: SequenceNumber::from(message_info.sequence_number),
-                };
-            ( rmw_request_id , rw.request ) 
-          }
-        )
+    Ok( rwo.map( |(rw, message_info)| cyclone_unwrap(rw, message_info, None) )
       )
   }
 
   pub fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
-    self.response_sender.publish( 
-      ResponseSerializationWrapper {
-        // writer_guid: id.writer_guid,
-        // sequence_number_high: id.sequence_number.high(),
-        // sequence_number_low: id.sequence_number.low(),
-        //sample_rc: 0,
-        response,
-      }
-    )
+    self.response_sender.publish( cyclone_wrap(id, response))
   }
 }
 
@@ -176,8 +199,8 @@ impl<S:Service> Evented for Server<S> {
 // -------------------------------------------------------------------
 
 pub struct Client<S:Service> {
-  request_sender: Publisher<RequestSerializationWrapper<S::Request>>,
-  response_receiver: Subscription<ResponseSerializationWrapper<S::Response>>,
+  request_sender: Publisher<CycloneWrapper<S::Request>>,
+  response_receiver: Subscription<CycloneWrapper<S::Response>>,
   sequence_number_counter: SequenceNumber,
 }
 
@@ -186,9 +209,9 @@ impl<S: 'static + Service> Client<S> {
     request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S>>
   {
     let request_sender = node.create_publisher
-      ::<RequestSerializationWrapper<S::Request>>(request_topic, qos.clone())?;
+      ::<CycloneWrapper<S::Request>>(request_topic, qos.clone())?;
     let response_receiver = node.create_subscription
-      ::<ResponseSerializationWrapper<S::Response>>(response_topic, qos)?;
+      ::<CycloneWrapper<S::Response>>(response_topic, qos)?;
     info!("Created new Client: request topic={} response topic={}", request_topic.name(), response_topic.name());
 
     Ok( Client{ request_sender, response_receiver, 
@@ -196,45 +219,26 @@ impl<S: 'static + Service> Client<S> {
   }
 
   pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
-    let sn = self.sequence_number_counter;
+    let sequence_number = self.sequence_number_counter;
     self.sequence_number_counter = self.sequence_number_counter.next();
-    let writer_guid = self.request_sender.guid();
 
-    self.request_sender.publish( 
-      RequestSerializationWrapper {
-        //writer_guid,
-        //sequence_number_high: sn.high(),
-        //sequence_number_low: sn.low() ,
-        //instance_name: "".to_string(),
-        request,
-      }
-    )?;
+    // Generate new request id
+    let request_id = RmwRequestId {
+      writer_guid: self.request_sender.guid(),
+      sequence_number,
+    };
 
-    Ok( RmwRequestId{writer_guid, sequence_number: sn} )
+    self.request_sender.publish( cyclone_wrap(request_id, request) )?;
+
+    Ok( request_id )
   }
 
   pub fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
     where <S as Service>::Response: 'static
   {
     let rwo = self.response_receiver.take()?;
-    Ok( rwo
-        .map( |(rw, message_info)| {
-            let request_id = 
-              // RmwRequestId {
-              //   writer_guid: rw.writer_guid,  
-              //   sequence_number: SequenceNumber::from_high_low(
-              //     rw.sequence_number_high, rw.sequence_number_low,
-              //     ),
-              // };
-              RmwRequestId {
-                writer_guid: message_info.writer_guid,  
-                sequence_number: SequenceNumber::from(message_info.sequence_number),
-              };
-
-            ( request_id, rw.response ) 
-          }
-        )
-      )
+    Ok( rwo.map( |(rw, message_info)| 
+                    cyclone_unwrap(rw, message_info, Some(self.request_sender.guid()))))
   }
 
 }

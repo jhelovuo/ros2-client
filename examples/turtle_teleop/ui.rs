@@ -137,6 +137,14 @@ impl UiController {
       let mut events = Events::with_capacity(100);
       self.poll.poll(&mut events, None).unwrap();
 
+      let mut pen_index = 0;
+      let pen_requests = vec![
+        PenRequest { r: 255, b: 0, g: 0, width: 3, off: 0,},
+        PenRequest { r: 255, b: 0, g: 200, width: 5, off: 0,},
+        PenRequest { r: 250, b: 250, g: 250, width: 2, off: 10,},
+        PenRequest { r: 0, b: 0, g: 250, width: 1, off: 0,},
+        ];
+
       for event in events.iter() {
         if event.token() == UiController::KEYBOARD_CHECK_TOKEN {
           // a small wait here to allow the termion input mechnism to react.
@@ -164,13 +172,8 @@ impl UiController {
               }
               Key::Char('p') => {
                 debug!("Pen request");
-                self.send_command(RosCommand::SetPen( PenRequest {
-                  r: 255,
-                  b: 0,
-                  g: 0,
-                  width: 3,
-                  off: 0, 
-                }));
+                self.send_command(RosCommand::SetPen( pen_requests[pen_index].clone() ));
+                pen_index = (pen_index + 1) % pen_requests.len();
               }
 
               Key::Up => {
