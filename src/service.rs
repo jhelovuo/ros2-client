@@ -11,6 +11,7 @@ use crate::pubsub::{Publisher,Subscription, MessageInfo, };
 use crate::node::Node;
 
 use rustdds::*;
+use rustdds::rpc::*;
 
 use serde::{Serialize, Deserialize,};
 
@@ -69,6 +70,19 @@ pub struct RmwRequestId {
 //   pub request_id: RmwRequestId,
 // }
 
+// --------------------------------------------
+// --------------------------------------------
+
+// See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
+pub trait ServiceWrapper<R> {
+  type State;
+  fn wrap(state: &mut Self::State, r_id: RmwRequestId, response_or_request:R) -> Self;
+  fn request_id_after_wrap(state: &mut Self::State, write_result:SampleIdentity) -> RmwRequestId;
+  fn unwrap(state: &mut Self::State, wrapped: Self, sample_info: SampleInfo) -> (RmwRequestId, R);
+}
+
+// --------------------------------------------
+// --------------------------------------------
 
 // This is reverse-engineered from
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/rmw_node.cpp
