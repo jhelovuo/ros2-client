@@ -15,7 +15,7 @@ use crate::{
   log::Log,
   parameters::*,
   pubsub::{Publisher,Subscription},
-  service::{Service,Client,Server},
+  //service::{Service,Client,Server},
 };
 
 
@@ -291,7 +291,7 @@ impl Node {
     self.add_writer(p.guid());
     Ok(p)
   }
-
+  /*
   pub fn create_client<S:Service+ 'static>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<Client<S>, dds::Error> 
   {
@@ -331,5 +331,5 @@ impl Node {
 
     Server::new(self, &rq_topic, &rs_topic, Some(qos))
   }
-
+  */
 }
