@@ -1,3 +1,4 @@
+use std::io;
 use std::marker::PhantomData;
 
 use mio::{Evented, Poll, Token, PollOpt, Ready,};
@@ -73,18 +74,22 @@ pub struct RmwRequestId {
 // --------------------------------------------
 
 // See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
-pub trait ServiceServerWrapper<Q,P> 
+pub trait ServiceMapping<Q,P> 
 where 
   Self::RequestWrapper: Message,
   Self::ResponseWrapper: Message,
 {
   type RequestWrapper;
   type ResponseWrapper;
+
+
+  // Server operations
+  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q);
   // Unwrapping will clone the request
   // This is reasonable, because we may have to take it out of another struct
-  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q);
-
   fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>);
+
+  // Client operations
 }
 
 //pub trait ServiceClientWrapper<Q,P> {
@@ -100,7 +105,7 @@ where
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/rmw_node.cpp
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/serdata.hpp
 #[derive(Serialize,Deserialize)]
-struct CycloneWrapper<R> {
+pub struct CycloneWrapper<R> {
   guid_second_half: [u8;8], // CycolenDDS RMW only sends last 8 bytes of client GUID
   sequence_number_high: i32,
   sequence_number_low: u32,
@@ -109,19 +114,21 @@ struct CycloneWrapper<R> {
 
 impl<R:Message> Message for CycloneWrapper<R> {}
 
-struct CycloneServerWrapper<Q,P> 
+pub struct CycloneServiceMapping<Q,P> 
 {
   request_phantom: PhantomData<Q>,
   response_phantom: PhantomData<P>,
 }
 
+pub type CycloneServer<S> 
+  = Server<S,CycloneServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
 
 // struct CycloneWrapperState {
 //  client_guid: GUID,
 //  sequence_number_counter: SequenceNumber,
 // }
 
-impl<Q,P> ServiceServerWrapper<Q,P> for CycloneServerWrapper<Q,P> 
+impl<Q,P> ServiceMapping<Q,P> for CycloneServiceMapping<Q,P> 
 where
   Q: Message + Clone,
   P: Message,
@@ -214,7 +221,7 @@ pub trait Service {
 }
 
 
-pub struct Server<S:Service, W:ServiceServerWrapper<S::Request,S::Response>>
+pub struct Server<S:Service, W:ServiceMapping<S::Request,S::Response>>
 {
   request_receiver: Subscription<W::RequestWrapper>,
   response_sender: Publisher<W::ResponseWrapper>,
@@ -225,7 +232,7 @@ pub struct Server<S:Service, W:ServiceServerWrapper<S::Request,S::Response>>
 impl<S,W> Server<S,W>
 where
   S: 'static + Service,
-  W: 'static + ServiceServerWrapper<S::Request, S::Response>,
+  W: 'static + ServiceMapping<S::Request, S::Response>,
 {
   pub(crate) fn new(node: &mut Node, 
     request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) 
@@ -259,30 +266,34 @@ where
 }
 
 
-// impl<S:Service, W:ServiceServerWrapper> Evented for Server<S,W> {
-//   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
-//     self
-//       .request_receiver
-//       .register(poll, token, interest, opts)
-//   }
+impl<S, W> Evented for Server<S,W> 
+where
+  S: 'static + Service,
+  W: 'static + ServiceMapping<S::Request, S::Response>,
+{
+  fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+    self
+      .request_receiver
+      .register(poll, token, interest, opts)
+  }
 
-//   fn reregister(
-//     &self,
-//     poll: &Poll,
-//     token: Token,
-//     interest: Ready,
-//     opts: PollOpt,
-//   ) -> io::Result<()> {
-//     self
-//       .request_receiver
-//       .reregister(poll, token, interest, opts)
-//   }
+  fn reregister(
+    &self,
+    poll: &Poll,
+    token: Token,
+    interest: Ready,
+    opts: PollOpt,
+  ) -> io::Result<()> {
+    self
+      .request_receiver
+      .reregister(poll, token, interest, opts)
+  }
 
-//   fn deregister(&self, poll: &Poll) -> io::Result<()> {
-//     self.request_receiver.deregister(poll)
-//   }
+  fn deregister(&self, poll: &Poll) -> io::Result<()> {
+    self.request_receiver.deregister(poll)
+  }
 
-// }
+}
 
 // -------------------------------------------------------------------
 // -------------------------------------------------------------------

@@ -15,7 +15,7 @@ use crate::{
   log::Log,
   parameters::*,
   pubsub::{Publisher,Subscription},
-  //service::{Service,Client,Server},
+  service::{Service,Client,Server, CycloneServiceMapping},
 };
 
 
@@ -74,7 +74,7 @@ pub struct Node {
   namespace: String,
   options: NodeOptions,
 
-  ros_context: Context,
+  pub(crate) ros_context: Context,
 
   // dynamic
   readers: HashSet<GUID>,
@@ -313,9 +313,12 @@ impl Node {
 
     Client::new(self, &rq_topic, &rs_topic, Some(qos))
   }
-
-  pub fn create_server<S:Service+ 'static>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<Server<S>, dds::Error> 
+  */
+  pub fn create_server<S>(&mut self, service_name:&str, qos: QosPolicies ) 
+    -> Result<Server<S,CycloneServiceMapping<S::Request,S::Response>>, dds::Error>
+    where
+      S: Service + 'static,
+      S::Request: Clone,
   {
     let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
     let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), service_name)?;
@@ -329,7 +332,7 @@ impl Node {
       .domain_participant()
       .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
 
-    Server::new(self, &rq_topic, &rs_topic, Some(qos))
+    Server::<S,CycloneServiceMapping<S::Request,S::Response>>::new(self, &rq_topic, &rs_topic, Some(qos))
   }
-  */
+  
 }
