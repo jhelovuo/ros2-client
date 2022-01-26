@@ -1,5 +1,3 @@
-use std::io;
-use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 use mio::{Evented, Poll, Token, PollOpt, Ready,};
@@ -9,13 +7,14 @@ use log::{debug, error, info, warn};
 
 use crate::message::Message;
 use crate::node::Node;
+use crate::pubsub::{Publisher, Subscription, MessageInfo};
 
 use rustdds::*;
 use rustdds::rpc::*;
 
 use serde::{Serialize, Deserialize,};
 
-use concat_arrays::concat_arrays;
+//use concat_arrays::concat_arrays;
 
 #[derive(Clone,Copy,Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SequenceNumber {
@@ -75,8 +74,9 @@ pub struct RmwRequestId {
 
 // See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
 pub trait ServiceServerWrapper<Q,P> 
-where Self::RequestWrapper: serde::de::DeserializeOwned,
-  Self::ResponseWrapper: Serialize,
+where 
+  Self::RequestWrapper: Message,
+  Self::ResponseWrapper: Message,
 {
   type RequestWrapper;
   type ResponseWrapper;
@@ -107,6 +107,8 @@ struct CycloneWrapper<R> {
   response_or_request: R,  // ROS2 payload  
 }
 
+impl<R:Message> Message for CycloneWrapper<R> {}
+
 struct CycloneServerWrapper<Q,P> 
 {
   request_phantom: PhantomData<Q>,
@@ -121,8 +123,8 @@ struct CycloneServerWrapper<Q,P>
 
 impl<Q,P> ServiceServerWrapper<Q,P> for CycloneServerWrapper<Q,P> 
 where
-  Q: serde::de::DeserializeOwned + Clone,
-  P: Serialize,
+  Q: Message + Clone,
+  P: Message,
 {
 
   type RequestWrapper = CycloneWrapper<Q>;
@@ -214,8 +216,8 @@ pub trait Service {
 
 pub struct Server<S:Service, W:ServiceServerWrapper<S::Request,S::Response>>
 {
-  request_receiver: no_key::DataReaderCdr<W::RequestWrapper>,
-  response_sender: no_key::DataWriterCdr<W::ResponseWrapper>,
+  request_receiver: Subscription<W::RequestWrapper>,
+  response_sender: Publisher<W::ResponseWrapper>,
   phantom: PhantomData<S>,
 }
 
@@ -225,31 +227,33 @@ where
   S: 'static + Service,
   W: 'static + ServiceServerWrapper<S::Request, S::Response>,
 {
-  // pub(crate) fn new(node: &mut Node, 
-  //   request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Server<S>>
-  // {
+  pub(crate) fn new(node: &mut Node, 
+    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) 
+    -> dds::Result<Server<S,W>>
+  {
 
-  //   let request_receiver = node.create_subscription
-  //     ::<CycloneWrapper<S::Request>>(request_topic, qos.clone())?;
-  //   let response_sender = node.create_publisher
-  //     ::<CycloneWrapper<S::Response>>(response_topic, qos)?;
-  //   info!("Created new Server: requests={} response={}", request_topic.name(), response_topic.name());
+    let request_receiver = node
+      .create_subscription::<W::RequestWrapper>(request_topic, qos.clone())?;
+    let response_sender = node
+      .create_publisher::<W::ResponseWrapper>(response_topic, qos)?;
 
-  //   Ok(Server { request_receiver, response_sender })
-  // }
+    info!("Created new Server: requests={} response={}", request_topic.name(), response_topic.name());
+
+    Ok(Server { request_receiver, response_sender, phantom:PhantomData })
+  }
 
   pub fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>>
     where <S as Service>::Request: 'static
   {
-    let next_sample = self.request_receiver.take_next_sample()?;
+    let next_sample = self.request_receiver.take()?;
 
-    Ok( next_sample.map( |s| W::unwrap_request(s.value(), s.sample_info() ) ) )
+    Ok( next_sample.map( |(s,mi)| W::unwrap_request(&s, &mi.sample_info ) ) )
   }
 
   pub fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
     let (wrapped_response, rsi_opt) = W::wrap_response(id, response);
     let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(rsi_opt);
-    self.response_sender.write_with_options(wrapped_response, write_opt.build() )?;
+    self.response_sender.publish_with_options(wrapped_response, write_opt.build() )?;
     Ok(())
   }
 }

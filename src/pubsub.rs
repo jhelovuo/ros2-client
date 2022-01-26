@@ -28,6 +28,12 @@ impl<M:Serialize> Publisher<M> {
 		self.datawriter.write(message,None)
 	}
 
+	pub(crate) fn publish_with_options(&self, message:M, wo:WriteOptions) 
+		-> dds::Result<rustdds::rpc::SampleIdentity> 
+	{
+		self.datawriter.write_with_options(message,wo)
+	}
+
 	pub fn assert_liveliness(&self) -> dds::Result<()> {
 		self.datawriter.assert_liveliness()
 	}
@@ -99,17 +105,20 @@ where
 }
 
 
-#[derive(Copy,Debug,Clone,)]
+// This is just a thinly veiled RustDDS SampleInfo
+#[derive(Debug,Clone,)]
 pub struct MessageInfo {
-	pub writer_guid : GUID,
-	pub sequence_number: i64,
-} // TODO
+	pub(crate) sample_info: SampleInfo,
+} 
+
+impl MessageInfo {
+	pub fn writer_guid(&self) -> GUID {
+		self.sample_info.writer_guid()
+	}
+}
 
 impl From<&SampleInfo> for MessageInfo {
 	fn from(sample_info:&SampleInfo) -> MessageInfo {
-		MessageInfo{
-			writer_guid: sample_info.publication_handle(),
-			sequence_number: 0xdeadbeef, // TODO: implement
-		}
+		MessageInfo{ sample_info: sample_info.clone() }
 	}
 } 
