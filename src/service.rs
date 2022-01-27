@@ -8,7 +8,7 @@ use log::{debug, error, info, warn};
 
 use crate::message::Message;
 use crate::node::Node;
-use crate::pubsub::{Publisher, Subscription, MessageInfo};
+use crate::pubsub::{Publisher, Subscription, };
 
 use rustdds::*;
 use rustdds::rpc::*;
@@ -23,8 +23,12 @@ pub struct SequenceNumber {
 }
 
 impl SequenceNumber {
-  pub fn new() -> SequenceNumber { 
-    SequenceNumber{ number: 0 } 
+  pub fn new(number: i64) -> SequenceNumber { 
+    SequenceNumber{ number } 
+  }
+
+  pub fn zero() -> SequenceNumber {
+    SequenceNumber::new(0)
   }
 
   pub fn from_high_low(high:i32, low:u32) -> SequenceNumber {
@@ -47,9 +51,9 @@ impl SequenceNumber {
 
 }
 
-impl From<i64> for SequenceNumber {
-  fn from(number:i64) -> SequenceNumber {
-    SequenceNumber{ number }
+impl From<SequenceNumber> for i64 {
+  fn from(sn:SequenceNumber) -> i64 {
+    sn.number
   }
 }
 
@@ -59,6 +63,15 @@ impl From<i64> for SequenceNumber {
 pub struct RmwRequestId {
   pub writer_guid: GUID,
   pub sequence_number: SequenceNumber, 
+}
+
+impl From<RmwRequestId> for SampleIdentity {
+  fn from(si : RmwRequestId) -> SampleIdentity {
+    SampleIdentity {
+      writer_guid: si.writer_guid,
+      sequence_number: rustdds::SequenceNumber::from( i64::from( si.sequence_number) ),
+    }
+  }
 }
 
 /// [original](https://docs.ros2.org/foxy/api/rmw/structrmw__service__info__t.html)
@@ -73,6 +86,16 @@ pub struct RmwRequestId {
 // --------------------------------------------
 // --------------------------------------------
 
+pub trait Service {
+    type Request: Message;
+    type Response: Message;
+    fn request_type_name() -> String;
+    fn response_type_name() -> String;
+}
+
+// --------------------------------------------
+// --------------------------------------------
+
 // See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
 pub trait ServiceMapping<Q,P> 
 where 
@@ -82,7 +105,6 @@ where
   type RequestWrapper;
   type ResponseWrapper;
 
-
   // Server operations
   fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q);
   // Unwrapping will clone the request
@@ -90,20 +112,24 @@ where
   fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>);
 
   // Client operations
+  type ClientState;
+  // ClientState persists between requests.
+  fn new_client_state(request_sender: GUID) -> Self::ClientState;
+
+  // If wrap_requests returns request id, then that will be used. If None, then use
+  // return value from request_id_after_wrap
+  fn wrap_request(state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper, Option<RmwRequestId>);
+  fn request_id_after_wrap(state: &mut Self::ClientState, write_result:SampleIdentity) -> RmwRequestId;
+  fn unwrap_response(state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) -> (RmwRequestId, P);
 }
 
-//pub trait ServiceClientWrapper<Q,P> {
-//fn wrap_request(state: &mut Self::State, request:R) -> Self;
-// type State;
-//  fn request_id_after_wrap(state: &mut Self::State, write_result:SampleIdentity) -> RmwRequestId;
-//  fn unwrap_response(state: &mut Self::State, wrapped: Self, sample_info: SampleInfo) -> (RmwRequestId, R);
-//  }
 // --------------------------------------------
 // --------------------------------------------
 
 // This is reverse-engineered from
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/rmw_node.cpp
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/serdata.hpp
+// This is a header that Cyclone puts in DDS messages. Same header is used for Requst and Response.
 #[derive(Serialize,Deserialize)]
 pub struct CycloneWrapper<R> {
   guid_second_half: [u8;8], // CycolenDDS RMW only sends last 8 bytes of client GUID
@@ -111,7 +137,6 @@ pub struct CycloneWrapper<R> {
   sequence_number_low: u32,
   response_or_request: R,  // ROS2 payload  
 }
-
 impl<R:Message> Message for CycloneWrapper<R> {}
 
 pub struct CycloneServiceMapping<Q,P> 
@@ -123,10 +148,19 @@ pub struct CycloneServiceMapping<Q,P>
 pub type CycloneServer<S> 
   = Server<S,CycloneServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
 
-// struct CycloneWrapperState {
-//  client_guid: GUID,
-//  sequence_number_counter: SequenceNumber,
-// }
+pub struct CycloneClientState {
+ client_guid: GUID,
+ sequence_number_counter: SequenceNumber,
+}
+
+impl CycloneClientState {
+  pub fn new(client_guid: GUID) -> CycloneClientState {
+    CycloneClientState {
+      client_guid,
+      sequence_number_counter: SequenceNumber::zero(),
+    }
+  }
+}
 
 impl<Q,P> ServiceMapping<Q,P> for CycloneServiceMapping<Q,P> 
 where
@@ -136,32 +170,6 @@ where
 
   type RequestWrapper = CycloneWrapper<Q>;
   type ResponseWrapper = CycloneWrapper<P>;
-
-  // fn wrap_request(state: &mut Self::State, request:R) -> Self {
-  //   state.sequence_number_counter = state.sequence_number_counter.next();
-  //   let sequence_number = state.sequence_number_counter;
-    
-
-  //   // Generate new request id
-  //   let request_id = RmwRequestId {
-  //     writer_guid: state.client_guid,
-  //     sequence_number,
-  //   };
-
-  //   cyclone_wrap(request_id, request)
-  // }
-
-  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
-    (cyclone_wrap(r_id,response), None)
-  }
-
-  // fn request_id_after_wrap(state: &mut Self::State, _write_result:SampleIdentity) -> RmwRequestId {
-  //   // request id is what we generated into header. write_result is irrelevant
-  //   RmwRequestId {
-  //     writer_guid: state.client_guid,
-  //     sequence_number: state.sequence_number_counter,
-  //   }
-  // }
 
   fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q) {
     let r_id = RmwRequestId {
@@ -174,25 +182,65 @@ where
     ( r_id, wrapped.response_or_request.clone() )
   }
 
-  // fn unwrap_response(state: &mut Self::State, wrapped: Self, sample_info: SampleInfo) -> (RmwRequestId, R) {
-  //   let mut first_half = [0;8];
-  //   first_half.copy_from_slice( &state.client_guid.to_bytes().as_slice()[0..8]);
-  //   // this seems a bit odd, but source is
-  //   // https://github.com/ros2/rmw_connextdds/blob/master/rmw_connextdds_common/src/common/rmw_impl.cpp
-  //   // function take_response()
+  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
+    (cyclone_wrap(r_id,response), None)
+  }
 
-  //   // This is received in the wrapper header
-  //   let mut second_half = [0;8];
-  //   second_half.copy_from_slice( &sample_info.writer_guid.to_bytes()[8..16] );
 
-  //   let r_id = RmwRequestId {
-  //     writer_guid: GUID::from_bytes(concat_arrays!(first_half,second_half)),
-  //     sequence_number: SequenceNumber::
-  //       from_high_low(wrapped.sequence_number_high, wrapped.sequence_number_low),
-  //   };
+  type ClientState = CycloneClientState;
 
-  //   ( r_id, wrapped.response_or_request )
-  // }
+  fn wrap_request(state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper,Option<RmwRequestId>) {
+    state.sequence_number_counter = state.sequence_number_counter.next();
+
+    // Generate new request id
+    let request_id = RmwRequestId {
+      writer_guid: state.client_guid,
+      sequence_number: state.sequence_number_counter,
+    };
+
+    (cyclone_wrap(request_id, request) , Some(request_id))
+  }
+
+  fn request_id_after_wrap(state: &mut Self::ClientState, _write_result:SampleIdentity) -> RmwRequestId {
+    // Request id is what we generated into header. 
+    // write_result is irrelevant, so we discard it.
+    RmwRequestId {
+      writer_guid: state.client_guid,
+      sequence_number: state.sequence_number_counter,
+    }
+  }
+
+  fn unwrap_response(state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) 
+    -> (RmwRequestId, P) 
+  {
+    let mut client_guid_bytes = [0;16];
+    {
+      let (first_half, second_half) = client_guid_bytes.split_at_mut(8);
+  
+      // this seems a bit odd, but source is
+      // https://github.com/ros2/rmw_connextdds/blob/master/rmw_connextdds_common/src/common/rmw_impl.cpp
+      // function take_response()
+      first_half.copy_from_slice( &state.client_guid.to_bytes().as_slice()[0..8]);
+  
+      // This is received in the wrapper header
+      second_half.copy_from_slice( &sample_info.writer_guid().to_bytes()[8..16] );
+    }
+
+    let r_id = RmwRequestId {
+      writer_guid: GUID::from_bytes(client_guid_bytes),
+      sequence_number: SequenceNumber::
+        from_high_low(wrapped.sequence_number_high, wrapped.sequence_number_low),
+    };
+
+    ( r_id, wrapped.response_or_request )
+  }
+
+  fn new_client_state(request_sender: GUID) -> Self::ClientState {
+    CycloneClientState {
+      client_guid: request_sender,
+      sequence_number_counter: SequenceNumber::zero(),
+    }
+  }
 }
 
 fn cyclone_wrap<R>(r_id: RmwRequestId, response_or_request:R ) -> CycloneWrapper<R> {
@@ -212,14 +260,6 @@ fn cyclone_wrap<R>(r_id: RmwRequestId, response_or_request:R ) -> CycloneWrapper
 
 // --------------------------------------------
 // --------------------------------------------
-
-pub trait Service {
-    type Request: Message;
-    type Response: Message;
-    fn request_type_name() -> String;
-    fn response_type_name() -> String;
-}
-
 
 pub struct Server<S:Service, W:ServiceMapping<S::Request,S::Response>>
 {
@@ -298,53 +338,57 @@ where
 // -------------------------------------------------------------------
 // -------------------------------------------------------------------
 
-pub struct Client<S:Service> {
-  request_sender: no_key::DataWriterCdr<S::Request>,
-  response_receiver: no_key::DataReaderCdr<S::Response>,
-  sequence_number_counter: SequenceNumber,
-}
-/*
-impl<S: 'static + Service> Client<S> {
-  // pub(crate) fn new(node: &mut Node, 
-  //   request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S>>
-  // {
-  //   let request_sender = node.create_publisher
-  //     ::<CycloneWrapper<S::Request>>(request_topic, qos.clone())?;
-  //   let response_receiver = node.create_subscription
-  //     ::<CycloneWrapper<S::Response>>(response_topic, qos)?;
-  //   info!("Created new Client: request topic={} response topic={}", request_topic.name(), response_topic.name());
-
-  //   Ok( Client{ request_sender, response_receiver, 
-  //               sequence_number_counter: SequenceNumber::new(), })
-  // }
-
-  // pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
-  //   let sequence_number = self.sequence_number_counter;
-  //   self.sequence_number_counter = self.sequence_number_counter.next();
-
-  //   // Generate new request id
-  //   let request_id = RmwRequestId {
-  //     writer_guid: self.request_sender.guid(),
-  //     sequence_number,
-  //   };
-
-  //   self.request_sender.publish( cyclone_wrap(request_id, request) )?;
-
-  //   Ok( request_id )
-  // }
-
-  // pub fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
-  //   where <S as Service>::Response: 'static
-  // {
-  //   let rwo = self.response_receiver.take()?;
-  //   Ok( rwo.map( |(rw, message_info)| 
-  //                   cyclone_unwrap(rw, message_info, Some(self.request_sender.guid()))))
-  // }
-
+pub struct Client<S:Service, W:ServiceMapping<S::Request,S::Response>> {
+  request_sender: Publisher<W::RequestWrapper>,
+  response_receiver: Subscription<W::ResponseWrapper>,
+  client_state: W::ClientState,
+  phantom: PhantomData<S>,
 }
 
+impl<S,W> Client<S,W>
+where
+  S: 'static + Service,
+  W: 'static + ServiceMapping<S::Request, S::Response>,
+{
+  pub(crate) fn new(node: &mut Node, 
+    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S,W>>
+  {
+    let request_sender = node.create_publisher
+      ::<W::RequestWrapper>(request_topic, qos.clone())?;
+    let response_receiver = node.create_subscription
+      ::<W::ResponseWrapper>(response_topic, qos)?;
+    info!("Created new Client: request topic={} response topic={}", request_topic.name(), response_topic.name());
 
-impl<S:Service> Evented for Client<S> {
+    let request_sender_guid = request_sender.guid();
+    Ok( Client{ request_sender, response_receiver, 
+                client_state: W::new_client_state( request_sender_guid ), 
+                phantom: PhantomData,
+              })
+  }
+
+  pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
+    let (wrapped,rsi_opt) = W::wrap_request(&mut self.client_state, request);
+    let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(  rsi_opt.map(SampleIdentity::from));
+    let sample_id = self.request_sender.publish_with_options( wrapped , write_opt.build() )?;
+    Ok( W::request_id_after_wrap(&mut self.client_state, sample_id) )
+  }
+
+  pub fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
+    where <S as Service>::Response: 'static
+  {
+    let next_sample = self.response_receiver.take()?;
+
+    Ok( next_sample.map( |(s,mi)| W::unwrap_response(&mut self.client_state, s, mi.sample_info ) ) )
+  }
+
+}
+
+
+impl<S,W> Evented for Client<S,W> 
+where
+  S: 'static + Service,
+  W: 'static + ServiceMapping<S::Request, S::Response>,
+{
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self
       .response_receiver
@@ -368,4 +412,3 @@ impl<S:Service> Evented for Client<S> {
   }
 
 }
-*/
