@@ -6,8 +6,6 @@ use mio::{unix::EventedFd, Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
 use termion::{event::Key, input::TermRead, AsyncReader};
 
-use ctrlc::*;
-
 use crate::{Pose, Twist, Vector3, PenRequest};
 
 #[derive(Debug)]
@@ -130,6 +128,15 @@ impl UiController {
     .unwrap();
     self.stdout.flush().unwrap();
 
+    let mut pen_index = 0;
+    let pen_requests = vec![
+      PenRequest { r: 255, b: 0, g: 0, width: 3, off: 0,},
+      PenRequest { r: 255, b: 0, g: 200, width: 5, off: 0,},
+      PenRequest { r: 250, b: 250, g: 250, width: 2, off: 1,},
+      PenRequest { r: 0, b: 0, g: 250, width: 1, off: 0,},
+      PenRequest { r: 0, b: 0, g: 0, width: 1, off: 0,},
+      ];
+
     loop {
       write!(self.stdout, "{}", termion::cursor::Goto(1, 1)).unwrap();
       self.stdout.flush().unwrap();
@@ -137,13 +144,6 @@ impl UiController {
       let mut events = Events::with_capacity(100);
       self.poll.poll(&mut events, None).unwrap();
 
-      let mut pen_index = 0;
-      let pen_requests = vec![
-        PenRequest { r: 255, b: 0, g: 0, width: 3, off: 0,},
-        PenRequest { r: 255, b: 0, g: 200, width: 5, off: 0,},
-        PenRequest { r: 250, b: 250, g: 250, width: 2, off: 10,},
-        PenRequest { r: 0, b: 0, g: 250, width: 1, off: 0,},
-        ];
 
       for event in events.iter() {
         if event.token() == UiController::KEYBOARD_CHECK_TOKEN {

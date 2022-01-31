@@ -17,7 +17,7 @@ use serde::{Serialize, Deserialize,};
 
 //use concat_arrays::concat_arrays;
 
-#[derive(Clone,Copy,Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SequenceNumber {
   number: i64,
 }
@@ -51,6 +51,12 @@ impl SequenceNumber {
 
 }
 
+impl Default for SequenceNumber {
+  fn default() -> SequenceNumber {
+    SequenceNumber::new(1) // This is consistent with RustDDS SequenceNumber default value
+  }
+}
+
 impl From<SequenceNumber> for i64 {
   fn from(sn:SequenceNumber) -> i64 {
     sn.number
@@ -59,7 +65,7 @@ impl From<SequenceNumber> for i64 {
 
 
 /// [Original](https://docs.ros2.org/foxy/api/rmw/structrmw__request__id__t.html)
-#[derive(Clone,Copy,Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone,Copy,Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RmwRequestId {
   pub writer_guid: GUID,
   pub sequence_number: SequenceNumber, 
@@ -70,6 +76,15 @@ impl From<RmwRequestId> for SampleIdentity {
     SampleIdentity {
       writer_guid: si.writer_guid,
       sequence_number: rustdds::SequenceNumber::from( i64::from( si.sequence_number) ),
+    }
+  }
+}
+
+impl From<SampleIdentity> for RmwRequestId {
+  fn from(si : SampleIdentity) -> RmwRequestId {
+    RmwRequestId {
+      writer_guid: si.writer_guid,
+      sequence_number: SequenceNumber::new( i64::from(si.sequence_number ) ),
     }
   }
 }
@@ -147,6 +162,8 @@ pub struct CycloneServiceMapping<Q,P>
 
 pub type CycloneServer<S> 
   = Server<S,CycloneServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+pub type CycloneClient<S> 
+  = Client<S,CycloneServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
 
 pub struct CycloneClientState {
  client_guid: GUID,
@@ -255,6 +272,80 @@ fn cyclone_wrap<R>(r_id: RmwRequestId, response_or_request:R ) -> CycloneWrapper
     sequence_number_high: sn.high(),
     sequence_number_low: sn.low(),
     response_or_request,
+  }
+}
+// --------------------------------------------
+// --------------------------------------------
+
+#[derive(Serialize,Deserialize)]
+pub struct EnhancedWrapper<R> {
+  // Enhanced mode does not use any header in the DDS payload.
+  // Therefore, we use a wrapper that is identical to the payload.
+  response_or_request: R,  // ROS2 payload  
+}
+impl<R:Message> Message for EnhancedWrapper<R> {}
+
+pub struct EnhancedServiceMapping<Q,P> 
+{
+  request_phantom: PhantomData<Q>,
+  response_phantom: PhantomData<P>,
+}
+
+pub type EnhancedServer<S> 
+  = Server<S,EnhancedServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+pub type EnhancedClient<S> 
+  = Client<S,EnhancedServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+
+// Enhanced mode needs no client state in RMW, thus a unit struct.
+pub struct EnhancedClientState {}
+
+impl EnhancedClientState {
+  pub fn new(_client_guid: GUID) -> EnhancedClientState {
+    EnhancedClientState { }
+  }
+}
+
+impl<Q,P> ServiceMapping<Q,P> for EnhancedServiceMapping<Q,P> 
+where
+  Q: Message + Clone,
+  P: Message,
+{
+
+  type RequestWrapper = EnhancedWrapper<Q>;
+  type ResponseWrapper = EnhancedWrapper<P>;
+
+  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q) {
+    ( RmwRequestId::from(sample_info.sample_identity() ) , wrapped.response_or_request.clone() )
+  }
+
+  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
+    (  EnhancedWrapper{ response_or_request: response }, Some(SampleIdentity::from(r_id)))
+  }
+
+
+  type ClientState = EnhancedClientState;
+
+  fn wrap_request(_state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper,Option<RmwRequestId>) {
+    (EnhancedWrapper{ response_or_request: request }, None)
+  }
+
+  fn request_id_after_wrap(_state: &mut Self::ClientState, write_result:SampleIdentity) -> RmwRequestId {
+    RmwRequestId::from(write_result)
+  }
+
+  fn unwrap_response(_state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) 
+    -> (RmwRequestId, P) 
+  {
+    let r_id = 
+      sample_info.related_sample_identity()
+        .map( RmwRequestId::from )
+        .unwrap_or_default();
+
+    ( r_id, wrapped.response_or_request )
+  }
+
+  fn new_client_state(_request_sender: GUID) -> Self::ClientState {
+    EnhancedClientState { }
   }
 }
 

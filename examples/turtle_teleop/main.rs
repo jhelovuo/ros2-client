@@ -19,7 +19,7 @@ const TURTLE_CMD_VEL_READER_TOKEN: Token = Token(1);
 const ROS2_COMMAND_TOKEN: Token = Token(2);
 const TURTLE_POSE_READER_TOKEN: Token = Token(3);
 const RESET_CLIENT_TOKEN: Token = Token(4);
-const SET_PEN_CLIENT_TOKEN: Token = Token(4);
+const SET_PEN_CLIENT_TOKEN: Token = Token(5);
 
 // This corresponds to ROS2 message type
 // https://github.com/ros2/common_interfaces/blob/master/geometry_msgs/msg/Twist.msg
@@ -175,13 +175,22 @@ fn ros2_loop(
 
   pub struct EmptyService { }
 
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  // ROS2 Foxy with eProsima DDS crashes if the EmptyMessage is really empty,
+  // so we put in a dummy byte.
+  pub struct EmptyMessage { dummy: u8 }
+  impl EmptyMessage {
+    pub fn new() -> EmptyMessage { EmptyMessage { dummy: 1 } }
+  }
+
+  impl Message for EmptyMessage {}
+
   impl Service for EmptyService {
-    type Request = ();
-    type Response = ();
+    type Request = EmptyMessage;
+    type Response = EmptyMessage;
 
     // TODO: ROS2 seems to append _Request_ and  _Response_ to type names?
-    // TODO: What
-    // Where is this documented and who shoud do it?
+    // TODO: Where is this documented and who should do it?
     // TODO: Where does the "dds_" name fragment come from?
 
     fn request_type_name() -> String {
@@ -201,9 +210,13 @@ fn ros2_loop(
       .build()
   };
 
+  // create_client_cyclone version tested against ROS2 Galactic. Seems to work on the same host only.
+  // create_client_enhanced version tested agains ROS2 Foxy with eProsima DDS. Works to another
+  // host also.
+  // Service responses do not fully work yet.
   let mut reset_client = 
     ros_node
-      .create_client::<EmptyService>("/reset", service_qos.clone())
+      .create_client_cyclone::<EmptyService>("/reset", service_qos.clone())
       .unwrap();
 
   // another client
@@ -225,7 +238,7 @@ fn ros2_loop(
 
   let mut set_pen_client = 
     ros_node
-      .create_client::<SetPenService>("turtle1/set_pen", service_qos)
+      .create_client_cyclone::<SetPenService>("turtle1/set_pen", service_qos)
       .unwrap();
 
 
@@ -302,7 +315,7 @@ fn ros2_loop(
                 }
               }
               RosCommand::Reset => {
-                match reset_client.send_request( () ) {
+                match reset_client.send_request( EmptyMessage::new() ) {
                   Ok(id) => {
                     info!("Reset request sent {:?}", id);
                   }
