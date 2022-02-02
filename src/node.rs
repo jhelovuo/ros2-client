@@ -16,8 +16,9 @@ use crate::{
   parameters::*,
   pubsub::{Publisher,Subscription},
   service::{Service,Client,Server, ServiceMapping, 
-    CycloneServiceMapping, CycloneClient, CycloneServer,
-    EnhancedServiceMapping, EnhancedClient, EnhancedServer,
+    cyclone::{CycloneServiceMapping, CycloneClient, CycloneServer,},
+    enhanced::{EnhancedServiceMapping, EnhancedClient, EnhancedServer,},
+    basic::{BasicServiceMapping, BasicClient, BasicServer},
   },
 };
 
@@ -308,6 +309,18 @@ impl Node {
 
   }
 
+  pub fn create_client_basic<S>(&mut self, service_name:&str, qos: QosPolicies) 
+    -> Result<BasicClient<S>, dds::Error> 
+  where
+      S: Service + 'static,
+      S::Request: Clone,
+  {
+    self.create_client
+      ::<S,BasicServiceMapping<S::Request,S::Response>>
+      (service_name, qos)
+
+  }
+
   pub fn create_client_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<EnhancedClient<S>, dds::Error> 
   where
@@ -356,6 +369,17 @@ impl Node {
   {
     self.create_server
       ::<S,CycloneServiceMapping<S::Request,S::Response>>
+      (service_name, qos)
+  }
+
+  pub fn create_server_basic<S>(&mut self, service_name:&str, qos: QosPolicies ) 
+    -> Result<BasicServer<S>, dds::Error>
+    where
+      S: Service + 'static,
+      S::Request: Clone,
+  {
+    self.create_server
+      ::<S,BasicServiceMapping<S::Request,S::Response>>
       (service_name, qos)
   }
 

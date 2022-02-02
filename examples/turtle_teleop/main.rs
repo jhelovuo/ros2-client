@@ -210,12 +210,16 @@ fn ros2_loop(
       .build()
   };
 
-  // create_client_cyclone version tested against ROS2 Galactic. Seems to work on the same host only.
+  // create_client_cyclone version tested against ROS2 Galactic. Obviously with CycloneDDS.
+  // Seems to work on the same host only.
+  //
   // create_client_enhanced version tested against 
   // * ROS2 Foxy with eProsima DDS. Works to another host also.
-  // * ROS2 Galactic with RTI Connext, environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
+  // * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp)  
+  //   Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
   //   Works to another host also.
   //
+  // * create_client_basic is untestd
   // Service responses do not fully work yet.
   let mut reset_client = 
     ros_node
