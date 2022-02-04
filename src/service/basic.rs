@@ -10,7 +10,8 @@ use rustdds::rpc::*;
 
 use serde::{Serialize, Deserialize,};
 
-use super::*;
+use super::{Service, Server, Client, ServiceMapping,};
+use super::request_id::{SequenceNumber, RmwRequestId,};
 
 // --------------------------------------------
 // --------------------------------------------
@@ -38,46 +39,43 @@ pub struct BasicResponseWrapper<R> {
 impl<R:Message> Message for BasicResponseWrapper<R> {}
 
 
-pub struct BasicServiceMapping<Q,P> 
+pub struct BasicServiceMapping<S> 
 {
-  request_phantom: PhantomData<Q>,
-  response_phantom: PhantomData<P>,
+  phantom: PhantomData<S>,
 }
 
-pub type BasicServer<S> 
-  = Server<S,BasicServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
-pub type BasicClient<S> 
-  = Client<S,BasicServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+pub type BasicServer<S> = Server<S,BasicServiceMapping<S>>;
+pub type BasicClient<S> = Client<S,BasicServiceMapping<S>>;
 
 pub struct BasicClientState {
   client_guid: GUID,
-  sequence_number_counter: super::SequenceNumber,
+  sequence_number_counter: SequenceNumber,
 }
 
 impl BasicClientState {
   pub fn new(client_guid: GUID) -> BasicClientState {
     BasicClientState { 
       client_guid,
-      sequence_number_counter: super::SequenceNumber::default(),
+      sequence_number_counter: SequenceNumber::default(),
     }
   }
 }
 
-impl<Q,P> ServiceMapping<Q,P> for BasicServiceMapping<Q,P> 
+impl<S> ServiceMapping<S> for BasicServiceMapping<S> 
 where
-  Q: Message + Clone,
-  P: Message,
-{
+  S: Service,
+  S::Request: Clone,
+  {
 
-  type RequestWrapper = BasicRequestWrapper<Q>;
-  type ResponseWrapper = BasicResponseWrapper<P>;
+  type RequestWrapper = BasicRequestWrapper<S::Request>;
+  type ResponseWrapper = BasicResponseWrapper<S::Response>;
 
-  fn unwrap_request(wrapped: &Self::RequestWrapper, _sample_info: &SampleInfo) -> (RmwRequestId, Q) {
+  fn unwrap_request(wrapped: &Self::RequestWrapper, _sample_info: &SampleInfo) -> (RmwRequestId, S::Request) {
 
     ( RmwRequestId::from(wrapped.request_id) , wrapped.request.clone() )
   }
 
-  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
+  fn wrap_response(r_id: RmwRequestId, response:S::Response) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
     ( BasicResponseWrapper {
         related_request_id: SampleIdentity::from(r_id),
         remote_exception_code: 0,
@@ -90,7 +88,7 @@ where
 
   type ClientState = BasicClientState;
 
-  fn wrap_request(state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper,Option<RmwRequestId>) {
+  fn wrap_request(state: &mut Self::ClientState, request:S::Request) -> (Self::RequestWrapper,Option<RmwRequestId>) {
     state.sequence_number_counter = state.sequence_number_counter.next();
 
     let rmw_request_id = RmwRequestId {
@@ -117,12 +115,12 @@ where
   }
 
   fn unwrap_response(_state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, _sample_info: SampleInfo) 
-    -> (RmwRequestId, P) 
+    -> (RmwRequestId, S::Response) 
   {
     let r_id = 
       RmwRequestId {
         writer_guid: wrapped.related_request_id.writer_guid,
-        sequence_number: super::SequenceNumber::from( wrapped.related_request_id.sequence_number ),
+        sequence_number: SequenceNumber::from( wrapped.related_request_id.sequence_number ),
       };
 
     ( r_id, wrapped.response )

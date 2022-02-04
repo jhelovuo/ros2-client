@@ -16,9 +16,9 @@ use crate::{
   parameters::*,
   pubsub::{Publisher,Subscription},
   service::{Service,Client,Server, ServiceMapping, 
-    //cyclone::{CycloneServiceMapping, CycloneClient, CycloneServer,},
+    cyclone::{CycloneServiceMapping, CycloneClient, CycloneServer,},
     enhanced::{EnhancedServiceMapping, EnhancedClient, EnhancedServer,},
-    //basic::{BasicServiceMapping, BasicClient, BasicServer},
+    basic::{BasicServiceMapping, BasicClient, BasicServer},
   },
 };
 
@@ -297,29 +297,25 @@ impl Node {
   }
 
 
-  // pub fn create_client_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies) 
-  //   -> Result<CycloneClient<S>, dds::Error> 
-  // where
-  //     S: Service + 'static,
-  //     S::Request: Clone,
-  // {
-  //   self.create_client
-  //     ::<S,CycloneServiceMapping<S::Request,S::Response>>
-  //     (service_name, qos)
+  pub fn create_client_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies) 
+    -> Result<CycloneClient<S>, dds::Error> 
+  where
+      S: Service + 'static,
+      S::Request: Clone,
+  {
+    self.create_client::<S,CycloneServiceMapping<S>>(service_name, qos)
 
-  // }
+  }
 
-  // pub fn create_client_basic<S>(&mut self, service_name:&str, qos: QosPolicies) 
-  //   -> Result<BasicClient<S>, dds::Error> 
-  // where
-  //     S: Service + 'static,
-  //     S::Request: Clone,
-  // {
-  //   self.create_client
-  //     ::<S,BasicServiceMapping<S::Request,S::Response>>
-  //     (service_name, qos)
+  pub fn create_client_basic<S>(&mut self, service_name:&str, qos: QosPolicies) 
+    -> Result<BasicClient<S>, dds::Error> 
+  where
+      S: Service + 'static,
+      S::Request: Clone,
+  {
+    self.create_client::<S,BasicServiceMapping<S>>(service_name, qos)
 
-  // }
+  }
 
   pub fn create_client_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<EnhancedClient<S>, dds::Error> 
@@ -327,9 +323,7 @@ impl Node {
       S: Service + 'static,
       S::Request: Clone,
   {
-    self.create_client
-      ::<S,EnhancedServiceMapping<S>>
-      (service_name, qos)
+    self.create_client::<S,EnhancedServiceMapping<S>>(service_name, qos)
 
   }
 
@@ -361,27 +355,23 @@ impl Node {
   }
 
 
-  // pub fn create_server_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-  //   -> Result<CycloneServer<S>, dds::Error>
-  //   where
-  //     S: Service + 'static,
-  //     S::Request: Clone,
-  // {
-  //   self.create_server
-  //     ::<S,CycloneServiceMapping<S::Request,S::Response>>
-  //     (service_name, qos)
-  // }
+  pub fn create_server_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies ) 
+    -> Result<CycloneServer<S>, dds::Error>
+    where
+      S: Service + 'static,
+      S::Request: Clone,
+  {
+    self.create_server::<S,CycloneServiceMapping<S>>(service_name, qos)
+  }
 
-  // pub fn create_server_basic<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-  //   -> Result<BasicServer<S>, dds::Error>
-  //   where
-  //     S: Service + 'static,
-  //     S::Request: Clone,
-  // {
-  //   self.create_server
-  //     ::<S,BasicServiceMapping<S::Request,S::Response>>
-  //     (service_name, qos)
-  // }
+  pub fn create_server_basic<S>(&mut self, service_name:&str, qos: QosPolicies ) 
+    -> Result<BasicServer<S>, dds::Error>
+    where
+      S: Service + 'static,
+      S::Request: Clone,
+  {
+    self.create_server::<S,BasicServiceMapping<S>>(service_name, qos)
+  }
 
   pub fn create_server_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies ) 
     -> Result<EnhancedServer<S>, dds::Error>
@@ -389,9 +379,7 @@ impl Node {
       S: Service + 'static,
       S::Request: Clone,
   {
-    self.create_server
-      ::<S,EnhancedServiceMapping<S>>
-      (service_name, qos)
+    self.create_server::<S,EnhancedServiceMapping<S>>(service_name, qos)
   }
 
   pub fn create_server<S,SW>(&mut self, service_name:&str, qos: QosPolicies ) 

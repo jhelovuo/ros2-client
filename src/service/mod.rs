@@ -15,9 +15,9 @@ use rustdds::rpc::*;
 
 pub mod request_id;
 
-//pub mod basic;
+pub mod basic;
 pub mod enhanced;
-//pub mod cyclone;
+pub mod cyclone;
 
 pub use request_id::*;
 

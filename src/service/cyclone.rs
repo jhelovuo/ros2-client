@@ -10,8 +10,8 @@ use rustdds::rpc::*;
 
 use serde::{Serialize, Deserialize,};
 
-use super::*;
-use super::SequenceNumber;
+use super::{Service, Server, Client, ServiceMapping,};
+use super::request_id::{SequenceNumber, RmwRequestId,};
 
 
 // This is reverse-engineered from
@@ -27,16 +27,13 @@ pub struct CycloneWrapper<R> {
 }
 impl<R:Message> Message for CycloneWrapper<R> {}
 
-pub struct CycloneServiceMapping<Q,P> 
+pub struct CycloneServiceMapping<S> 
 {
-  request_phantom: PhantomData<Q>,
-  response_phantom: PhantomData<P>,
+  phantom: PhantomData<S>,
 }
 
-pub type CycloneServer<S> 
-  = Server<S,CycloneServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
-pub type CycloneClient<S> 
-  = Client<S,CycloneServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+pub type CycloneServer<S> = Server<S,CycloneServiceMapping<S>>;
+pub type CycloneClient<S> = Client<S,CycloneServiceMapping<S>>;
 
 pub struct CycloneClientState {
  client_guid: GUID,
@@ -52,16 +49,16 @@ impl CycloneClientState {
   }
 }
 
-impl<Q,P> ServiceMapping<Q,P> for CycloneServiceMapping<Q,P> 
+impl<S> ServiceMapping<S> for CycloneServiceMapping<S> 
 where
-  Q: Message + Clone,
-  P: Message,
-{
+  S: Service,
+  S::Request: Clone,
+  {
 
-  type RequestWrapper = CycloneWrapper<Q>;
-  type ResponseWrapper = CycloneWrapper<P>;
+  type RequestWrapper = CycloneWrapper<S::Request>;
+  type ResponseWrapper = CycloneWrapper<S::Response>;
 
-  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q) {
+  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, S::Request) {
     let r_id = RmwRequestId {
       writer_guid: sample_info.writer_guid(),
       // Last 8 bytes of writer (client) GUID should be in the wrapper also
@@ -72,14 +69,14 @@ where
     ( r_id, wrapped.response_or_request.clone() )
   }
 
-  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
+  fn wrap_response(r_id: RmwRequestId, response:S::Response) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
     (cyclone_wrap(r_id,response), None)
   }
 
 
   type ClientState = CycloneClientState;
 
-  fn wrap_request(state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper,Option<RmwRequestId>) {
+  fn wrap_request(state: &mut Self::ClientState, request:S::Request) -> (Self::RequestWrapper,Option<RmwRequestId>) {
     state.sequence_number_counter = state.sequence_number_counter.next();
 
     // Generate new request id
@@ -101,7 +98,7 @@ where
   }
 
   fn unwrap_response(state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) 
-    -> (RmwRequestId, P) 
+    -> (RmwRequestId, S::Response) 
   {
     let mut client_guid_bytes = [0;16];
     {
