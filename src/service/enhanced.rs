@@ -11,6 +11,7 @@ use rustdds::rpc::*;
 use serde::{Serialize, Deserialize,};
 
 use super::*;
+use super::request_id::*;
 
 // --------------------------------------------
 // --------------------------------------------
@@ -23,16 +24,15 @@ pub struct EnhancedWrapper<R> {
 }
 impl<R:Message> Message for EnhancedWrapper<R> {}
 
-pub struct EnhancedServiceMapping<Q,P> 
+pub struct EnhancedServiceMapping<S:Service> 
 {
-  request_phantom: PhantomData<Q>,
-  response_phantom: PhantomData<P>,
+  phantom: PhantomData<S>,
 }
 
 pub type EnhancedServer<S> 
-  = Server<S,EnhancedServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+  = Server<S,EnhancedServiceMapping< S >>;
 pub type EnhancedClient<S> 
-  = Client<S,EnhancedServiceMapping<<S as Service>::Request,<S as Service>::Response>>;
+  = Client<S,EnhancedServiceMapping< S >>;
 
 // Enhanced mode needs no client state in RMW, thus a unit struct.
 pub struct EnhancedClientState {}
@@ -43,27 +43,27 @@ impl EnhancedClientState {
   }
 }
 
-impl<Q,P> ServiceMapping<Q,P> for EnhancedServiceMapping<Q,P> 
+impl<S> ServiceMapping<S> for EnhancedServiceMapping<S> 
 where
-  Q: Message + Clone,
-  P: Message,
+  S: Service,
+  S::Request: Clone,
 {
 
-  type RequestWrapper = EnhancedWrapper<Q>;
-  type ResponseWrapper = EnhancedWrapper<P>;
+  type RequestWrapper = EnhancedWrapper<S::Request>;
+  type ResponseWrapper = EnhancedWrapper<S::Response>;
 
-  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q) {
+  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, S::Request) {
     ( RmwRequestId::from(sample_info.sample_identity() ) , wrapped.response_or_request.clone() )
   }
 
-  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
+  fn wrap_response(r_id: RmwRequestId, response: S::Response) -> (Self::ResponseWrapper, Option<SampleIdentity>) {
     (  EnhancedWrapper{ response_or_request: response }, Some(SampleIdentity::from(r_id)))
   }
 
 
   type ClientState = EnhancedClientState;
 
-  fn wrap_request(_state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper,Option<RmwRequestId>) {
+  fn wrap_request(_state: &mut Self::ClientState, request: S::Request) -> (Self::RequestWrapper,Option<RmwRequestId>) {
     (EnhancedWrapper{ response_or_request: request }, None)
   }
 
@@ -72,7 +72,7 @@ where
   }
 
   fn unwrap_response(_state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) 
-    -> (RmwRequestId, P) 
+    -> (RmwRequestId, S::Response) 
   {
     let r_id = 
       sample_info.related_sample_identity()

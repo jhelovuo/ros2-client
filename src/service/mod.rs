@@ -13,99 +13,13 @@ use crate::pubsub::{Publisher, Subscription, };
 use rustdds::*;
 use rustdds::rpc::*;
 
+pub mod request_id;
 
-pub mod basic;
+//pub mod basic;
 pub mod enhanced;
-pub mod cyclone;
+//pub mod cyclone;
 
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SequenceNumber {
-  number: i64,
-}
-
-impl SequenceNumber {
-  pub fn new(number: i64) -> SequenceNumber { 
-    SequenceNumber{ number } 
-  }
-
-  pub fn zero() -> SequenceNumber {
-    SequenceNumber::new(0)
-  }
-
-  pub fn from_high_low(high:i32, low:u32) -> SequenceNumber {
-    SequenceNumber { 
-      number: ((high as i64) << 32) + (low as i64)
-    }
-  }
-
-  pub fn high(&self) -> i32 {
-    (self.number >> 32) as i32
-  }
-
-  pub fn low(&self) -> u32 {
-    (self.number & 0xFFFF_FFFF) as u32
-  }
-
-  pub fn next(&self) -> SequenceNumber {
-    SequenceNumber{ number: self.number + 1 }
-  }
-
-}
-
-impl Default for SequenceNumber {
-  fn default() -> SequenceNumber {
-    SequenceNumber::new(1) // This is consistent with RustDDS SequenceNumber default value
-  }
-}
-
-impl From<SequenceNumber> for i64 {
-  fn from(sn:SequenceNumber) -> i64 {
-    sn.number
-  }
-}
-
-impl From<rustdds::SequenceNumber> for SequenceNumber {
-  fn from(sn:rustdds::SequenceNumber) -> SequenceNumber {
-    SequenceNumber::new( i64::from(sn) )
-  }
-}
-
-
-
-/// [Original](https://docs.ros2.org/foxy/api/rmw/structrmw__request__id__t.html)
-#[derive(Clone,Copy,Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RmwRequestId {
-  pub writer_guid: GUID,
-  pub sequence_number: SequenceNumber, 
-}
-
-impl From<RmwRequestId> for SampleIdentity {
-  fn from(si : RmwRequestId) -> SampleIdentity {
-    SampleIdentity {
-      writer_guid: si.writer_guid,
-      sequence_number: rustdds::SequenceNumber::from( i64::from( si.sequence_number) ),
-    }
-  }
-}
-
-impl From<SampleIdentity> for RmwRequestId {
-  fn from(si : SampleIdentity) -> RmwRequestId {
-    RmwRequestId {
-      writer_guid: si.writer_guid,
-      sequence_number: SequenceNumber::from(si.sequence_number),
-    }
-  }
-}
-
-/// [original](https://docs.ros2.org/foxy/api/rmw/structrmw__service__info__t.html)
-// But where is this used?
-//
-// pub struct RmwServiceInfo {
-//   pub source_timestamp: RmwTimePointValue,
-//   pub received_timestamp: RmwTimePointValue,
-//   pub request_id: RmwRequestId,
-// }
+pub use request_id::*;
 
 // --------------------------------------------
 // --------------------------------------------
@@ -121,8 +35,9 @@ pub trait Service {
 // --------------------------------------------
 
 // See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
-pub trait ServiceMapping<Q,P> 
-where 
+pub trait ServiceMapping<S> 
+where
+  S: Service, 
   Self::RequestWrapper: Message,
   Self::ResponseWrapper: Message,
 {
@@ -130,10 +45,10 @@ where
   type ResponseWrapper;
 
   // Server operations
-  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, Q);
+  fn unwrap_request(wrapped: &Self::RequestWrapper, sample_info: &SampleInfo) -> (RmwRequestId, S::Request);
   // Unwrapping will clone the request
   // This is reasonable, because we may have to take it out of another struct
-  fn wrap_response(r_id: RmwRequestId, response:P) -> (Self::ResponseWrapper, Option<SampleIdentity>);
+  fn wrap_response(r_id: RmwRequestId, response:S::Response) -> (Self::ResponseWrapper, Option<SampleIdentity>);
 
   // Client operations
   type ClientState;
@@ -142,36 +57,39 @@ where
 
   // If wrap_requests returns request id, then that will be used. If None, then use
   // return value from request_id_after_wrap
-  fn wrap_request(state: &mut Self::ClientState, request:Q) -> (Self::RequestWrapper, Option<RmwRequestId>);
+  fn wrap_request(state: &mut Self::ClientState, request:S::Request) -> (Self::RequestWrapper, Option<RmwRequestId>);
   fn request_id_after_wrap(state: &mut Self::ClientState, write_result:SampleIdentity) -> RmwRequestId;
-  fn unwrap_response(state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) -> (RmwRequestId, P);
+  fn unwrap_response(state: &mut Self::ClientState, wrapped: Self::ResponseWrapper, sample_info: SampleInfo) -> (RmwRequestId, S::Response);
 }
 
 // --------------------------------------------
 // --------------------------------------------
 
-pub struct Server<S:Service, W:ServiceMapping<S::Request,S::Response>>
+pub struct Server<S, SW>
+where
+  S: Service,
+  SW: ServiceMapping<S>,
 {
-  request_receiver: Subscription<W::RequestWrapper>,
-  response_sender: Publisher<W::ResponseWrapper>,
-  phantom: PhantomData<S>,
+  request_receiver: Subscription<SW::RequestWrapper>,
+  response_sender: Publisher<SW::ResponseWrapper>,
+  phantom: PhantomData<SW>,
 }
 
 
-impl<S,W> Server<S,W>
+impl<S,SW> Server<S,SW>
 where
   S: 'static + Service,
-  W: 'static + ServiceMapping<S::Request, S::Response>,
+  SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(node: &mut Node, 
     request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) 
-    -> dds::Result<Server<S,W>>
+    -> dds::Result<Server<S,SW>>
   {
 
     let request_receiver = node
-      .create_subscription::<W::RequestWrapper>(request_topic, qos.clone())?;
+      .create_subscription::<SW::RequestWrapper>(request_topic, qos.clone())?;
     let response_sender = node
-      .create_publisher::<W::ResponseWrapper>(response_topic, qos)?;
+      .create_publisher::<SW::ResponseWrapper>(response_topic, qos)?;
 
     info!("Created new Server: requests={} response={}", request_topic.name(), response_topic.name());
 
@@ -183,11 +101,11 @@ where
   {
     let next_sample = self.request_receiver.take()?;
 
-    Ok( next_sample.map( |(s,mi)| W::unwrap_request(&s, &mi.sample_info ) ) )
+    Ok( next_sample.map( |(s,mi)| SW::unwrap_request(&s, &mi.sample_info ) ) )
   }
 
   pub fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
-    let (wrapped_response, rsi_opt) = W::wrap_response(id, response);
+    let (wrapped_response, rsi_opt) = SW::wrap_response(id, response);
     let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(rsi_opt);
     self.response_sender.publish_with_options(wrapped_response, write_opt.build() )?;
     Ok(())
@@ -195,10 +113,10 @@ where
 }
 
 
-impl<S, W> Evented for Server<S,W> 
+impl<S,SW> Evented for Server<S,SW> 
 where
   S: 'static + Service,
-  W: 'static + ServiceMapping<S::Request, S::Response>,
+  SW: 'static + ServiceMapping<S>,
 {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self
@@ -227,39 +145,43 @@ where
 // -------------------------------------------------------------------
 // -------------------------------------------------------------------
 
-pub struct Client<S:Service, W:ServiceMapping<S::Request,S::Response>> {
-  request_sender: Publisher<W::RequestWrapper>,
-  response_receiver: Subscription<W::ResponseWrapper>,
-  client_state: W::ClientState,
-  phantom: PhantomData<S>,
+pub struct Client<S,SW> 
+where
+  S: Service,
+  SW: ServiceMapping<S>,
+{
+  request_sender: Publisher<SW::RequestWrapper>,
+  response_receiver: Subscription<SW::ResponseWrapper>,
+  client_state: SW::ClientState,
+  phantom: PhantomData<SW>,
 }
 
-impl<S,W> Client<S,W>
+impl<S,SW> Client<S,SW>
 where
   S: 'static + Service,
-  W: 'static + ServiceMapping<S::Request, S::Response>,
+  SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(node: &mut Node, 
-    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S,W>>
+    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S,SW>>
   {
     let request_sender = node.create_publisher
-      ::<W::RequestWrapper>(request_topic, qos.clone())?;
+      ::<SW::RequestWrapper>(request_topic, qos.clone())?;
     let response_receiver = node.create_subscription
-      ::<W::ResponseWrapper>(response_topic, qos)?;
+      ::<SW::ResponseWrapper>(response_topic, qos)?;
     info!("Created new Client: request topic={} response topic={}", request_topic.name(), response_topic.name());
 
     let request_sender_guid = request_sender.guid();
     Ok( Client{ request_sender, response_receiver, 
-                client_state: W::new_client_state( request_sender_guid ), 
+                client_state: SW::new_client_state( request_sender_guid ), 
                 phantom: PhantomData,
               })
   }
 
   pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
-    let (wrapped,rsi_opt) = W::wrap_request(&mut self.client_state, request);
+    let (wrapped,rsi_opt) = SW::wrap_request(&mut self.client_state, request);
     let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(  rsi_opt.map(SampleIdentity::from));
     let sample_id = self.request_sender.publish_with_options( wrapped , write_opt.build() )?;
-    Ok( W::request_id_after_wrap(&mut self.client_state, sample_id) )
+    Ok( SW::request_id_after_wrap(&mut self.client_state, sample_id) )
   }
 
   pub fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
@@ -267,16 +189,16 @@ where
   {
     let next_sample = self.response_receiver.take()?;
 
-    Ok( next_sample.map( |(s,mi)| W::unwrap_response(&mut self.client_state, s, mi.sample_info ) ) )
+    Ok( next_sample.map( |(s,mi)| SW::unwrap_response(&mut self.client_state, s, mi.sample_info ) ) )
   }
 
 }
 
 
-impl<S,W> Evented for Client<S,W> 
+impl<S,SW> Evented for Client<S,SW> 
 where
   S: 'static + Service,
-  W: 'static + ServiceMapping<S::Request, S::Response>,
+  SW: 'static + ServiceMapping<S>,
 {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self

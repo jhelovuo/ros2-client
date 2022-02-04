@@ -16,9 +16,9 @@ use crate::{
   parameters::*,
   pubsub::{Publisher,Subscription},
   service::{Service,Client,Server, ServiceMapping, 
-    cyclone::{CycloneServiceMapping, CycloneClient, CycloneServer,},
+    //cyclone::{CycloneServiceMapping, CycloneClient, CycloneServer,},
     enhanced::{EnhancedServiceMapping, EnhancedClient, EnhancedServer,},
-    basic::{BasicServiceMapping, BasicClient, BasicServer},
+    //basic::{BasicServiceMapping, BasicClient, BasicServer},
   },
 };
 
@@ -297,29 +297,29 @@ impl Node {
   }
 
 
-  pub fn create_client_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies) 
-    -> Result<CycloneClient<S>, dds::Error> 
-  where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_client
-      ::<S,CycloneServiceMapping<S::Request,S::Response>>
-      (service_name, qos)
+  // pub fn create_client_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies) 
+  //   -> Result<CycloneClient<S>, dds::Error> 
+  // where
+  //     S: Service + 'static,
+  //     S::Request: Clone,
+  // {
+  //   self.create_client
+  //     ::<S,CycloneServiceMapping<S::Request,S::Response>>
+  //     (service_name, qos)
 
-  }
+  // }
 
-  pub fn create_client_basic<S>(&mut self, service_name:&str, qos: QosPolicies) 
-    -> Result<BasicClient<S>, dds::Error> 
-  where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_client
-      ::<S,BasicServiceMapping<S::Request,S::Response>>
-      (service_name, qos)
+  // pub fn create_client_basic<S>(&mut self, service_name:&str, qos: QosPolicies) 
+  //   -> Result<BasicClient<S>, dds::Error> 
+  // where
+  //     S: Service + 'static,
+  //     S::Request: Clone,
+  // {
+  //   self.create_client
+  //     ::<S,BasicServiceMapping<S::Request,S::Response>>
+  //     (service_name, qos)
 
-  }
+  // }
 
   pub fn create_client_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<EnhancedClient<S>, dds::Error> 
@@ -328,7 +328,7 @@ impl Node {
       S::Request: Clone,
   {
     self.create_client
-      ::<S,EnhancedServiceMapping<S::Request,S::Response>>
+      ::<S,EnhancedServiceMapping<S>>
       (service_name, qos)
 
   }
@@ -338,7 +338,7 @@ impl Node {
   where
       S: Service + 'static,
       S::Request: Clone,
-      W: 'static + ServiceMapping<S::Request, S::Response>,
+      W: 'static + ServiceMapping<S>,
   {
     // Add rq/ and rr/ prefixes as documented in
     // https://design.ros2.org/articles/topic_and_service_names.html
@@ -361,27 +361,27 @@ impl Node {
   }
 
 
-  pub fn create_server_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<CycloneServer<S>, dds::Error>
-    where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_server
-      ::<S,CycloneServiceMapping<S::Request,S::Response>>
-      (service_name, qos)
-  }
+  // pub fn create_server_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies ) 
+  //   -> Result<CycloneServer<S>, dds::Error>
+  //   where
+  //     S: Service + 'static,
+  //     S::Request: Clone,
+  // {
+  //   self.create_server
+  //     ::<S,CycloneServiceMapping<S::Request,S::Response>>
+  //     (service_name, qos)
+  // }
 
-  pub fn create_server_basic<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<BasicServer<S>, dds::Error>
-    where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_server
-      ::<S,BasicServiceMapping<S::Request,S::Response>>
-      (service_name, qos)
-  }
+  // pub fn create_server_basic<S>(&mut self, service_name:&str, qos: QosPolicies ) 
+  //   -> Result<BasicServer<S>, dds::Error>
+  //   where
+  //     S: Service + 'static,
+  //     S::Request: Clone,
+  // {
+  //   self.create_server
+  //     ::<S,BasicServiceMapping<S::Request,S::Response>>
+  //     (service_name, qos)
+  // }
 
   pub fn create_server_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies ) 
     -> Result<EnhancedServer<S>, dds::Error>
@@ -390,16 +390,16 @@ impl Node {
       S::Request: Clone,
   {
     self.create_server
-      ::<S,EnhancedServiceMapping<S::Request,S::Response>>
+      ::<S,EnhancedServiceMapping<S>>
       (service_name, qos)
   }
 
-  pub fn create_server<S,W>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<Server<S,W>, dds::Error>
+  pub fn create_server<S,SW>(&mut self, service_name:&str, qos: QosPolicies ) 
+    -> Result<Server<S,SW>, dds::Error>
     where
       S: Service + 'static,
       S::Request: Clone,
-      W: 'static + ServiceMapping<S::Request, S::Response>,
+      SW: 'static + ServiceMapping<S>,
   {
     let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
     let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), service_name)?;
@@ -413,7 +413,7 @@ impl Node {
       .domain_participant()
       .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
 
-    Server::<S,W>
+    Server::<S,SW>
       ::new(self, &rq_topic, &rs_topic, Some(qos) )
   }
   
