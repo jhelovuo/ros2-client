@@ -301,6 +301,22 @@ impl Node {
     Ok(p)
   }
 
+  /// Creates ROS2 Service Client
+  ///
+  /// # Arguments
+  ///
+  /// * `service_mapping` - ServiceMapping to be used
+  /// * `service_name` -
+  /// * `qos`- 
+  ///
+  /// There are different and incompatible ways to map Services onto DDS Topics.
+  /// * Basic
+  ///  * Untested. Could work with RTI Connext?
+  /// * Enhanced 
+  ///  * ROS2 Foxy with eProsima DDS, 
+  ///  * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) - set Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
+  /// * Cyclone
+  ///  * ROS2 Galactic with CycloneDDS
   pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
     -> Result<ClientGeneric<S>, dds::Error> 
   where
@@ -348,6 +364,14 @@ impl Node {
   }
 
 
+  /// Creates ROS2 Service Server
+  ///
+  /// # Arguments
+  ///
+  /// * `service_mapping` - ServiceMapping to be used. See [`create_client`].
+  /// * `service_name` -
+  /// * `qos`- 
+  ///
   pub fn create_server<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
     -> Result<ServerGeneric<S>, dds::Error> 
   where

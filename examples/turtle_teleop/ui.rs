@@ -11,9 +11,11 @@ use crate::{Pose, Twist, Vector3, PenRequest};
 #[derive(Debug)]
 pub enum RosCommand {
   StopEventLoop,
-  TurtleCmdVel { twist: Twist },
+  TurtleCmdVel { turtle_id: i32, twist: Twist },
   Reset,
   SetPen(PenRequest),
+  Spawn(String),
+  Kill(String),
 }
 
 // Define turtle movement commands as Twist values
@@ -128,6 +130,8 @@ impl UiController {
     .unwrap();
     self.stdout.flush().unwrap();
 
+    let mut turtle_id = 1;
+
     let mut pen_index = 0;
     let pen_requests = vec![
       PenRequest { r: 255, b: 0, g: 0, width: 3, off: 0,},
@@ -175,30 +179,54 @@ impl UiController {
                 self.send_command(RosCommand::SetPen( pen_requests[pen_index].clone() ));
                 pen_index = (pen_index + 1) % pen_requests.len();
               }
+              Key::Char('a') => {
+                debug!("Spawn 1");
+                self.send_command(RosCommand::Spawn( "turtle1".to_owned() ));
+              }
+              Key::Char('b') => {
+                debug!("Spawn 2");
+                self.send_command(RosCommand::Spawn( "turtle2".to_owned() ));
+              }
+              Key::Char('A') => {
+                debug!("Kill 1");
+                self.send_command(RosCommand::Kill( "turtle1".to_owned() ));
+              }
+              Key::Char('B') => {
+                debug!("Kill 2");
+                self.send_command(RosCommand::Kill( "turtle2".to_owned() ));
+              }
+
+              Key::Char('1') => {
+                turtle_id = 1;
+              }
+
+              Key::Char('2') => {
+                turtle_id = 2;
+              }
 
               Key::Up => {
                 debug!("Move left.");
                 let twist = MOVE_FORWARD;
                 self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { twist })
+                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
               }
               Key::Right => {
                 debug!("Move right.");
                 let twist = ROTATE_RIGHT;
                 self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { twist })
+                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
               }
               Key::Down => {
                 debug!("Rotate down.");
                 let twist = MOVE_BACKWARD;
                 self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { twist })
+                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
               }
               Key::Left => {
                 debug!("Rotate left.");
                 let twist = ROTATE_LEFT;
                 self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { twist })
+                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
               }
               _ => (),
             }
