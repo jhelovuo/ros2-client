@@ -68,7 +68,22 @@ impl Default for NodeOptions {
 // ----------------------------------------------------------------------------------------------------
 
 /// Enumerate supported service mappings
-pub enum ServiceMappings { Basic, Enhanced, Cyclone, }
+///
+/// There are different and incompatible ways to map Services onto DDS Topics.
+/// For details, see OMG Specification
+/// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
+pub enum ServiceMappings { 
+  /// Supposed to work with RTI Connext with
+  /// `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended` , but untested.
+  Basic, 
+
+  /// * ROS2 Foxy with eProsima DDS, 
+  /// * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) - set environment variable `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended` before running ROS2 executable.
+  Enhanced, 
+
+  /// ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not over actual network.
+  Cyclone, 
+}
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
@@ -309,14 +324,6 @@ impl Node {
   /// * `service_name` -
   /// * `qos`- 
   ///
-  /// There are different and incompatible ways to map Services onto DDS Topics.
-  /// * Basic
-  ///  * Untested. Could work with RTI Connext?
-  /// * Enhanced 
-  ///  * ROS2 Foxy with eProsima DDS, 
-  ///  * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) - set Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
-  /// * Cyclone
-  ///  * ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not over actual network.
   pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
     -> Result<Client<S>, dds::Error> 
   where
