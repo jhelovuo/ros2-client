@@ -1,4 +1,6 @@
 use std::io;
+use std::ops::{Deref,DerefMut};
+
 use std::marker::PhantomData;
 
 use mio::{Evented, Poll, Token, PollOpt, Ready,};
@@ -46,11 +48,25 @@ where S:Service
   fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()>;
 }
 
-pub struct ServerGeneric<S> {
+/// Server end of a ROS2 Service
+pub struct Server<S> {
   pub(crate) inner: Box<dyn ServerT<S>>
 }
 
-impl<S> ServerT<S> for ServerGeneric<S> 
+impl<S> Deref for Server<S> {
+  type Target= dyn ServerT<S>;
+  fn deref(&self) -> &Self::Target {
+    &*self.inner
+  }
+}
+
+impl<S> DerefMut for Server<S> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut *self.inner
+  }
+}
+
+impl<S> ServerT<S> for Server<S> 
 where S: 'static + Service
 {
   fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>> {
@@ -62,7 +78,7 @@ where S: 'static + Service
   }
 }
 
-impl<S> Evented for ServerGeneric<S> 
+impl<S> Evented for Server<S> 
 where
   S: 'static + Service,
 {
@@ -92,11 +108,25 @@ pub trait ClientT<S> : Evented
   fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>;
 }
 
-pub struct ClientGeneric<S> {
+/// Client end of a ROS2 Service
+pub struct Client<S> {
   pub(crate) inner: Box<dyn ClientT<S>>
 }
 
-impl<S> ClientT<S> for ClientGeneric<S> 
+impl<S> Deref for Client<S> {
+  type Target= dyn ClientT<S>;
+  fn deref(&self) -> &Self::Target {
+    &*self.inner
+  }
+}
+
+impl<S> DerefMut for Client<S> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut *self.inner
+  }
+}
+
+impl<S> ClientT<S> for Client<S> 
 where S: 'static + Service
 {
   fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
@@ -108,7 +138,7 @@ where S: 'static + Service
   }
 }
 
-impl<S> Evented for ClientGeneric<S> 
+impl<S> Evented for Client<S> 
 where
   S: 'static + Service,
 {
@@ -162,7 +192,7 @@ where
 // --------------------------------------------
 // --------------------------------------------
 
-pub struct Server<S, SW>
+pub struct ServerGeneric<S, SW>
 where
   S: Service,
   SW: ServiceMapping<S>,
@@ -173,14 +203,14 @@ where
 }
 
 
-impl<S,SW> Server<S,SW>
+impl<S,SW> ServerGeneric<S,SW>
 where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(node: &mut Node, 
     request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) 
-    -> dds::Result<Server<S,SW>>
+    -> dds::Result<ServerGeneric<S,SW>>
   {
 
     let request_receiver = node
@@ -188,13 +218,13 @@ where
     let response_sender = node
       .create_publisher::<SW::ResponseWrapper>(response_topic, qos)?;
 
-    info!("Created new Server: requests={} response={}", request_topic.name(), response_topic.name());
+    info!("Created new ServerGeneric: requests={} response={}", request_topic.name(), response_topic.name());
 
-    Ok(Server { request_receiver, response_sender, phantom:PhantomData })
+    Ok(ServerGeneric { request_receiver, response_sender, phantom:PhantomData })
   }
 }
 
-impl<S,SW> ServerT<S> for Server<S,SW> 
+impl<S,SW> ServerT<S> for ServerGeneric<S,SW> 
 where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
@@ -218,7 +248,7 @@ where
 
 
 
-impl<S,SW> Evented for Server<S,SW> 
+impl<S,SW> Evented for ServerGeneric<S,SW> 
 where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
@@ -250,7 +280,7 @@ where
 // -------------------------------------------------------------------
 // -------------------------------------------------------------------
 
-pub struct Client<S,SW> 
+pub struct ClientGeneric<S,SW> 
 where
   S: Service,
   SW: ServiceMapping<S>,
@@ -261,29 +291,29 @@ where
   phantom: PhantomData<SW>,
 }
 
-impl<S,SW> Client<S,SW>
+impl<S,SW> ClientGeneric<S,SW>
 where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(node: &mut Node, 
-    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<Client<S,SW>>
+    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<ClientGeneric<S,SW>>
   {
     let request_sender = node.create_publisher
       ::<SW::RequestWrapper>(request_topic, qos.clone())?;
     let response_receiver = node.create_subscription
       ::<SW::ResponseWrapper>(response_topic, qos)?;
-    info!("Created new Client: request topic={} response topic={}", request_topic.name(), response_topic.name());
+    info!("Created new ClientGeneric: request topic={} response topic={}", request_topic.name(), response_topic.name());
 
     let request_sender_guid = request_sender.guid();
-    Ok( Client{ request_sender, response_receiver, 
+    Ok( ClientGeneric{ request_sender, response_receiver, 
                 client_state: SW::new_client_state( request_sender_guid ), 
                 phantom: PhantomData,
               })
   }
 }
 
-impl<S,SW> ClientT<S> for Client<S,SW> 
+impl<S,SW> ClientT<S> for ClientGeneric<S,SW> 
 where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
@@ -306,7 +336,7 @@ where
 }
 
 
-impl<S,SW> Evented for Client<S,SW> 
+impl<S,SW> Evented for ClientGeneric<S,SW> 
 where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,

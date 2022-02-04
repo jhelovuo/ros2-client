@@ -316,9 +316,9 @@ impl Node {
   ///  * ROS2 Foxy with eProsima DDS, 
   ///  * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) - set Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
   /// * Cyclone
-  ///  * ROS2 Galactic with CycloneDDS
+  ///  * ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not over actual network.
   pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
-    -> Result<ClientGeneric<S>, dds::Error> 
+    -> Result<Client<S>, dds::Error> 
   where
       S: Service + 'static,
       S::Request: Clone,
@@ -333,11 +333,11 @@ impl Node {
           Box::new(self.create_client_generic::<S,CycloneServiceMapping<S>>(service_name, qos)?),
       };
 
-    Ok( ClientGeneric { inner } )
+    Ok( Client { inner } )
   }
 
   fn create_client_generic<S,W>(&mut self, service_name:&str, qos: QosPolicies) 
-    -> Result<Client<S,W>, dds::Error> 
+    -> Result<ClientGeneric<S,W>, dds::Error> 
   where
       S: Service + 'static,
       S::Request: Clone,
@@ -359,7 +359,7 @@ impl Node {
       .domain_participant()
       .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
 
-    Client::<S,W>
+    ClientGeneric::<S,W>
       ::new(self, &rq_topic, &rs_topic, Some(qos),)
   }
 
@@ -368,12 +368,12 @@ impl Node {
   ///
   /// # Arguments
   ///
-  /// * `service_mapping` - ServiceMapping to be used. See [`create_client`].
+  /// * `service_mapping` - ServiceMapping to be used. See [`Self.create_client`].
   /// * `service_name` -
   /// * `qos`- 
   ///
   pub fn create_server<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
-    -> Result<ServerGeneric<S>, dds::Error> 
+    -> Result<Server<S>, dds::Error> 
   where
       S: Service + 'static,
       S::Request: Clone,
@@ -388,11 +388,11 @@ impl Node {
           Box::new(self.create_server_generic::<S,CycloneServiceMapping<S>>(service_name, qos)?),
       };
 
-    Ok( ServerGeneric { inner } )
+    Ok( Server { inner } )
   }
 
   fn create_server_generic<S,SW>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<Server<S,SW>, dds::Error>
+    -> Result<ServerGeneric<S,SW>, dds::Error>
     where
       S: Service + 'static,
       S::Request: Clone,
@@ -410,7 +410,7 @@ impl Node {
       .domain_participant()
       .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
 
-    Server::<S,SW>
+    ServerGeneric::<S,SW>
       ::new(self, &rq_topic, &rs_topic, Some(qos) )
   }
   

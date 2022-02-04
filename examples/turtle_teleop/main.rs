@@ -173,7 +173,7 @@ fn ros2_loop(
     .create_subscription::<Pose>(&turtle_pose_topic, None)
     .unwrap();
 
-  // Perepare wor controlling 2nd turtle
+  // Perepare for controlling 2nd turtle
   let turtle2_cmd_vel_topic = ros_node
     .create_topic(
       "/turtle2/cmd_vel",

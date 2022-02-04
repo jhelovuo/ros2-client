@@ -3,45 +3,32 @@
 //! # Examples
 //!
 //! ```
-//! use rustdds::dds::DomainParticipant;
-//! use rustdds::dds::data_types::TopicKind;
-//! use rustdds::dds::traits::RTPSEntity;
-//! use rustdds::ros2::RosParticipant;
-//! use rustdds::ros2::NodeOptions;
-//! use rustdds::ros2::Node;
-//! use rustdds::ros2::builtin_datatypes::NodeEntitiesInfo;
-//! use rustdds::dds::qos::QosPolicies;
-//! use rustdds::serialization::CDRSerializerAdapter;
+//! use rustdds::*;
+//! use ros2_client::*;
+//! use ros2_client::node_entities_info::NodeEntitiesInfo;
 //!
 //!
-//!
-//! // RosParticipant is needed for defined RosNodes to be visible in ROS2 network.
-//! let mut ros_participant = RosParticipant::new().unwrap();
+//! let mut ros_context = Context::new().unwrap();
 //!
 //!
-//! // declaring ros node
-//! let mut ros_node = ros_participant.new_ros_node(
+//! let mut ros_node = ros_context.new_node(
 //!   "some_node_name",
 //!   "/some_namespace",
-//!   NodeOptions::new(false), // enable rosout?
+//!   NodeOptions::new().enable_rosout(true),
 //!   ).unwrap();
 //!
-//! // Creating some topic for Node
-//! let some_topic = ros_node.create_ros_topic(
+//! let some_topic = ros_node.create_topic(
 //!     "some_topic_name",
 //!     "NodeEntitiesInfo".to_string(),
-//!     &QosPolicies::builder().build(),
-//!     TopicKind::NoKey)
+//!     &QosPolicies::builder().build() )
 //!   .unwrap();
 //!
 //! // declaring some writer that use non keyed types
 //! let some_writer = ros_node
-//!   .create_ros_nokey_publisher::<NodeEntitiesInfo, CDRSerializerAdapter<_>>(
-//!     &some_topic, None)
+//!   .create_publisher::<NodeEntitiesInfo>(&some_topic, None)
 //!   .unwrap();
 //!
-//! // Readers and RosParticipant implement mio Evented trait and thus function the same way as
-//! // std::sync::mpcs and can be handled the same way for reading the data
+//! // Publisher and subscription implement [`mio::Evented`], so thay can be polled.
 //! ```
 
 #[macro_use] extern crate lazy_static;
@@ -73,7 +60,7 @@ pub use context::*;
 #[doc(inline)]
 pub use pubsub::*;
 #[doc(inline)]
-pub use service::*;
+pub use service::{Service, Server, Client};
 #[doc(inline)]
 pub use message::Message;
 

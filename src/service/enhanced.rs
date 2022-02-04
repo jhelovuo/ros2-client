@@ -29,8 +29,8 @@ pub struct EnhancedServiceMapping<S:Service>
   phantom: PhantomData<S>,
 }
 
-pub type EnhancedServer<S> = Server<S,EnhancedServiceMapping< S >>;
-pub type EnhancedClient<S> = Client<S,EnhancedServiceMapping< S >>;
+pub type EnhancedServer<S> = ServerGeneric<S,EnhancedServiceMapping< S >>;
+pub type EnhancedClient<S> = ClientGeneric<S,EnhancedServiceMapping< S >>;
 
 // Enhanced mode needs no client state in RMW, thus a unit struct.
 pub struct EnhancedClientState {}

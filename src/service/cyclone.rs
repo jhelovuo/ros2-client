@@ -10,7 +10,7 @@ use rustdds::rpc::*;
 
 use serde::{Serialize, Deserialize,};
 
-use super::{Service, Server, Client, ServiceMapping,};
+use super::{Service, ServerGeneric, ClientGeneric, ServiceMapping,};
 use super::request_id::{SequenceNumber, RmwRequestId,};
 
 
@@ -32,8 +32,8 @@ pub struct CycloneServiceMapping<S>
   phantom: PhantomData<S>,
 }
 
-pub type CycloneServer<S> = Server<S,CycloneServiceMapping<S>>;
-pub type CycloneClient<S> = Client<S,CycloneServiceMapping<S>>;
+pub type CycloneServer<S> = ServerGeneric<S,CycloneServiceMapping<S>>;
+pub type CycloneClient<S> = ClientGeneric<S,CycloneServiceMapping<S>>;
 
 pub struct CycloneClientState {
  client_guid: GUID,

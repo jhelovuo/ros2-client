@@ -10,7 +10,7 @@ use rustdds::rpc::*;
 
 use serde::{Serialize, Deserialize,};
 
-use super::{Service, Server, Client, ServiceMapping,};
+use super::{Service, ServerGeneric, ClientGeneric, ServiceMapping,};
 use super::request_id::{SequenceNumber, RmwRequestId,};
 
 // --------------------------------------------
@@ -44,8 +44,8 @@ pub struct BasicServiceMapping<S>
   phantom: PhantomData<S>,
 }
 
-pub type BasicServer<S> = Server<S,BasicServiceMapping<S>>;
-pub type BasicClient<S> = Client<S,BasicServiceMapping<S>>;
+pub type BasicServer<S> = ServerGeneric<S,BasicServiceMapping<S>>;
+pub type BasicClient<S> = ClientGeneric<S,BasicServiceMapping<S>>;
 
 pub struct BasicClientState {
   client_guid: GUID,
