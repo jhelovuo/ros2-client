@@ -15,10 +15,11 @@ use crate::{
   log::Log,
   parameters::*,
   pubsub::{Publisher,Subscription},
-  service::{Service,Client,Server, ServiceMapping, 
-    cyclone::{CycloneServiceMapping, CycloneClient, CycloneServer,},
-    enhanced::{EnhancedServiceMapping, EnhancedClient, EnhancedServer,},
-    basic::{BasicServiceMapping, BasicClient, BasicServer},
+  service::{Service,Client,Server, ServiceMapping,
+    ServerGeneric, ClientGeneric, ServerT, ClientT,
+    cyclone::{CycloneServiceMapping, },
+    enhanced::{EnhancedServiceMapping, },
+    basic::{BasicServiceMapping, },
   },
 };
 
@@ -65,6 +66,10 @@ impl Default for NodeOptions {
 }
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
+
+/// Enumerate supported service mappings
+pub enum ServiceMappings { Basic, Enhanced, Cyclone, }
+
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
@@ -296,38 +301,26 @@ impl Node {
     Ok(p)
   }
 
-
-  pub fn create_client_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies) 
-    -> Result<CycloneClient<S>, dds::Error> 
+  pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
+    -> Result<ClientGeneric<S>, dds::Error> 
   where
       S: Service + 'static,
       S::Request: Clone,
   {
-    self.create_client::<S,CycloneServiceMapping<S>>(service_name, qos)
+    let inner :Box<dyn ClientT<S>> = 
+      match service_mapping {
+        ServiceMappings::Basic => 
+          Box::new( self.create_client_generic::<S,BasicServiceMapping<S>>(service_name, qos)?),
+        ServiceMappings::Enhanced => 
+          Box::new( self.create_client_generic::<S,EnhancedServiceMapping<S>>(service_name, qos)?),
+        ServiceMappings::Cyclone => 
+          Box::new(self.create_client_generic::<S,CycloneServiceMapping<S>>(service_name, qos)?),
+      };
 
+    Ok( ClientGeneric { inner } )
   }
 
-  pub fn create_client_basic<S>(&mut self, service_name:&str, qos: QosPolicies) 
-    -> Result<BasicClient<S>, dds::Error> 
-  where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_client::<S,BasicServiceMapping<S>>(service_name, qos)
-
-  }
-
-  pub fn create_client_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies) 
-    -> Result<EnhancedClient<S>, dds::Error> 
-  where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_client::<S,EnhancedServiceMapping<S>>(service_name, qos)
-
-  }
-
-  pub fn create_client<S,W>(&mut self, service_name:&str, qos: QosPolicies) 
+  fn create_client_generic<S,W>(&mut self, service_name:&str, qos: QosPolicies) 
     -> Result<Client<S,W>, dds::Error> 
   where
       S: Service + 'static,
@@ -355,34 +348,26 @@ impl Node {
   }
 
 
-  pub fn create_server_cyclone<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<CycloneServer<S>, dds::Error>
-    where
+  pub fn create_server<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
+    -> Result<ServerGeneric<S>, dds::Error> 
+  where
       S: Service + 'static,
       S::Request: Clone,
   {
-    self.create_server::<S,CycloneServiceMapping<S>>(service_name, qos)
+    let inner :Box<dyn ServerT<S>> = 
+      match service_mapping {
+        ServiceMappings::Basic => 
+          Box::new( self.create_server_generic::<S,BasicServiceMapping<S>>(service_name, qos)?),
+        ServiceMappings::Enhanced => 
+          Box::new( self.create_server_generic::<S,EnhancedServiceMapping<S>>(service_name, qos)?),
+        ServiceMappings::Cyclone => 
+          Box::new(self.create_server_generic::<S,CycloneServiceMapping<S>>(service_name, qos)?),
+      };
+
+    Ok( ServerGeneric { inner } )
   }
 
-  pub fn create_server_basic<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<BasicServer<S>, dds::Error>
-    where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_server::<S,BasicServiceMapping<S>>(service_name, qos)
-  }
-
-  pub fn create_server_enhanced<S>(&mut self, service_name:&str, qos: QosPolicies ) 
-    -> Result<EnhancedServer<S>, dds::Error>
-    where
-      S: Service + 'static,
-      S::Request: Clone,
-  {
-    self.create_server::<S,EnhancedServiceMapping<S>>(service_name, qos)
-  }
-
-  pub fn create_server<S,SW>(&mut self, service_name:&str, qos: QosPolicies ) 
+  fn create_server_generic<S,SW>(&mut self, service_name:&str, qos: QosPolicies ) 
     -> Result<Server<S,SW>, dds::Error>
     where
       S: Service + 'static,

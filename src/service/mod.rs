@@ -24,6 +24,9 @@ pub use request_id::*;
 // --------------------------------------------
 // --------------------------------------------
 
+/// Service trait pairs the Request and Response types together.
+/// Additonally, it ensures that Response and Request are Messages (serializable)
+/// and we have a menas to name the types.
 pub trait Service {
     type Request: Message;
     type Response: Message;
@@ -33,6 +36,100 @@ pub trait Service {
 
 // --------------------------------------------
 // --------------------------------------------
+
+/// Server trait defines the behavior for a "Server". It is required so that we can
+/// hide away the ServiceMapping in a Server
+pub trait ServerT<S> : Evented 
+where S:Service
+{
+  fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>>;
+  fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()>;
+}
+
+pub struct ServerGeneric<S> {
+  pub(crate) inner: Box<dyn ServerT<S>>
+}
+
+impl<S> ServerT<S> for ServerGeneric<S> 
+where S: 'static + Service
+{
+  fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>> {
+    self.inner.receive_request()
+  }
+
+  fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
+    self.inner.send_response(id,response)
+  }
+}
+
+impl<S> Evented for ServerGeneric<S> 
+where
+  S: 'static + Service,
+{
+  fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+    self.inner
+      .register(poll, token, interest, opts)
+  }
+
+  fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+    self.inner
+      .reregister(poll, token, interest, opts)
+  }
+
+  fn deregister(&self, poll: &Poll) -> io::Result<()> {
+    self.inner.deregister(poll)
+  }
+
+}
+
+
+/// Client trait defines the behavior for a "Client". It is required so that we can
+/// hide away the ServiceMapping in a Client
+pub trait ClientT<S> : Evented 
+  where S:Service
+{
+  fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId>;
+  fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>;
+}
+
+pub struct ClientGeneric<S> {
+  pub(crate) inner: Box<dyn ClientT<S>>
+}
+
+impl<S> ClientT<S> for ClientGeneric<S> 
+where S: 'static + Service
+{
+  fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
+    self.inner.send_request(request)
+  }
+
+  fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>> {
+    self.inner.receive_response()
+  }
+}
+
+impl<S> Evented for ClientGeneric<S> 
+where
+  S: 'static + Service,
+{
+  fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+    self.inner
+      .register(poll, token, interest, opts)
+  }
+
+  fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+    self.inner
+      .reregister(poll, token, interest, opts)
+  }
+
+  fn deregister(&self, poll: &Poll) -> io::Result<()> {
+    self.inner.deregister(poll)
+  }
+
+}
+
+// --------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------
 
 // See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
 pub trait ServiceMapping<S> 
@@ -95,8 +192,14 @@ where
 
     Ok(Server { request_receiver, response_sender, phantom:PhantomData })
   }
+}
 
-  pub fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>>
+impl<S,SW> ServerT<S> for Server<S,SW> 
+where
+  S: 'static + Service,
+  SW: 'static + ServiceMapping<S>,
+{
+  fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId,S::Request)>>
     where <S as Service>::Request: 'static
   {
     let next_sample = self.request_receiver.take()?;
@@ -104,13 +207,15 @@ where
     Ok( next_sample.map( |(s,mi)| SW::unwrap_request(&s, &mi.sample_info ) ) )
   }
 
-  pub fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
+  fn send_response(&self, id:RmwRequestId, response: S::Response) -> dds::Result<()> {
     let (wrapped_response, rsi_opt) = SW::wrap_response(id, response);
     let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(rsi_opt);
     self.response_sender.publish_with_options(wrapped_response, write_opt.build() )?;
     Ok(())
   }
 }
+
+
 
 
 impl<S,SW> Evented for Server<S,SW> 
@@ -176,15 +281,21 @@ where
                 phantom: PhantomData,
               })
   }
+}
 
-  pub fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
+impl<S,SW> ClientT<S> for Client<S,SW> 
+where
+  S: 'static + Service,
+  SW: 'static + ServiceMapping<S>,
+{
+  fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
     let (wrapped,rsi_opt) = SW::wrap_request(&mut self.client_state, request);
     let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(  rsi_opt.map(SampleIdentity::from));
     let sample_id = self.request_sender.publish_with_options( wrapped , write_opt.build() )?;
     Ok( SW::request_id_after_wrap(&mut self.client_state, sample_id) )
   }
 
-  pub fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
+  fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId,S::Response)>>
     where <S as Service>::Response: 'static
   {
     let next_sample = self.response_receiver.take()?;

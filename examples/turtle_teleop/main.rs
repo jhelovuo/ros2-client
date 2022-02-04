@@ -210,20 +210,20 @@ fn ros2_loop(
       .build()
   };
 
-  // create_client_cyclone version tested against ROS2 Galactic. Obviously with CycloneDDS.
+  // create_client cyclone version tested against ROS2 Galactic. Obviously with CycloneDDS.
   // Seems to work on the same host only.
   //
-  // create_client_enhanced version tested against 
+  // create_client enhanced version tested against 
   // * ROS2 Foxy with eProsima DDS. Works to another host also.
   // * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp)  
   //   Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
   //   Works to another host also.
   //
-  // * create_client_basic is untestd
+  // * create_client basic version is untested.
   // Service responses do not fully work yet.
   let mut reset_client = 
     ros_node
-      .create_client_enhanced::<EmptyService>("/reset", service_qos.clone())
+      .create_client::<EmptyService>(ServiceMappings::Enhanced, "/reset", service_qos.clone())
       .unwrap();
 
   // another client
@@ -245,7 +245,7 @@ fn ros2_loop(
 
   let mut set_pen_client = 
     ros_node
-      .create_client_enhanced::<SetPenService>("turtle1/set_pen", service_qos)
+      .create_client::<SetPenService>(ServiceMappings::Enhanced,"turtle1/set_pen", service_qos)
       .unwrap();
 
 
