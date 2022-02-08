@@ -209,14 +209,14 @@ where
   SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(node: &mut Node, 
-    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) 
+    request_topic: &Topic, response_topic: &Topic, qos_request:Option<QosPolicies>, qos_response:Option<QosPolicies>) 
     -> dds::Result<ServerGeneric<S,SW>>
   {
 
     let request_receiver = node
-      .create_subscription::<SW::RequestWrapper>(request_topic, qos.clone())?;
+      .create_subscription::<SW::RequestWrapper>(request_topic, qos_request)?;
     let response_sender = node
-      .create_publisher::<SW::ResponseWrapper>(response_topic, qos)?;
+      .create_publisher::<SW::ResponseWrapper>(response_topic, qos_response)?;
 
     info!("Created new ServerGeneric: requests={} response={}", request_topic.name(), response_topic.name());
 
@@ -297,12 +297,13 @@ where
   SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(node: &mut Node, 
-    request_topic: &Topic, response_topic: &Topic, qos:Option<QosPolicies>) -> dds::Result<ClientGeneric<S,SW>>
+    request_topic: &Topic, response_topic: &Topic, qos_request:Option<QosPolicies>, qos_response:Option<QosPolicies>) 
+  -> dds::Result<ClientGeneric<S,SW>>
   {
     let request_sender = node.create_publisher
-      ::<SW::RequestWrapper>(request_topic, qos.clone())?;
+      ::<SW::RequestWrapper>(request_topic, qos_request)?;
     let response_receiver = node.create_subscription
-      ::<SW::ResponseWrapper>(response_topic, qos)?;
+      ::<SW::ResponseWrapper>(response_topic, qos_response)?;
     info!("Created new ClientGeneric: request topic={} response topic={}", request_topic.name(), response_topic.name());
 
     let request_sender_guid = request_sender.guid();

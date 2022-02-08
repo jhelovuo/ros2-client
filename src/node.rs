@@ -123,13 +123,15 @@ impl Node {
 
     let rosout_writer = if options.enable_rosout {
       Some(
-        ros_context.create_publisher(&rosout_topic, None)?,
+        // topic already has QoS defined
+        ros_context.create_publisher(&rosout_topic, None )?,
       )
     } else {
       None
     };
 
     let parameter_events_writer = ros_context
+      // topic already has QoS defined
       .create_publisher(&paramtopic, None)?;
 
     Ok(Node {
@@ -140,7 +142,7 @@ impl Node {
       readers: HashSet::new(),
       writers: HashSet::new(),
       rosout_writer,
-      rosout_reader: None,
+      rosout_reader: None, //TODO
       parameter_events_writer,
     })
   }
@@ -324,7 +326,8 @@ impl Node {
   /// * `service_name` -
   /// * `qos`- 
   ///
-  pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
+  pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, 
+    request_qos: QosPolicies, response_qos: QosPolicies, ) 
     -> Result<Client<S>, dds::Error> 
   where
       S: Service + 'static,
@@ -333,17 +336,18 @@ impl Node {
     let inner :Box<dyn ClientT<S>> = 
       match service_mapping {
         ServiceMappings::Basic => 
-          Box::new( self.create_client_generic::<S,BasicServiceMapping<S>>(service_name, qos)?),
+          Box::new( self.create_client_generic::<S,BasicServiceMapping<S>>(service_name, request_qos, response_qos)?),
         ServiceMappings::Enhanced => 
-          Box::new( self.create_client_generic::<S,EnhancedServiceMapping<S>>(service_name, qos)?),
+          Box::new( self.create_client_generic::<S,EnhancedServiceMapping<S>>(service_name, request_qos, response_qos)?),
         ServiceMappings::Cyclone => 
-          Box::new(self.create_client_generic::<S,CycloneServiceMapping<S>>(service_name, qos)?),
+          Box::new(self.create_client_generic::<S,CycloneServiceMapping<S>>(service_name, request_qos, response_qos)?),
       };
 
     Ok( Client { inner } )
   }
 
-  fn create_client_generic<S,W>(&mut self, service_name:&str, qos: QosPolicies) 
+  fn create_client_generic<S,W>(&mut self, service_name:&str, 
+    request_qos: QosPolicies, response_qos: QosPolicies, ) 
     -> Result<ClientGeneric<S,W>, dds::Error> 
   where
       S: Service + 'static,
@@ -360,14 +364,14 @@ impl Node {
     let rq_topic = self
       .ros_context
       .domain_participant()
-      .create_topic(rq_name, S::request_type_name(), &qos, TopicKind::NoKey)?;
+      .create_topic(rq_name, S::request_type_name(), &request_qos, TopicKind::NoKey)?;
     let rs_topic = self
       .ros_context
       .domain_participant()
-      .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
+      .create_topic(rs_name, S::response_type_name(), &response_qos, TopicKind::NoKey)?;
 
     ClientGeneric::<S,W>
-      ::new(self, &rq_topic, &rs_topic, Some(qos),)
+      ::new(self, &rq_topic, &rs_topic, Some(request_qos), Some(response_qos))
   }
 
 
@@ -379,7 +383,8 @@ impl Node {
   /// * `service_name` -
   /// * `qos`- 
   ///
-  pub fn create_server<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, qos: QosPolicies) 
+  pub fn create_server<S>(&mut self, service_mapping: ServiceMappings, service_name:&str,
+       request_qos: QosPolicies, response_qos: QosPolicies, ) 
     -> Result<Server<S>, dds::Error> 
   where
       S: Service + 'static,
@@ -388,17 +393,18 @@ impl Node {
     let inner :Box<dyn ServerT<S>> = 
       match service_mapping {
         ServiceMappings::Basic => 
-          Box::new( self.create_server_generic::<S,BasicServiceMapping<S>>(service_name, qos)?),
+          Box::new( self.create_server_generic::<S,BasicServiceMapping<S>>(service_name, request_qos, response_qos)?),
         ServiceMappings::Enhanced => 
-          Box::new( self.create_server_generic::<S,EnhancedServiceMapping<S>>(service_name, qos)?),
+          Box::new( self.create_server_generic::<S,EnhancedServiceMapping<S>>(service_name, request_qos, response_qos)?),
         ServiceMappings::Cyclone => 
-          Box::new(self.create_server_generic::<S,CycloneServiceMapping<S>>(service_name, qos)?),
+          Box::new(self.create_server_generic::<S,CycloneServiceMapping<S>>(service_name, request_qos, response_qos)?),
       };
 
     Ok( Server { inner } )
   }
 
-  fn create_server_generic<S,SW>(&mut self, service_name:&str, qos: QosPolicies ) 
+  fn create_server_generic<S,SW>(&mut self, service_name:&str, 
+      request_qos: QosPolicies, response_qos: QosPolicies, )  
     -> Result<ServerGeneric<S,SW>, dds::Error>
     where
       S: Service + 'static,
@@ -411,14 +417,14 @@ impl Node {
     let rq_topic = self
       .ros_context
       .domain_participant()
-      .create_topic(rq_name, S::request_type_name(), &qos, TopicKind::NoKey)?;
+      .create_topic(rq_name, S::request_type_name(), &request_qos, TopicKind::NoKey)?;
     let rs_topic = self
       .ros_context
       .domain_participant()
-      .create_topic(rs_name, S::response_type_name(), &qos, TopicKind::NoKey)?;
+      .create_topic(rs_name, S::response_type_name(), &response_qos, TopicKind::NoKey)?;
 
     ServerGeneric::<S,SW>
-      ::new(self, &rq_topic, &rs_topic, Some(qos) )
+      ::new(self, &rq_topic, &rs_topic, Some(request_qos), Some(response_qos) )
   }
   
 }

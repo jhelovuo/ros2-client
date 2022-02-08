@@ -1,10 +1,14 @@
-use std::{io::Write, os::unix::io::AsRawFd};
+use std::{io::Write, };
+use std::collections::VecDeque;
+use std::sync::{Arc,};
+use std::sync::atomic::{AtomicBool, Ordering, };
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use mio::{unix::EventedFd, Events, Poll, PollOpt, Ready, Token};
+
+use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
-use termion::{event::Key, input::TermRead, AsyncReader};
+use termion::{event::{Key,Event,}, input::TermRead,};
 
 use crate::{Pose, Twist, Vector3, PenRequest};
 
@@ -54,33 +58,58 @@ const ROTATE_RIGHT: Twist = Twist {
 pub struct UiController {
   poll: Poll,
   stdout: std::io::Stdout,
-  async_reader: termion::input::Events<AsyncReader>,
+  //async_reader: termion::input::Events<AsyncReader>,
+  stdin_receiver: mio_channel::Receiver<Event>,
+  stop_reader: Arc<AtomicBool>,
   command_sender: mio_channel::SyncSender<RosCommand>,
   readback_receiver: mio_channel::Receiver<Twist>,
   pose_receiver: mio_channel::Receiver<Pose>,
+  message_receiver: mio_channel::Receiver<String>,
+  messages: VecDeque<String>,
 }
 
 impl UiController {
   const KEYBOARD_CHECK_TOKEN: Token = Token(0);
   const READBACK_TOKEN: Token = Token(1);
   const POSE_TOKEN: Token = Token(2);
+  const MESSAGE_TOKEN: Token = Token(3);
 
   pub fn new(
     stdout: std::io::Stdout,
     command_sender: mio_channel::SyncSender<RosCommand>,
     readback_receiver: mio_channel::Receiver<Twist>,
     pose_receiver: mio_channel::Receiver<Pose>,
+    message_receiver: mio_channel::Receiver<String>,
   ) -> UiController {
     let poll = Poll::new().unwrap();
-    let async_reader = termion::async_stdin().events();
+    let stop_reader = Arc::new(AtomicBool::new(false));
+    //let async_reader = termion::async_stdin().events();
+    let (stdin_tx, stdin_receiver) = mio_channel::sync_channel(8);
+
+    // separate thread to do blocking reads of stdin events
+    // termion library has async_stdin for exactly this purpose, but
+    // we cannot use it, because it does not support .poll()
+    let stop_reader_thread_clone = stop_reader.clone();
+    std::thread::spawn(move || {  
+      for i in std::io::stdin().events() {
+        match stdin_tx.send( i.unwrap() ) {
+          Err(_) => return,
+          _ => (),
+        }
+        if stop_reader_thread_clone.load(Ordering::Relaxed) { return }
+      }
+    });
 
     UiController {
       poll,
       stdout,
-      async_reader,
+      stdin_receiver,
+      stop_reader,
       command_sender,
       readback_receiver,
       pose_receiver,
+      message_receiver,
+      messages: VecDeque::new(),
     }
   }
 
@@ -94,10 +123,10 @@ impl UiController {
     self
       .poll
       .register(
-        &EventedFd(&std::io::stdin().lock().as_raw_fd()),
+        &self.stdin_receiver,
         UiController::KEYBOARD_CHECK_TOKEN,
         Ready::readable(),
-        PollOpt::level(),
+        PollOpt::edge(),
       )
       .unwrap();
 
@@ -115,6 +144,15 @@ impl UiController {
       .register(
         &self.pose_receiver,
         UiController::POSE_TOKEN,
+        Ready::readable(),
+        PollOpt::edge(),
+      )
+      .unwrap();
+    self
+      .poll
+      .register(
+        &self.message_receiver,
+        UiController::MESSAGE_TOKEN,
         Ready::readable(),
         PollOpt::edge(),
       )
@@ -150,115 +188,138 @@ impl UiController {
 
 
       for event in events.iter() {
-        if event.token() == UiController::KEYBOARD_CHECK_TOKEN {
-          // a small wait here to allow the termion input mechnism to react.
-          // Still some keyboard presses are missed. What are we doing wrong here?
-          std::thread::sleep(std::time::Duration::from_millis(10));
-          while let Some(Ok(termion::event::Event::Key(key))) = &self.async_reader.next() {
-            write!(
-              self.stdout,
-              "{}{}{:?}",
-              termion::cursor::Goto(1, 2),
-              termion::clear::CurrentLine,
-              key,
-            )
-            .unwrap();
-            info!("key: {:?}", key);
-            match key {
-              Key::Char('q') | Key::Ctrl('c') => {
-                debug!("Quit.");
-                self.send_command(RosCommand::StopEventLoop);
-                return; // stop loop
-              }
-              Key::Char('r') => {
-                debug!("Reset request");
-                self.send_command(RosCommand::Reset);
-              }
-              Key::Char('p') => {
-                debug!("Pen request");
-                self.send_command(RosCommand::SetPen( pen_requests[pen_index].clone() ));
-                pen_index = (pen_index + 1) % pen_requests.len();
-              }
-              Key::Char('a') => {
-                debug!("Spawn 1");
-                self.send_command(RosCommand::Spawn( "turtle1".to_owned() ));
-              }
-              Key::Char('b') => {
-                debug!("Spawn 2");
-                self.send_command(RosCommand::Spawn( "turtle2".to_owned() ));
-              }
-              Key::Char('A') => {
-                debug!("Kill 1");
-                self.send_command(RosCommand::Kill( "turtle1".to_owned() ));
-              }
-              Key::Char('B') => {
-                debug!("Kill 2");
-                self.send_command(RosCommand::Kill( "turtle2".to_owned() ));
-              }
+        match event.token() {
+          UiController::KEYBOARD_CHECK_TOKEN => {
+            while let Ok(termion::event::Event::Key(key)) = &self.stdin_receiver.try_recv() {
+              write!(
+                self.stdout,
+                "{}{}{:?}",
+                termion::cursor::Goto(1, 2),
+                termion::clear::CurrentLine,
+                key,
+              )
+              .unwrap();
+              info!("key: {:?}", key);
+              match key {
+                Key::Char('q') | Key::Ctrl('c') => {
+                  debug!("Quit.");
+                  self.send_command(RosCommand::StopEventLoop);
+                  self.stop_reader.store(true, Ordering::Relaxed);
+                  return; // stop loop
+                }
+                Key::Char('r') => {
+                  debug!("Reset request");
+                  self.send_command(RosCommand::Reset);
+                }
+                Key::Char('p') => {
+                  debug!("Pen request");
+                  self.send_command(RosCommand::SetPen( pen_requests[pen_index].clone() ));
+                  pen_index = (pen_index + 1) % pen_requests.len();
+                }
+                Key::Char('a') => {
+                  debug!("Spawn 1");
+                  self.send_command(RosCommand::Spawn( "turtle1".to_owned() ));
+                }
+                Key::Char('b') => {
+                  debug!("Spawn 2");
+                  self.send_command(RosCommand::Spawn( "turtle2".to_owned() ));
+                }
+                Key::Char('A') => {
+                  debug!("Kill 1");
+                  self.send_command(RosCommand::Kill( "turtle1".to_owned() ));
+                }
+                Key::Char('B') => {
+                  debug!("Kill 2");
+                  self.send_command(RosCommand::Kill( "turtle2".to_owned() ));
+                }
 
-              Key::Char('1') => {
-                turtle_id = 1;
-              }
+                Key::Char('1') => {
+                  turtle_id = 1;
+                }
 
-              Key::Char('2') => {
-                turtle_id = 2;
-              }
+                Key::Char('2') => {
+                  turtle_id = 2;
+                }
 
-              Key::Up => {
-                debug!("Move left.");
-                let twist = MOVE_FORWARD;
-                self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
+                Key::Up => {
+                  debug!("Move left.");
+                  let twist = MOVE_FORWARD;
+                  self.print_sent_turtle_cmd_vel(&twist);
+                  self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
+                }
+                Key::Right => {
+                  debug!("Move right.");
+                  let twist = ROTATE_RIGHT;
+                  self.print_sent_turtle_cmd_vel(&twist);
+                  self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
+                }
+                Key::Down => {
+                  debug!("Rotate down.");
+                  let twist = MOVE_BACKWARD;
+                  self.print_sent_turtle_cmd_vel(&twist);
+                  self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
+                }
+                Key::Left => {
+                  debug!("Rotate left.");
+                  let twist = ROTATE_LEFT;
+                  self.print_sent_turtle_cmd_vel(&twist);
+                  self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
+                }
+                _ => (),
               }
-              Key::Right => {
-                debug!("Move right.");
-                let twist = ROTATE_RIGHT;
-                self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
-              }
-              Key::Down => {
-                debug!("Rotate down.");
-                let twist = MOVE_BACKWARD;
-                self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
-              }
-              Key::Left => {
-                debug!("Rotate left.");
-                let twist = ROTATE_LEFT;
-                self.print_sent_turtle_cmd_vel(&twist);
-                self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
-              }
-              _ => (),
             }
+          } 
+          UiController::READBACK_TOKEN => {
+            while let Ok(twist) = self.readback_receiver.try_recv() {
+              write!(
+                self.stdout,
+                "{}{}Read Turtle cmd_vel {:?}",
+                termion::cursor::Goto(1, 6),
+                termion::clear::CurrentLine,
+                twist
+              )
+              .unwrap();
+            }
+          } 
+          UiController::POSE_TOKEN => {
+            while let Ok(pose) = self.pose_receiver.try_recv() {
+              write!(
+                self.stdout,
+                "{}{}Turtle pose {:?}",
+                termion::cursor::Goto(1, 8),
+                termion::clear::CurrentLine,
+                pose
+              )
+              .unwrap();
+            }
+          } 
+          UiController::MESSAGE_TOKEN => {
+            while let Ok(msg) = self.message_receiver.try_recv() {
+              self.messages.push_back(msg);
+              while self.messages.len() > 5  { 
+                self.messages.pop_front(); 
+              }
+              write!(
+                self.stdout,
+                "{}{}Messages:{}",
+                termion::cursor::Goto(1, 10),
+                termion::clear::CurrentLine,
+                termion::cursor::Goto(1, 11),
+              )
+                .unwrap();
+              for m in &self.messages {
+                writeln!(self.stdout,"{}\r",m)
+                  .unwrap();
+              }
+            }
+          } 
+          other_token => {
+            error!("What is this? {:?}", other_token);
           }
-        } else if event.token() == UiController::READBACK_TOKEN {
-          while let Ok(twist) = self.readback_receiver.try_recv() {
-            write!(
-              self.stdout,
-              "{}{}Read Turtle cmd_vel {:?}",
-              termion::cursor::Goto(1, 6),
-              termion::clear::CurrentLine,
-              twist
-            )
-            .unwrap();
-          }
-        } else if event.token() == UiController::POSE_TOKEN {
-          while let Ok(pose) = self.pose_receiver.try_recv() {
-            write!(
-              self.stdout,
-              "{}{}Turtle pose {:?}",
-              termion::cursor::Goto(1, 8),
-              termion::clear::CurrentLine,
-              pose
-            )
-            .unwrap();
-          }
-        } else {
-          error!("What is this? {:?}", event.token())
-        }
-      }
-    }
-  }
+        } // match
+      } // for
+    } // loop
+  } // fn
 
   fn send_command(&self, command: RosCommand) {
     self
