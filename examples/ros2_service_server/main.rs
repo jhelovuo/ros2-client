@@ -1,16 +1,13 @@
-pub mod add_two_ints_interface;
-pub mod camera_info_interface;
-
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
-use ros2_client::{Context, Node, NodeOptions, ServiceMappings};
+use ros2_client::{
+    interfaces::{BasicTypesResponse, BasicTypesService},
+    Context, Node, NodeOptions, ServiceMappings,
+};
 use rustdds::{
     policy::{self, Deadline, Lifespan},
     Duration, QosPolicies, QosPolicyBuilder,
 };
-
-// use crate::add_two_ints_interface::{AddTwoIntsResponse, AddTwoIntsService};
-use camera_info_interface::{CameraInfoResponse, CameraInfoService};
 
 fn main() {
     println!("ros2_service starting...");
@@ -20,9 +17,9 @@ fn main() {
     println!("ros2_service node started");
 
     let mut server = node
-        .create_server::<CameraInfoService>(
+        .create_server::<BasicTypesService>(
             ServiceMappings::Enhanced,
-            "/ros2_test_service",
+            "/ros2_test_service_basic",
             service_qos.clone(),
         )
         .unwrap();
@@ -49,11 +46,7 @@ fn main() {
                             Some((id, request)) => {
                                 println!("Request received - id: {id:?}, request: {request:?}");
                                 // let response = AddTwoIntsResponse { sum: 99 };
-                                let response = CameraInfoResponse {
-                                    success: true,
-                                    status_message: "random message to better see it in wireshark"
-                                        .to_string(),
-                                };
+                                let response = BasicTypesResponse::new();
                                 match server.send_response(id, response.clone()) {
                                     Ok(_) => {
                                         println!(

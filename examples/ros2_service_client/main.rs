@@ -1,7 +1,9 @@
 use mio::{Events, Poll, PollOpt, Ready, Token};
-use ros2_client::{Context, Message, Node, NodeOptions, Service, ServiceMappings};
+use ros2_client::{
+    interfaces::{BasicTypesRequest, BasicTypesService},
+    Context, Node, NodeOptions, ServiceMappings,
+};
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
-use serde::{Deserialize, Serialize};
 
 fn main() {
     println!("ros2_service starting...");
@@ -11,9 +13,9 @@ fn main() {
     println!("ros2_service node started");
 
     let mut client = node
-        .create_client::<AddTwoIntsService>(
+        .create_client::<BasicTypesService>(
             ServiceMappings::Enhanced,
-            "/ros2_test_service",
+            "/ros2_test_service_basic",
             service_qos.clone(),
         )
         .unwrap();
@@ -26,7 +28,7 @@ fn main() {
         .unwrap();
 
     println!("request sending...");
-    match client.send_request(AddTwoIntsRequest { a: 0, b: 1 }) {
+    match client.send_request(BasicTypesRequest::new()) {
         Ok(id) => {
             println!("request sent {id:?}");
         }
@@ -54,32 +56,6 @@ fn main() {
         }
     }
 }
-
-pub struct AddTwoIntsService {}
-
-impl Service for AddTwoIntsService {
-    type Request = AddTwoIntsRequest;
-    type Response = AddTwoIntsResponse;
-    fn request_type_name() -> String {
-        "example_interfaces::srv::dds_::AddTwoInts_Request_".to_owned()
-    }
-    fn response_type_name() -> String {
-        "example_interfaces::srv::dds_::AddTwoInts_Response_".to_owned()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddTwoIntsRequest {
-    pub a: i64,
-    pub b: i64,
-}
-impl Message for AddTwoIntsRequest {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddTwoIntsResponse {
-    pub sum: i64,
-}
-impl Message for AddTwoIntsResponse {}
 
 fn create_qos() -> QosPolicies {
     let service_qos: QosPolicies = {

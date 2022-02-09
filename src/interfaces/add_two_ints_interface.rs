@@ -1,5 +1,6 @@
-use ros2_client::{Message, Service};
 use serde::{Deserialize, Serialize};
+
+use crate::{Message, Service};
 
 pub struct AddTwoIntsService {}
 
