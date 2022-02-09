@@ -1,14 +1,16 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{Context, Message, Node, NodeOptions, Service, ServiceMappings};
-use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
+use rustdds::{
+    policy::{self, Deadline, Lifespan},
+    Duration, QosPolicies, QosPolicyBuilder,
+};
 use serde::{Deserialize, Serialize};
 
 fn main() {
     println!("ros2_service starting...");
     let mut node = create_node();
     let service_qos = create_qos();
-    let default_qos = QosPolicies::default();
 
     println!("ros2_service node started");
 
@@ -16,7 +18,7 @@ fn main() {
         .create_server::<AddTwoIntsService>(
             ServiceMappings::Enhanced,
             "/ros2_test_service",
-            default_qos.clone(),
+            service_qos.clone(),
         )
         .unwrap();
 
@@ -36,18 +38,29 @@ fn main() {
             println!("New event");
             match event.token() {
                 Token(1) => {
-                    while let Ok(Some((id, request))) = server.receive_request() {
-                        println!("Request received - id: {id:?}, request: {request:?}");
-                        let response = AddTwoIntsResponse { sum: 99 };
-                        match server.send_response(id, response.clone()) {
-                            Ok(_) => {
-                                println!(
-                                    "Server response send for id: {id:?}, response: {response:?}"
-                                )
+                    let _readiness = event.readiness();
+                    match server.receive_request() {
+                        Ok(req_option) => match req_option {
+                            Some((id, request)) => {
+                                println!("Request received - id: {id:?}, request: {request:?}");
+                                let response = AddTwoIntsResponse { sum: 99 };
+                                match server.send_response(id, response.clone()) {
+                                    Ok(_) => {
+                                        println!(
+                                            "Server response send for id: {id:?}, response: {response:?}"
+                                        )
+                                    }
+                                    Err(e) => {
+                                        error!("Server response error: {e}");
+                                    }
+                                }
                             }
-                            Err(e) => {
-                                error!("Server response error: {e}");
+                            None => {
+                                println!("req_option is None")
                             }
+                        },
+                        Err(e) => {
+                            println!("error with response handling, e: {e}")
                         }
                     }
                 }
@@ -86,10 +99,18 @@ impl Message for AddTwoIntsResponse {}
 fn create_qos() -> QosPolicies {
     let service_qos: QosPolicies = {
         QosPolicyBuilder::new()
+            .history(policy::History::KeepLast { depth: 10 })
             .reliability(policy::Reliability::Reliable {
                 max_blocking_time: Duration::from_millis(100),
             })
-            .history(policy::History::KeepLast { depth: 1 })
+            .durability(policy::Durability::Volatile)
+            .deadline(Deadline(Duration::DURATION_INFINITE))
+            .lifespan(Lifespan {
+                duration: Duration::DURATION_INFINITE,
+            })
+            .liveliness(policy::Liveliness::Automatic {
+                lease_duration: Duration::DURATION_INFINITE,
+            })
             .build()
     };
     service_qos
