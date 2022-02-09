@@ -1,11 +1,16 @@
+pub mod add_two_ints_interface;
+pub mod camera_info_interface;
+
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
-use ros2_client::{Context, Message, Node, NodeOptions, Service, ServiceMappings};
+use ros2_client::{Context, Node, NodeOptions, ServiceMappings};
 use rustdds::{
     policy::{self, Deadline, Lifespan},
     Duration, QosPolicies, QosPolicyBuilder,
 };
-use serde::{Deserialize, Serialize};
+
+// use crate::add_two_ints_interface::{AddTwoIntsResponse, AddTwoIntsService};
+use camera_info_interface::{CameraInfoResponse, CameraInfoService};
 
 fn main() {
     println!("ros2_service starting...");
@@ -15,7 +20,7 @@ fn main() {
     println!("ros2_service node started");
 
     let mut server = node
-        .create_server::<AddTwoIntsService>(
+        .create_server::<CameraInfoService>(
             ServiceMappings::Enhanced,
             "/ros2_test_service",
             service_qos.clone(),
@@ -43,7 +48,12 @@ fn main() {
                         Ok(req_option) => match req_option {
                             Some((id, request)) => {
                                 println!("Request received - id: {id:?}, request: {request:?}");
-                                let response = AddTwoIntsResponse { sum: 99 };
+                                // let response = AddTwoIntsResponse { sum: 99 };
+                                let response = CameraInfoResponse {
+                                    success: true,
+                                    status_message: "random message to better see it in wireshark"
+                                        .to_string(),
+                                };
                                 match server.send_response(id, response.clone()) {
                                     Ok(_) => {
                                         println!(
@@ -69,32 +79,6 @@ fn main() {
         }
     }
 }
-
-pub struct AddTwoIntsService {}
-
-impl Service for AddTwoIntsService {
-    type Request = AddTwoIntsRequest;
-    type Response = AddTwoIntsResponse;
-    fn request_type_name() -> String {
-        "example_interfaces::srv::dds_::AddTwoInts_Request_".to_owned()
-    }
-    fn response_type_name() -> String {
-        "example_interfaces::srv::dds_::AddTwoInts_Response_".to_owned()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddTwoIntsRequest {
-    pub a: i64,
-    pub b: i64,
-}
-impl Message for AddTwoIntsRequest {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddTwoIntsResponse {
-    pub sum: i64,
-}
-impl Message for AddTwoIntsResponse {}
 
 fn create_qos() -> QosPolicies {
     let service_qos: QosPolicies = {
