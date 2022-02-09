@@ -10,6 +10,8 @@ The intetion is that this is a medium-level library between lower-level DDS. How
 
 The included example program should be able to communicate with out-of-the-box ROS2 turtlesim example.
 
+![Turtlesim screenshot](examples/turtle_teleop/screenshot.png)
+
 Teleop example program currently has the following keyboard commands:
 
 * Cursor keys: Move turtle
