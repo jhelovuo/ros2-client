@@ -1,57 +1,59 @@
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
-    interfaces::{BasicTypesRequest, BasicTypesService},
+    interfaces::{AddTwoIntsRequest, AddTwoIntsService},
     Context, Node, NodeOptions, ServiceMappings,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
 
 fn main() {
-    println!("ros2_service starting...");
+    pretty_env_logger::init();
+
+    println!(">>> ros2_service starting...");
     let mut node = create_node();
     let service_qos = create_qos();
 
-    println!("ros2_service node started");
+    println!(">>> ros2_service node started");
 
     let mut client = node
-        .create_client::<BasicTypesService>(
+        .create_client::<AddTwoIntsService>(
             ServiceMappings::Enhanced,
-            "/ros2_test_service_basic",
+            "/ros2_test_service_add",
             service_qos.clone(),
         )
         .unwrap();
 
-    println!("ros2_service client created");
+    println!(">>> ros2_service client created");
 
     let poll = Poll::new().unwrap();
 
     poll.register(&client, Token(7), Ready::readable(), PollOpt::edge())
         .unwrap();
 
-    println!("request sending...");
-    match client.send_request(BasicTypesRequest::new()) {
+    println!(">>> request sending...");
+    match client.send_request(AddTwoIntsRequest { a: 0, b: 1 }) {
         Ok(id) => {
-            println!("request sent {id:?}");
+            println!(">>> request sent {id:?}");
         }
         Err(e) => {
-            println!("request sending error {e:?}");
+            println!(">>> request sending error {e:?}");
         }
     }
 
     'e_loop: loop {
-        println!("event loop iter");
+        println!(">>> event loop iter");
         let mut events = Events::with_capacity(100);
         poll.poll(&mut events, None).unwrap();
 
         for event in events.iter() {
-            println!("New event");
+            println!(">>> New event");
             match event.token() {
                 Token(7) => {
                     while let Ok(Some((id, response))) = client.receive_response() {
-                        println!("Response received - id: {id:?}, response: {response:?}");
+                        println!(">>> Response received - id: {id:?}, response: {response:?}");
                         break 'e_loop;
                     }
                 }
-                _ => println!("Unknown poll token {:?}", event.token()),
+                _ => println!(">>> Unknown poll token {:?}", event.token()),
             }
         }
     }

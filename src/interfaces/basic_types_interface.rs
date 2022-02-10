@@ -48,9 +48,7 @@ impl BasicTypesRequest {
             uint32_value: 0,
             int64_value: 0,
             uint64_value: 0,
-            string_value: String::from(
-                "From RustDDS service, Some completely dummy string to let it be more visible for wireshark sniff, this a Request",
-            ),
+            string_value: String::from("From RustDDS service, this a Request"),
         }
     }
 }
@@ -89,9 +87,7 @@ impl BasicTypesResponse {
             uint32_value: 0,
             int64_value: 0,
             uint64_value: 0,
-            string_value: String::from(
-                "From RustDDS service, Some completely dummy string to let it be more visible for wireshark sniff, this a Response",
-            ),
+            string_value: String::from("From RustDDS service, this a Response"),
         }
     }
 }
