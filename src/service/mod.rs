@@ -379,7 +379,8 @@ where
         let sample_id = self
             .request_sender
             .publish_with_options(wrapped, write_opt.build())?;
-        Ok(SW::request_id_after_wrap(&mut self.client_state, sample_id))
+        let r_id = SW::request_id_after_wrap(&mut self.client_state, sample_id);
+        Ok(r_id)
     }
 
     fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId, S::Response)>>

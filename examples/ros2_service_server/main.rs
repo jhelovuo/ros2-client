@@ -1,7 +1,7 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
-    interfaces::{AddTwoIntsResponse, AddTwoIntsService},
+    interfaces::{MarkerResponse, MarkerService},
     Context, Node, NodeOptions, ServiceMappings,
 };
 use rustdds::{
@@ -19,9 +19,9 @@ fn main() {
     println!(">>> ros2_service node started");
 
     let mut server = node
-        .create_server::<AddTwoIntsService>(
+        .create_server::<MarkerService>(
             ServiceMappings::Enhanced,
-            "/ros2_test_service_add",
+            "/ros2_test_service_marker",
             service_qos.clone(),
         )
         .unwrap();
@@ -47,8 +47,10 @@ fn main() {
                         Ok(req_option) => match req_option {
                             Some((id, request)) => {
                                 println!(">>> Request received - id: {id:?}, request: {request:?}");
-                                let response = AddTwoIntsResponse { sum: 99 };
-                                // let response = BasicTypesResponse::new();
+                                // let response = AddTwoIntsResponse { sum: 99 };
+                                let response = MarkerResponse {
+                                    marker: String::from("This is a marker string"),
+                                };
                                 match server.send_response(id, response.clone()) {
                                     Ok(_) => {
                                         println!(

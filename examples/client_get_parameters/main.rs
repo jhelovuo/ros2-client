@@ -1,12 +1,20 @@
+use std::env;
+
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
-    interfaces::{MarkerRequest, MarkerService},
+    interfaces::{GetParametersRequest, GetParametersService},
     Context, Node, NodeOptions, ServiceMappings,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
 
 fn main() {
     pretty_env_logger::init();
+
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        println!("There is no args");
+        return;
+    }
 
     println!(">>> ros2_service starting...");
     let mut node = create_node();
@@ -15,9 +23,10 @@ fn main() {
     println!(">>> ros2_service node started");
 
     let mut client = node
-        .create_client::<MarkerService>(
+        .create_client::<GetParametersService>(
             ServiceMappings::Enhanced,
-            "/ros2_test_service_marker",
+            // "/ros2_param_node/list_parameters",
+            &args[1],
             service_qos.clone(),
         )
         .unwrap();
@@ -30,9 +39,8 @@ fn main() {
         .unwrap();
 
     println!(">>> request sending...");
-    // let request = AddTwoIntsRequest { a: 0, b: 1 };
-    let request = MarkerRequest {
-        marker: String::from("This is a marker string, from rustdds client"),
+    let request = GetParametersRequest {
+        names: args[2..].to_vec(),
     };
 
     match client.send_request(request) {
