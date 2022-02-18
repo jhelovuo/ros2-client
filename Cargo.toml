@@ -14,7 +14,7 @@ categories = ["network-programming", "science::robotics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rustdds = { version="~0.7" , path = "../RustDDS" }
+rustdds ="~0.7"
 mio = "^0.6.23"
 mio-extras = "2.0.6"
 log = "0.4.11"
@@ -26,6 +26,7 @@ lazy_static = "1.4.0"
 [dev-dependencies]
 log = "0.4"
 termion = "1.5.5"
+pretty_env_logger = "0.4.0"
 # turle_teleop
 log4rs = "1"
 test-case = "1.2.0"
