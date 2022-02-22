@@ -58,7 +58,6 @@ const ROTATE_RIGHT: Twist = Twist {
 pub struct UiController {
   poll: Poll,
   stdout: std::io::Stdout,
-  //async_reader: termion::input::Events<AsyncReader>,
   stdin_receiver: mio_channel::Receiver<Event>,
   stop_reader: Arc<AtomicBool>,
   command_sender: mio_channel::SyncSender<RosCommand>,
@@ -83,7 +82,6 @@ impl UiController {
   ) -> UiController {
     let poll = Poll::new().unwrap();
     let stop_reader = Arc::new(AtomicBool::new(false));
-    //let async_reader = termion::async_stdin().events();
     let (stdin_tx, stdin_receiver) = mio_channel::sync_channel(8);
 
     // separate thread to do blocking reads of stdin events

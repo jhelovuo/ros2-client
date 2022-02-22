@@ -411,8 +411,8 @@ impl Node {
       S::Request: Clone,
       SW: 'static + ServiceMapping<S>,
   {
-    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), service_name)?;
-    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), service_name)?;
+    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
+    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), &(service_name.to_owned() + "Reply"))?;
 
     let rq_topic = self
       .ros_context

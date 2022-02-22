@@ -173,7 +173,7 @@ impl ContextInner {
     let ros_discovery_topic = domain_participant.create_topic(
       builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
       builtin_topics::ros_discovery::TYPE_NAME.to_string(),
-      &builtin_topics::ros_discovery::QOS,
+      &builtin_topics::ros_discovery::QOS_PUB,
       TopicKind::NoKey,
     )?;
 

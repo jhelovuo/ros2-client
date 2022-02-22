@@ -1,9 +1,9 @@
 use std::io;
-use std::ops::{Deref,DerefMut};
+use std::ops::{Deref, DerefMut};
 
 use std::marker::PhantomData;
 
-use mio::{Evented, Poll, Token, PollOpt, Ready,};
+use mio::{Evented, Poll, PollOpt, Ready, Token};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
