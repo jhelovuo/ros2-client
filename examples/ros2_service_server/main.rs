@@ -42,7 +42,6 @@ fn main() {
         println!(">>> New event");
         match event.token() {
           Token(1) => {
-            let _readiness = event.readiness();
             match server.receive_request() {
               Ok(req_option) => match req_option {
                 Some((id, request)) => {

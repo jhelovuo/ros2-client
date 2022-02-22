@@ -159,14 +159,14 @@ impl ContextInner {
     let ros_discovery_topic = domain_participant.create_topic(
       builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
       builtin_topics::ros_discovery::TYPE_NAME.to_string(),
-      &builtin_topics::ros_discovery::QOS,
+      &builtin_topics::ros_discovery::QOS_PUB,
       TopicKind::NoKey,
     )?;
 
     let ros_discovery_publisher = 
-      domain_participant.create_publisher(&builtin_topics::ros_discovery::QOS)?;
+      domain_participant.create_publisher(&builtin_topics::ros_discovery::QOS_PUB)?;
     let ros_discovery_subscriber =
-      domain_participant.create_subscriber(&builtin_topics::ros_discovery::QOS)?;
+      domain_participant.create_subscriber(&builtin_topics::ros_discovery::QOS_SUB)?;
 
     let ros_parameter_events_topic = domain_participant.create_topic(
       builtin_topics::parameter_events::TOPIC_NAME.to_string(),

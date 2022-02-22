@@ -60,11 +60,11 @@ fn main() {
         request_sent_at = now;
         println!(">>> request sending...");
         request_generator += 3;
-        match client.send_request(
-          AddTwoIntsRequest { a: request_generator % 5 , 
-                              b: request_generator % 7 }) {
+        let a = request_generator % 5;
+        let b = request_generator % 7;
+        match client.send_request(AddTwoIntsRequest { a, b }) {
             Ok(id) => {
-                println!(">>> request sent {:?}",id);
+                println!(">>> request sent a={} b={}, {:?}",a,b,id);
             }
             Err(e) => {
                 println!(">>> request sending error {:?}",e);

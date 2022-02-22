@@ -5,10 +5,19 @@ pub mod ros_discovery {
   use super::*;
 
   lazy_static! {
-    pub static ref QOS: QosPolicies = 
+    pub static ref QOS_PUB: QosPolicies = 
       QosPolicyBuilder::new()
         .durability(Durability::TransientLocal)
         .deadline(Deadline(Duration::DURATION_INFINITE))
+        .ownership(Ownership::Shared)
+        .reliability(Reliability::Reliable { max_blocking_time: Duration::DURATION_ZERO })
+        .history(History::KeepLast { depth: 1 })
+        .lifespan(Lifespan {duration: Duration::DURATION_INFINITE})
+        .build();
+
+  pub static ref QOS_SUB: QosPolicies = 
+      QosPolicyBuilder::new()
+        .durability(Durability::Volatile)
         .ownership(Ownership::Shared)
         .reliability(Reliability::Reliable { max_blocking_time: Duration::DURATION_ZERO })
         .history(History::KeepLast { depth: 1 })
