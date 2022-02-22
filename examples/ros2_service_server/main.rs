@@ -9,6 +9,14 @@ use rustdds::{
     Duration, QosPolicies, QosPolicyBuilder,
 };
 
+// This is an example / test program.
+// Test this against minimal_client found in
+// https://github.com/ros2/examples/blob/master/rclpy/services/minimal_client/examples_rclpy_minimal_client/client.py
+// or
+// % ros2 run examples_rclpy_minimal_client client
+// or
+// % ros2 run examples_rclcpp_minimal_client client_main
+
 fn main() {
   pretty_env_logger::init();
 
@@ -39,7 +47,6 @@ fn main() {
     poll.poll(&mut events, None).unwrap();
 
     for event in events.iter() {
-        println!(">>> New event");
         match event.token() {
           Token(1) => {
             match server.receive_request() {
@@ -50,15 +57,15 @@ fn main() {
                   let response = AddTwoIntsResponse { sum };
                   match server.send_response(id, response.clone()) {
                       Ok(_) => 
-                        println!(">>> Server response send for id: {:?}, response: {:?}", 
-                            id, response),
+                        println!(">>> Server sent response: {:?} id: {:?}", 
+                            response, id,),
             
                       Err(e) => error!(">>> Server response error: {:?}",e),
                     
                   }
                 }
                 None => {
-                    println!(">>> req_option is None")
+                    println!(">>> No request available.")
                 }
               },
               Err(e) => {

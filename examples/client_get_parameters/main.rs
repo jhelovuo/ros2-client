@@ -38,6 +38,8 @@ fn main() {
     poll.register(&client, Token(7), Ready::readable(), PollOpt::edge())
         .unwrap();
 
+    //std::thread::sleep(std::time::Duration::from_secs(4));
+
     println!(">>> request sending...");
     let request = GetParametersRequest {
         names: args[2..].to_vec(),
@@ -45,10 +47,10 @@ fn main() {
 
     match client.send_request(request) {
         Ok(id) => {
-            println!(">>> request sent {id:?}");
+            println!(">>> request sent {:?}", id);
         }
         Err(e) => {
-            println!(">>> request sending error {e:?}");
+            println!(">>> request sending error {:?}", e);
         }
     }
 
@@ -62,7 +64,7 @@ fn main() {
             match event.token() {
                 Token(7) => {
                     while let Ok(Some((id, response))) = client.receive_response() {
-                        println!(">>> Response received - id: {id:?}, response: {response:?}");
+                        println!(">>> Response received -  response: {:?}, id: {:?}", response, id,);
                         break 'e_loop;
                     }
                 }

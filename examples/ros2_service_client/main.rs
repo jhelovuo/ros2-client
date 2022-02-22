@@ -11,6 +11,15 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 const RESPONSE_TOKEN : Token = Token(7); // Just an arbitrary value
 
+// Test / demo program of ROS2 services, client side.
+//
+// To set up a server from ROS2:
+// % ros2 run examples_rclcpp_minimal_service service_main
+// or
+// % ros2 run examples_rclpy_minimal_service service
+//
+// Then run this example.
+
 fn main() {
     pretty_env_logger::init();
 
@@ -39,12 +48,10 @@ fn main() {
     let mut request_sent_at = Instant::now(); // request rate limiter
 
     loop {
-      //println!(">>> event loop iter");
       let mut events = Events::with_capacity(100);
       poll.poll(&mut events, Some(Duration::from_secs(1))).unwrap();
 
       for event in events.iter() {
-        //println!(">>> New event");
         match event.token() {
           RESPONSE_TOKEN => {
               while let Ok(Some((id, response))) = client.receive_response() {
@@ -55,7 +62,8 @@ fn main() {
           _ => println!(">>> Unknown poll token {:?}", event.token()),
         }
       }
-      let now = Instant::now();
+
+      let now = Instant::now(); // rate limit
       if now.duration_since(request_sent_at) > Duration::from_secs(2) {
         request_sent_at = now;
         println!(">>> request sending...");
