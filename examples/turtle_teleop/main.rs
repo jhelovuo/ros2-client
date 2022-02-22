@@ -80,12 +80,13 @@ fn main() {
   let (command_sender, command_receiver) = mio_channel::sync_channel::<RosCommand>(10);
   let (readback_sender, readback_receiver) = mio_channel::sync_channel(10);
   let (pose_sender, pose_receiver) = mio_channel::sync_channel(10);
+  let (message_sender, message_receiver) = mio_channel::sync_channel(2);
 
   // For some strange reason the ROS2 messaging event loop is in a separate thread
   // and we talk to it using (mio) mpsc channels.
   let jhandle = std::thread::Builder::new()
     .name("ros2_loop".into())
-    .spawn(move || ros2_loop(command_receiver, readback_sender, pose_sender))
+    .spawn(move || ros2_loop(command_receiver, readback_sender, pose_sender, message_sender))
     .unwrap();
 
   // From termion docs:
@@ -102,6 +103,7 @@ fn main() {
     command_sender,
     readback_receiver,
     pose_receiver,
+    message_receiver,
   );
   main_control.start();
 
@@ -115,10 +117,11 @@ fn ros2_loop(
   command_receiver: mio_channel::Receiver<RosCommand>,
   readback_sender: mio_channel::SyncSender<Twist>,
   pose_sender: mio_channel::SyncSender<Pose>,
+  message_sender: mio_channel::SyncSender<String>,
 ) {
   info!("ros2_loop");
 
-  let qos: QosPolicies = {
+  let topic_qos: QosPolicies = {
     QosPolicyBuilder::new()
       .durability(policy::Durability::Volatile)
       .liveliness(policy::Liveliness::Automatic {
@@ -146,7 +149,7 @@ fn ros2_loop(
     .create_topic(
       "/turtle1/cmd_vel",
       String::from("geometry_msgs::msg::dds_::Twist_"),
-      &qos,
+      &topic_qos,
     )
     .unwrap();
 
@@ -166,7 +169,7 @@ fn ros2_loop(
     .create_topic(
       "/turtle1/pose",
       String::from("turtlesim::msg::dds_::Pose_"),
-      &qos,
+      &topic_qos,
     )
     .unwrap();
   let mut turtle_pose_reader = ros_node
@@ -178,7 +181,7 @@ fn ros2_loop(
     .create_topic(
       "/turtle2/cmd_vel",
       String::from("geometry_msgs::msg::dds_::Twist_"),
-      &qos,
+      &topic_qos,
     )
     .unwrap();
   let turtle_cmd_vel_writer2 = ros_node
@@ -237,7 +240,7 @@ fn ros2_loop(
   // Service responses do not fully work yet.
   let mut reset_client = 
     ros_node
-      .create_client::<EmptyService>(ServiceMappings::Enhanced, "/reset", service_qos.clone())
+      .create_client::<EmptyService>(ServiceMappings::Enhanced, "/reset", service_qos.clone(), service_qos.clone())
       .unwrap();
 
   // another client
@@ -259,7 +262,7 @@ fn ros2_loop(
 
   let mut set_pen_client = 
     ros_node
-      .create_client::<SetPenService>(ServiceMappings::Enhanced,"turtle1/set_pen", service_qos.clone())
+      .create_client::<SetPenService>(ServiceMappings::Enhanced,"turtle1/set_pen", service_qos.clone(), service_qos.clone())
       .unwrap();
 
   // third client
@@ -295,7 +298,7 @@ fn ros2_loop(
 
   let mut spawn_client = 
     ros_node
-      .create_client::<SpawnService>(ServiceMappings::Enhanced,"spawn", service_qos.clone())
+      .create_client::<SpawnService>(ServiceMappings::Enhanced,"spawn", service_qos.clone(), service_qos.clone())
       .unwrap();
 
 
@@ -324,7 +327,7 @@ fn ros2_loop(
 
   let mut kill_client = 
     ros_node
-      .create_client::<KillService>(ServiceMappings::Enhanced,"kill", service_qos)
+      .create_client::<KillService>(ServiceMappings::Enhanced,"kill", service_qos.clone(), service_qos.clone())
       .unwrap();
 
 
@@ -483,11 +486,13 @@ fn ros2_loop(
         }
         RESET_CLIENT_TOKEN => {
           while let Ok(Some(id)) = reset_client.receive_response() {
+            message_sender.send(format!("Turtle reset acknowledged: {:?}",id)).unwrap();
             info!("Turtle reset acknowledged: {:?}",id);
           }
         }
         SET_PEN_CLIENT_TOKEN => {
           while let Ok(Some(id)) = set_pen_client.receive_response() {
+            message_sender.send(format!("set_pen acknowledged: {:?}",id)).unwrap();
             info!("set_pen acknowledged: {:?}",id);
           }
         }

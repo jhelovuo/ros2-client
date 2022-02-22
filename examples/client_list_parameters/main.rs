@@ -28,6 +28,7 @@ fn main() {
             // "/ros2_param_node/list_parameters",
             &args[1],
             service_qos.clone(),
+            service_qos.clone(),
         )
         .unwrap();
 
@@ -47,10 +48,10 @@ fn main() {
 
     match client.send_request(request) {
         Ok(id) => {
-            println!(">>> request sent {id:?}");
+            println!(">>> request sent {:?}",id);
         }
         Err(e) => {
-            println!(">>> request sending error {e:?}");
+            println!(">>> request sending error {:?}",e);
         }
     }
 
@@ -64,7 +65,7 @@ fn main() {
             match event.token() {
                 Token(7) => {
                     while let Ok(Some((id, response))) = client.receive_response() {
-                        println!(">>> Response received - id: {id:?}, response: {response:?}");
+                        println!(">>> Response received -  response: {:?}, id: {:?},", response, id,);
                         break 'e_loop;
                     }
                 }

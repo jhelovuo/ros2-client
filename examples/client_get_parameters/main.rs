@@ -28,6 +28,7 @@ fn main() {
             // "/ros2_param_node/list_parameters",
             &args[1],
             service_qos.clone(),
+            service_qos.clone(),
         )
         .unwrap();
 

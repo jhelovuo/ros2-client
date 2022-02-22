@@ -11,8 +11,8 @@ appenders:
     kind: file
     path: "log4rs.txt"
 root:
-  level: info
-#  level: error
+#  level: info
+  level: error
   appenders:
     # - stdout
     - file_appender
@@ -26,4 +26,7 @@ loggers:
     level: info
   rustdds::dds::writer:
     level: info
+ # rustdds::dds::datasample_cache:
+ #   level: debug
+
     

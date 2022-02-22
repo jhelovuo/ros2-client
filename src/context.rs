@@ -8,6 +8,7 @@ use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
 
 use rustdds::*;
+use rustdds::policy::*;
 
 use crate::{
   gid::Gid,
@@ -17,6 +18,19 @@ use crate::{
   builtin_topics,
   pubsub::{Publisher,Subscription,},
 };
+
+lazy_static! {
+  pub static ref DEFAULT_QOS: QosPolicies = 
+    QosPolicyBuilder::new()
+      .durability(Durability::Volatile)
+      .deadline(Deadline(Duration::DURATION_INFINITE))
+      .ownership(Ownership::Shared)
+      .reliability(Reliability::BestEffort)
+      .history(History::KeepLast { depth: 1 })
+      .lifespan(Lifespan {duration: Duration::DURATION_INFINITE})
+      .build();
+}
+
 
 /// [Context] communicates with other 
 /// participants information in ROS2 network. It keeps track of [`NodeEntitiesInfo`]s.
@@ -56,7 +70,7 @@ impl Context {
   where M: Serialize
   {
     let datawriter = self
-      .get_ros_discovery_publisher()
+      .get_ros_default_publisher()
       .create_datawriter_no_key(topic,qos)?;
 
     Ok(Publisher::new(datawriter))
@@ -66,7 +80,7 @@ impl Context {
   where M: 'static + DeserializeOwned
   {
     let datareader = self
-      .get_ros_discovery_subscriber()
+      .get_ros_default_subscriber()
       .create_datareader_no_key(topic,qos)?;
     Ok(Subscription::new(datareader))
   }
@@ -126,12 +140,12 @@ impl Context {
   }
 
 
-  fn get_ros_discovery_publisher(&self) -> rustdds::Publisher {
-    self.inner.lock().unwrap().ros_discovery_publisher.clone()
+  fn get_ros_default_publisher(&self) -> rustdds::Publisher {
+    self.inner.lock().unwrap().ros_default_publisher.clone()
   }
 
-  fn get_ros_discovery_subscriber(&self) -> rustdds::Subscriber {
-    self.inner.lock().unwrap().ros_discovery_subscriber.clone()
+  fn get_ros_default_subscriber(&self) -> rustdds::Subscriber {
+    self.inner.lock().unwrap().ros_default_subscriber.clone()
   }
 
 }
@@ -144,8 +158,8 @@ struct ContextInner {
 
   domain_participant: DomainParticipant,
   #[allow(dead_code)] ros_discovery_topic: Topic,
-  ros_discovery_publisher: rustdds::Publisher,
-  ros_discovery_subscriber: rustdds::Subscriber,
+  ros_default_publisher: rustdds::Publisher,
+  ros_default_subscriber: rustdds::Subscriber,
 
   ros_parameter_events_topic: Topic,
   ros_rosout_topic: Topic,
@@ -163,10 +177,10 @@ impl ContextInner {
       TopicKind::NoKey,
     )?;
 
-    let ros_discovery_publisher = 
-      domain_participant.create_publisher(&builtin_topics::ros_discovery::QOS_PUB)?;
-    let ros_discovery_subscriber =
-      domain_participant.create_subscriber(&builtin_topics::ros_discovery::QOS_SUB)?;
+    let ros_default_publisher = 
+      domain_participant.create_publisher(&DEFAULT_QOS)?;
+    let ros_default_subscriber =
+      domain_participant.create_subscriber(&DEFAULT_QOS)?;
 
     let ros_parameter_events_topic = domain_participant.create_topic(
       builtin_topics::parameter_events::TOPIC_NAME.to_string(),
@@ -183,10 +197,10 @@ impl ContextInner {
     )?;
 
     let node_reader =
-      ros_discovery_subscriber.create_datareader_no_key(&ros_discovery_topic, None)?;
+      ros_default_subscriber.create_datareader_no_key(&ros_discovery_topic, None)?;
 
     let node_writer =
-      ros_discovery_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?;
+      ros_default_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?;
 
     Ok(ContextInner {
       nodes: HashMap::new(),
@@ -196,8 +210,8 @@ impl ContextInner {
 
       domain_participant,
       ros_discovery_topic,
-      ros_discovery_publisher,
-      ros_discovery_subscriber,
+      ros_default_publisher,
+      ros_default_subscriber,
       ros_parameter_events_topic,
       ros_rosout_topic,
     })

@@ -31,6 +31,7 @@ fn main() {
           ServiceMappings::Enhanced,
           "/add_two_ints",
           service_qos.clone(),
+          service_qos.clone(),
       )
       .unwrap();
 

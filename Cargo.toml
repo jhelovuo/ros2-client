@@ -1,6 +1,6 @@
 [package]
 name = "ros2-client"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 authors = ["Juhana Helovuo <juhana.helovuo@atostek.com>"]
 description = "ROS2 client library based on RustDDS"
@@ -22,7 +22,6 @@ log = "0.4.11"
 serde = { version = "1.0", features = ["derive"] }
 cdr-encoding-size = { version="^0.5" }
 lazy_static = "1.4.0"
-#concat-arrays = "0.1.2"
 
 [dev-dependencies]
 log = "0.4"
