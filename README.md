@@ -1,14 +1,20 @@
 # ROS2 Client
 
-This is a Rust native client library for [ROS2](https://docs.ros.org/en/galactic/index.html). It does not link to [rclcpp](https://docs.ros2.org/galactic/api/rclcpp/index.html), or any non-Rust DDS library. RustDDS is used for communication.
+This is a Rust native client library for [ROS2](https://docs.ros.org/en/galactic/index.html). 
+It does not link to [rcl](https://github.com/ros2/rcl), 
+[rclcpp](https://docs.ros2.org/galactic/api/rclcpp/index.html), or any non-Rust DDS library. 
+[RustDDS](https://github.com/jhelovuo/RustDDS) is used for communication.
 
 ## Architecture Ideas
 
-The intetion is that this is a medium-level library between lower-level DDS. However, it does not attempt to provide higher-level services, such as an event loop, or Actions. These are to be implemented as a separate crate on top of this one.
+The intetion is that this is a medium-level library between lower-level DDS and a higher-level library.
+The (yet-to-be-written) higher-level library should provide an event loop, Actions, and possibly an async API. These are to be implemented as a separate crate on top of this one.
 
 ## Example: turtle_teleop
 
 The included example program should be able to communicate with out-of-the-box ROS2 turtlesim example.
+
+Install ROS2 and start the simulator by ` ros2 run turtlesim turtlesim_node`. Then run the `turtle_teleop` example to control the simulator.
 
 ![Turtlesim screenshot](examples/turtle_teleop/screenshot.png)
 
@@ -17,14 +23,14 @@ Teleop example program currently has the following keyboard commands:
 * Cursor keys: Move turtle
 * `q` or `Ctrl-C`: quit
 * `r`: reset simulator
-* `p`: change pen color
+* `p`: change pen color (for turtle1 only)
 * `a`/`b` : spawn turtle1 / turtle2
 * `A`/`B` : kill turtle1 / turtle2
 * `1`/`2` : switch control between turtle1 / turtle2
 
 ## Example: ros2_service_server
 
-Install ROS2.
+Install ROS2. This has been tested to work against "Galactic" release, using either eProsima FastDDS or RTI Connext DDS (`rmw_connextdds`, not `rmw_connext_cpp`). 
 
 Start server: `cargo run --example=ros2_service_server`
 
@@ -32,7 +38,7 @@ In another terminal or computer, run a client: `ros2 run examples_rclpy_minimal_
 
 ## Example: ros2_service_client
 
-Similar to above: Install ROS2.
+Similar to above.
 
 Start server: `ros2 run examples_rclpy_minimal_service service`
 
