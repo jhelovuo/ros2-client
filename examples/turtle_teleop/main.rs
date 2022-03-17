@@ -1,15 +1,13 @@
 use std::time::Duration;
 
-use termion::raw::*;
 #[allow(unused_imports)]
 use ::log::{debug, error, info, warn};
-use serde::{Deserialize, Serialize};
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
-
+use serde::{Deserialize, Serialize};
+use termion::raw::*;
+use ros2_client::{ros2, *};
 use rustdds::*;
-use ros2_client::*;
-use ros2_client::ros2;
 use ui::{RosCommand, UiController};
 
 // modules
@@ -86,7 +84,14 @@ fn main() {
   // and we talk to it using (mio) mpsc channels.
   let jhandle = std::thread::Builder::new()
     .name("ros2_loop".into())
-    .spawn(move || ros2_loop(command_receiver, readback_sender, pose_sender, message_sender))
+    .spawn(move || {
+      ros2_loop(
+        command_receiver,
+        readback_sender,
+        pose_sender,
+        message_sender,
+      )
+    })
     .unwrap();
 
   // From termion docs:
@@ -138,10 +143,9 @@ fn ros2_loop(
 
   let mut ros_node = ros_context
     .new_node(
-      "turtle_teleop",         // name
-      "/ros2_demo",            // namespace
-      NodeOptions::new()
-        .enable_rosout(true),
+      "turtle_teleop", // name
+      "/ros2_demo",    // namespace
+      NodeOptions::new().enable_rosout(true),
     )
     .unwrap();
 
@@ -190,14 +194,18 @@ fn ros2_loop(
 
   // Turtle has services, let's construct some clients.
 
-  pub struct EmptyService { }
+  pub struct EmptyService {}
 
   #[derive(Debug, Clone, Serialize, Deserialize)]
   // ROS2 Foxy with eProsima DDS crashes if the EmptyMessage is really empty,
   // so we put in a dummy byte.
-  pub struct EmptyMessage { dummy: u8 }
+  pub struct EmptyMessage {
+    dummy: u8,
+  }
   impl EmptyMessage {
-    pub fn new() -> EmptyMessage { EmptyMessage { dummy: 1 } }
+    pub fn new() -> EmptyMessage {
+      EmptyMessage { dummy: 1 }
+    }
   }
 
   impl Message for EmptyMessage {}
@@ -227,27 +235,30 @@ fn ros2_loop(
       .build()
   };
 
-  // create_client cyclone version tested against ROS2 Galactic. Obviously with CycloneDDS.
-  // Seems to work on the same host only.
+  // create_client cyclone version tested against ROS2 Galactic. Obviously with
+  // CycloneDDS. Seems to work on the same host only.
   //
-  // create_client enhanced version tested against 
+  // create_client enhanced version tested against
   // * ROS2 Foxy with eProsima DDS. Works to another host also.
-  // * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp)  
-  //   Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended
-  //   Works to another host also.
+  // * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp)
+  //   Environment variable RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended Works to
+  //   another host also.
   //
   // * create_client basic version is untested.
   // Service responses do not fully work yet.
-  let mut reset_client = 
-    ros_node
-      .create_client::<EmptyService>(ServiceMappings::Enhanced, "/reset", service_qos.clone(), service_qos.clone())
-      .unwrap();
+  let mut reset_client = ros_node
+    .create_client::<EmptyService>(
+      ServiceMappings::Enhanced,
+      "/reset",
+      service_qos.clone(),
+      service_qos.clone(),
+    )
+    .unwrap();
 
   // another client
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/SetPen.html
   pub struct SetPenService {}
-
 
   impl Service for SetPenService {
     type Request = PenRequest;
@@ -260,10 +271,14 @@ fn ros2_loop(
     }
   }
 
-  let mut set_pen_client = 
-    ros_node
-      .create_client::<SetPenService>(ServiceMappings::Enhanced,"turtle1/set_pen", service_qos.clone(), service_qos.clone())
-      .unwrap();
+  let mut set_pen_client = ros_node
+    .create_client::<SetPenService>(
+      ServiceMappings::Enhanced,
+      "turtle1/set_pen",
+      service_qos.clone(),
+      service_qos.clone(),
+    )
+    .unwrap();
 
   // third client
 
@@ -296,11 +311,14 @@ fn ros2_loop(
   }
   impl Message for SpawnResponse {}
 
-  let mut spawn_client = 
-    ros_node
-      .create_client::<SpawnService>(ServiceMappings::Enhanced,"spawn", service_qos.clone(), service_qos.clone())
-      .unwrap();
-
+  let mut spawn_client = ros_node
+    .create_client::<SpawnService>(
+      ServiceMappings::Enhanced,
+      "spawn",
+      service_qos.clone(),
+      service_qos.clone(),
+    )
+    .unwrap();
 
   // kill client
 
@@ -324,12 +342,14 @@ fn ros2_loop(
   }
   impl Message for KillRequest {}
 
-
-  let mut kill_client = 
-    ros_node
-      .create_client::<KillService>(ServiceMappings::Enhanced,"kill", service_qos.clone(), service_qos.clone())
-      .unwrap();
-
+  let mut kill_client = ros_node
+    .create_client::<KillService>(
+      ServiceMappings::Enhanced,
+      "kill",
+      service_qos.clone(),
+      service_qos.clone(),
+    )
+    .unwrap();
 
   // Set up event loop
 
@@ -412,13 +432,11 @@ fn ros2_loop(
                 break 'event_loop;
               }
               RosCommand::TurtleCmdVel { turtle_id, twist } => {
-                match 
-                  match turtle_id {
-                    1 => turtle_cmd_vel_writer.publish(twist.clone()),
-                    2 => turtle_cmd_vel_writer2.publish(twist.clone()),
-                    _ => panic!("WTF?"),
-                  }
-                {
+                match match turtle_id {
+                  1 => turtle_cmd_vel_writer.publish(twist.clone()),
+                  2 => turtle_cmd_vel_writer2.publish(twist.clone()),
+                  _ => panic!("WTF?"),
+                } {
                   Ok(_) => {
                     info!("Wrote to ROS2 {:?}", twist);
                   }
@@ -429,18 +447,16 @@ fn ros2_loop(
                   }
                 }
               }
-              RosCommand::Reset => {
-                match reset_client.send_request( EmptyMessage::new() ) {
-                  Ok(id) => {
-                    info!("Reset request sent {:?}", id);
-                  }
-                  Err(e) => {
-                    error!("Failed to send request: {:?}", e);
-                  }
+              RosCommand::Reset => match reset_client.send_request(EmptyMessage::new()) {
+                Ok(id) => {
+                  info!("Reset request sent {:?}", id);
                 }
-              }
-              RosCommand::SetPen( pen_request ) => {
-                match set_pen_client.send_request( pen_request.clone() ) {
+                Err(e) => {
+                  error!("Failed to send request: {:?}", e);
+                }
+              },
+              RosCommand::SetPen(pen_request) => {
+                match set_pen_client.send_request(pen_request.clone()) {
                   Ok(id) => {
                     info!("set_pen request sent {:?} {:?}", id, pen_request);
                   }
@@ -450,8 +466,13 @@ fn ros2_loop(
                 }
               }
 
-              RosCommand::Spawn( name ) => {
-                match  spawn_client.send_request( SpawnRequest { x: 1.0, y: 1.0, theta: 0.0, name} ) {
+              RosCommand::Spawn(name) => {
+                match spawn_client.send_request(SpawnRequest {
+                  x: 1.0,
+                  y: 1.0,
+                  theta: 0.0,
+                  name,
+                }) {
                   Ok(id) => {
                     info!("spawn request sent {:?} ", id);
                   }
@@ -460,17 +481,14 @@ fn ros2_loop(
                   }
                 }
               }
-              RosCommand::Kill( name ) => {
-                match kill_client.send_request( KillRequest{ name } ) {
-                  Ok(id) => {
-                    info!("kill request sent {:?} ", id);
-                  }
-                  Err(e) => {
-                    error!("Failed to send request: {:?}", e);
-                  }
+              RosCommand::Kill(name) => match kill_client.send_request(KillRequest { name }) {
+                Ok(id) => {
+                  info!("kill request sent {:?} ", id);
                 }
-              }
-
+                Err(e) => {
+                  error!("Failed to send request: {:?}", e);
+                }
+              },
             };
           }
         }
@@ -486,14 +504,18 @@ fn ros2_loop(
         }
         RESET_CLIENT_TOKEN => {
           while let Ok(Some(id)) = reset_client.receive_response() {
-            message_sender.send(format!("Turtle reset acknowledged: {:?}",id)).unwrap();
-            info!("Turtle reset acknowledged: {:?}",id);
+            message_sender
+              .send(format!("Turtle reset acknowledged: {:?}", id))
+              .unwrap();
+            info!("Turtle reset acknowledged: {:?}", id);
           }
         }
         SET_PEN_CLIENT_TOKEN => {
           while let Ok(Some(id)) = set_pen_client.receive_response() {
-            message_sender.send(format!("set_pen acknowledged: {:?}",id)).unwrap();
-            info!("set_pen acknowledged: {:?}",id);
+            message_sender
+              .send(format!("set_pen acknowledged: {:?}", id))
+              .unwrap();
+            info!("set_pen acknowledged: {:?}", id);
           }
         }
 

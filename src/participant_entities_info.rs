@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::gid::Gid;
-use crate::node_entities_info::NodeEntitiesInfo;
+use crate::{gid::Gid, node_entities_info::NodeEntitiesInfo};
 
 /// Information structure for other DomainParticipants in ROS2 network
 ///

@@ -64,4 +64,3 @@ impl NodeEntitiesInfo {
     self.writer_guid.clear();
   }
 }
-

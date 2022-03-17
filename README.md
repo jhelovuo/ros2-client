@@ -22,11 +22,31 @@ Teleop example program currently has the following keyboard commands:
 * `A`/`B` : kill turtle1 / turtle2
 * `1`/`2` : switch control between turtle1 / turtle2
 
+## Example: ros2_service_server
+
+Install ROS2.
+
+Start server: `cargo run --example=ros2_service_server`
+
+In another terminal or computer, run a client: `ros2 run examples_rclpy_minimal_client client`
+
+## Example: ros2_service_client
+
+Similar to above: Install ROS2.
+
+Start server: `ros2 run examples_rclpy_minimal_service service`
+
+Run client: `cargo run --example=ros2_service_client`
+
 ## Status
 
 This is a work-in-progress.
 
-E.g. Service Requests mostly work, but Responses only randomly.
+## Related Work
+
+* [ros2_rust](https://github.com/ros2-rust/ros2_rust) is closest(?) to an official ROS2 client library. It links to ROS2 `rcl` library written in C.
+* [rclrust](https://github.com/rclrust/rclrust) is another ROS2 client library for Rust. It supports also ROS2 Services in addition to Topics. It links to ROS2 libraries, e.g. `rcl` and `rmw`.
+* [rus2](https://github.com/marshalshi/rus2) exists, but appears to be inactive since September 2020.
 
 ## License
 

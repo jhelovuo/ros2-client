@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-
 use rustdds::*;
-
-
 
 /// Rosout message structure, received from RosParticipant
 ///
@@ -20,11 +17,11 @@ pub struct Log {
 
 impl Log {
   /// ROS2 logging severity level
-  pub const DEBUG:u8 = 10;
-  pub const INFO:u8 = 20;
-  pub const WARN:u8 = 30;
-  pub const ERROR:u8 = 40;
-  pub const FATAL:u8 = 50;
+  pub const DEBUG: u8 = 10;
+  pub const INFO: u8 = 20;
+  pub const WARN: u8 = 30;
+  pub const ERROR: u8 = 40;
+  pub const FATAL: u8 = 50;
 
   /// Timestamp when rosout message was sent
   pub fn get_timestamp(&self) -> &Timestamp {

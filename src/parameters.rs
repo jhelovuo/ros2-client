@@ -1,4 +1,3 @@
-
 /// Rust-like representation of ROS2 Parameter
 pub struct Parameter {
   pub name: String,
@@ -22,42 +21,37 @@ pub enum ParameterValue {
 
 impl From<raw::Parameter> for Parameter {
   fn from(rp: raw::Parameter) -> Self {
-    let pv =
-    match rp.value.ptype {
-      raw::ParameterType::NOT_SET => 
-        ParameterValue::NotSet,
-      raw::ParameterType::BOOL => 
-        ParameterValue::Boolean(rp.value.boolean_value),
-      raw::ParameterType::INTEGER =>
-        ParameterValue::Integer(rp.value.int_value),
-      raw::ParameterType::DOUBLE =>
-        ParameterValue::Double(rp.value.double_value),
-      raw::ParameterType::STRING =>
-        ParameterValue::String(rp.value.string_value),
+    let pv = match rp.value.ptype {
+      raw::ParameterType::NOT_SET => ParameterValue::NotSet,
+      raw::ParameterType::BOOL => ParameterValue::Boolean(rp.value.boolean_value),
+      raw::ParameterType::INTEGER => ParameterValue::Integer(rp.value.int_value),
+      raw::ParameterType::DOUBLE => ParameterValue::Double(rp.value.double_value),
+      raw::ParameterType::STRING => ParameterValue::String(rp.value.string_value),
 
-      raw::ParameterType::BYTE_ARRAY =>
-        ParameterValue::ByteArray(rp.value.byte_array),
-      raw::ParameterType::BOOL_ARRAY =>
-        ParameterValue::BooleanArray(rp.value.bool_array),
-      raw::ParameterType::INTEGER_ARRAY =>
-        ParameterValue::IntegerArray(rp.value.int_array),
-      raw::ParameterType::DOUBLE_ARRAY =>
-        ParameterValue::DoubleArray(rp.value.double_array),
-      raw::ParameterType::STRING_ARRAY =>
-        ParameterValue::StringArray(rp.value.string_array),
+      raw::ParameterType::BYTE_ARRAY => ParameterValue::ByteArray(rp.value.byte_array),
+      raw::ParameterType::BOOL_ARRAY => ParameterValue::BooleanArray(rp.value.bool_array),
+      raw::ParameterType::INTEGER_ARRAY => ParameterValue::IntegerArray(rp.value.int_array),
+      raw::ParameterType::DOUBLE_ARRAY => ParameterValue::DoubleArray(rp.value.double_array),
+      raw::ParameterType::STRING_ARRAY => ParameterValue::StringArray(rp.value.string_array),
 
-      _ =>  // This may be an uspecified case.
-            // TODO: Do something better, at least log a warning.
-        ParameterValue::NotSet,
+      _ =>
+      // This may be an uspecified case.
+      // TODO: Do something better, at least log a warning.
+      {
+        ParameterValue::NotSet
+      }
     };
 
-    Parameter{ name: rp.name, value: pv, }
+    Parameter {
+      name: rp.name,
+      value: pv,
+    }
   }
 }
-  
+
 impl From<Parameter> for raw::Parameter {
-  fn from(p:Parameter) -> raw::Parameter {
-    let mut value = raw::ParameterValue{
+  fn from(p: Parameter) -> raw::Parameter {
+    let mut value = raw::ParameterValue {
       ptype: raw::ParameterType::NOT_SET,
       boolean_value: false,
       int_value: 0,
@@ -110,19 +104,17 @@ impl From<Parameter> for raw::Parameter {
     }
 
     raw::Parameter {
-      name:p.name,
+      name: p.name,
       value,
     }
   }
 }
 
-
-
 // This submodule contains raw, ROS2 -compatible Parameters.
 //
 pub(crate) mod raw {
-  use serde::{Deserialize, Serialize};
   use rustdds::*;
+  use serde::{Deserialize, Serialize};
 
   /// ROS2 [ParameterEvent](https://github.com/ros2/rcl_interfaces/blob/master/rcl_interfaces/msg/ParameterEvent.msg)
   #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,17 +154,16 @@ pub(crate) mod raw {
   pub struct ParameterType {}
 
   impl ParameterType {
-    pub const NOT_SET:u8 = 0;
+    pub const NOT_SET: u8 = 0;
 
-    pub const BOOL:u8 = 1;
-    pub const INTEGER:u8 = 2;
-    pub const DOUBLE:u8 = 3;
-    pub const STRING:u8 = 4;
-    pub const BYTE_ARRAY:u8 = 5;
-    pub const BOOL_ARRAY:u8 = 6;
-    pub const INTEGER_ARRAY:u8 = 7;
-    pub const DOUBLE_ARRAY:u8 = 8;
-    pub const STRING_ARRAY:u8 = 9;
+    pub const BOOL: u8 = 1;
+    pub const INTEGER: u8 = 2;
+    pub const DOUBLE: u8 = 3;
+    pub const STRING: u8 = 4;
+    pub const BYTE_ARRAY: u8 = 5;
+    pub const BOOL_ARRAY: u8 = 6;
+    pub const INTEGER_ARRAY: u8 = 7;
+    pub const DOUBLE_ARRAY: u8 = 8;
+    pub const STRING_ARRAY: u8 = 9;
   }
-
 }

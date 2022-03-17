@@ -1,16 +1,22 @@
-use std::{io::Write, };
-use std::collections::VecDeque;
-use std::sync::{Arc,};
-use std::sync::atomic::{AtomicBool, Ordering, };
+use std::{
+  collections::VecDeque,
+  io::Write,
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+  },
+};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
-use termion::{event::{Key,Event,}, input::TermRead,};
+use termion::{
+  event::{Event, Key},
+  input::TermRead,
+};
 
-use crate::{Pose, Twist, Vector3, PenRequest};
+use crate::{PenRequest, Pose, Twist, Vector3};
 
 #[derive(Debug)]
 pub enum RosCommand {
@@ -88,13 +94,15 @@ impl UiController {
     // termion library has async_stdin for exactly this purpose, but
     // we cannot use it, because it does not support .poll()
     let stop_reader_thread_clone = stop_reader.clone();
-    std::thread::spawn(move || {  
+    std::thread::spawn(move || {
       for i in std::io::stdin().events() {
-        match stdin_tx.send( i.unwrap() ) {
+        match stdin_tx.send(i.unwrap()) {
           Err(_) => return,
           _ => (),
         }
-        if stop_reader_thread_clone.load(Ordering::Relaxed) { return }
+        if stop_reader_thread_clone.load(Ordering::Relaxed) {
+          return;
+        }
       }
     });
 
@@ -113,10 +121,10 @@ impl UiController {
 
   pub fn start(&mut self) {
     ctrlc::set_handler(move || {
-        println!("Aborting");
-        std::process::abort();
-    }).expect("Error setting Ctrl-C handler");
-
+      println!("Aborting");
+      std::process::abort();
+    })
+    .expect("Error setting Ctrl-C handler");
 
     self
       .poll
@@ -170,12 +178,42 @@ impl UiController {
 
     let mut pen_index = 0;
     let pen_requests = vec![
-      PenRequest { r: 255, b: 0, g: 0, width: 3, off: 0,},
-      PenRequest { r: 255, b: 0, g: 200, width: 5, off: 0,},
-      PenRequest { r: 250, b: 250, g: 250, width: 2, off: 1,},
-      PenRequest { r: 0, b: 0, g: 250, width: 1, off: 0,},
-      PenRequest { r: 0, b: 0, g: 0, width: 1, off: 0,},
-      ];
+      PenRequest {
+        r: 255,
+        b: 0,
+        g: 0,
+        width: 3,
+        off: 0,
+      },
+      PenRequest {
+        r: 255,
+        b: 0,
+        g: 200,
+        width: 5,
+        off: 0,
+      },
+      PenRequest {
+        r: 250,
+        b: 250,
+        g: 250,
+        width: 2,
+        off: 1,
+      },
+      PenRequest {
+        r: 0,
+        b: 0,
+        g: 250,
+        width: 1,
+        off: 0,
+      },
+      PenRequest {
+        r: 0,
+        b: 0,
+        g: 0,
+        width: 1,
+        off: 0,
+      },
+    ];
 
     loop {
       write!(self.stdout, "{}", termion::cursor::Goto(1, 1)).unwrap();
@@ -183,7 +221,6 @@ impl UiController {
 
       let mut events = Events::with_capacity(100);
       self.poll.poll(&mut events, None).unwrap();
-
 
       for event in events.iter() {
         match event.token() {
@@ -211,24 +248,24 @@ impl UiController {
                 }
                 Key::Char('p') => {
                   debug!("Pen request");
-                  self.send_command(RosCommand::SetPen( pen_requests[pen_index].clone() ));
+                  self.send_command(RosCommand::SetPen(pen_requests[pen_index].clone()));
                   pen_index = (pen_index + 1) % pen_requests.len();
                 }
                 Key::Char('a') => {
                   debug!("Spawn 1");
-                  self.send_command(RosCommand::Spawn( "turtle1".to_owned() ));
+                  self.send_command(RosCommand::Spawn("turtle1".to_owned()));
                 }
                 Key::Char('b') => {
                   debug!("Spawn 2");
-                  self.send_command(RosCommand::Spawn( "turtle2".to_owned() ));
+                  self.send_command(RosCommand::Spawn("turtle2".to_owned()));
                 }
                 Key::Char('A') => {
                   debug!("Kill 1");
-                  self.send_command(RosCommand::Kill( "turtle1".to_owned() ));
+                  self.send_command(RosCommand::Kill("turtle1".to_owned()));
                 }
                 Key::Char('B') => {
                   debug!("Kill 2");
-                  self.send_command(RosCommand::Kill( "turtle2".to_owned() ));
+                  self.send_command(RosCommand::Kill("turtle2".to_owned()));
                 }
 
                 Key::Char('1') => {
@@ -266,7 +303,7 @@ impl UiController {
                 _ => (),
               }
             }
-          } 
+          }
           UiController::READBACK_TOKEN => {
             while let Ok(twist) = self.readback_receiver.try_recv() {
               write!(
@@ -278,7 +315,7 @@ impl UiController {
               )
               .unwrap();
             }
-          } 
+          }
           UiController::POSE_TOKEN => {
             while let Ok(pose) = self.pose_receiver.try_recv() {
               write!(
@@ -290,12 +327,12 @@ impl UiController {
               )
               .unwrap();
             }
-          } 
+          }
           UiController::MESSAGE_TOKEN => {
             while let Ok(msg) = self.message_receiver.try_recv() {
               self.messages.push_back(msg);
-              while self.messages.len() > 5  { 
-                self.messages.pop_front(); 
+              while self.messages.len() > 5 {
+                self.messages.pop_front();
               }
               write!(
                 self.stdout,
@@ -304,13 +341,12 @@ impl UiController {
                 termion::clear::CurrentLine,
                 termion::cursor::Goto(1, 11),
               )
-                .unwrap();
+              .unwrap();
               for m in &self.messages {
-                writeln!(self.stdout,"{}\r",m)
-                  .unwrap();
+                writeln!(self.stdout, "{}\r", m).unwrap();
               }
             }
-          } 
+          }
           other_token => {
             error!("What is this? {:?}", other_token);
           }

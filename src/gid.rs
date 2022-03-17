@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-
 use rustdds::*;
 
 /// ROS2 equivalent for DDS GUID
