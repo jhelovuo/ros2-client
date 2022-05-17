@@ -7,9 +7,16 @@ use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
 };
+use core::cmp::min;
+
+// Simple demo program.
+// Test this against ROS2 "talker" demo node.
+// https://github.com/ros2/demos/blob/humble/demo_nodes_py/demo_nodes_py/topics/talker.py
 
 fn main() {
-  pretty_env_logger::init();
+  // Here is a fixed path, so this example must be started from
+  // RustDDS main directory
+  log4rs::init_file("examples/listener/log4rs.yaml", Default::default()).unwrap();
 
   let mut node = create_node();
   let topic_qos = create_qos();
@@ -38,7 +45,10 @@ fn main() {
     for event in events.iter() {
       match event.token() {
         Token(1) => match chatter_subscription.take() {
-          Ok(Some((message, _messafe_info))) => println!("message: {:?}", message),
+          Ok(Some((message, _messafe_info))) => {
+            let l = message.len();
+            println!("message len={} : {:?}", l, &message[..min(l,50)]);
+          }
           Ok(None) => println!("No message?!"),
           Err(e) => {
             println!(">>> error with response handling, e: {:?}", e)
@@ -47,7 +57,7 @@ fn main() {
         _ => println!(">>> Unknown poll token {:?}", event.token()),
       } // match
     } // for
-  } // lopp
+  } // loop
 } // main
 
 fn create_qos() -> QosPolicies {
