@@ -1,39 +1,39 @@
-use std::collections::HashSet;
+use std::{
+  collections::{HashSet},
+};
 
-#[allow(unused_imports)]
-use log::{debug, error, info, trace, warn};
+#[allow(unused_imports)] use log::{error, warn, info, debug, trace};
+
 use serde::{de::DeserializeOwned, Serialize};
+
 use rustdds::*;
 
 use crate::{
-  context::Context,
   gid::Gid,
-  log::Log,
   node_entities_info::NodeEntitiesInfo,
+  context::Context,
+  log::Log,
   parameters::*,
-  pubsub::{Publisher, Subscription},
-  service::{
-    basic::BasicServiceMapping, cyclone::CycloneServiceMapping, enhanced::EnhancedServiceMapping,
-    Client, ClientGeneric, ClientT, Server, ServerGeneric, ServerT, Service, ServiceMapping,
+  pubsub::{Publisher,Subscription},
+  service::{Service,Client,Server, ServiceMapping,
+    ServerGeneric, ClientGeneric, ServerT, ClientT,
+    cyclone::{CycloneServiceMapping, },
+    enhanced::{EnhancedServiceMapping, },
+    basic::{BasicServiceMapping, },
   },
 };
+
 
 /// Configuration of [Node]
 /// This is a builder-like struct.
 pub struct NodeOptions {
-  #[allow(dead_code)]
-  cli_args: Vec<String>,
-  #[allow(dead_code)]
-  use_global_arguments: bool, // process-wide command line args
+  #[allow(dead_code)] cli_args: Vec<String>,
+  #[allow(dead_code)] use_global_arguments: bool, // process-wide command line args
   enable_rosout: bool, // use rosout topic for logging?
-  #[allow(dead_code)]
-  start_parameter_services: bool,
-  #[allow(dead_code)]
-  parameter_overrides: Vec<Parameter>,
-  #[allow(dead_code)]
-  allow_undeclared_parameters: bool,
-  #[allow(dead_code)]
-  automatically_declare_parameters_from_overrides: bool,
+  #[allow(dead_code)] start_parameter_services: bool,
+  #[allow(dead_code)] parameter_overrides: Vec<Parameter>,
+  #[allow(dead_code)] allow_undeclared_parameters: bool,
+  #[allow(dead_code)] automatically_declare_parameters_from_overrides: bool,
   // The NodeOptions struct does not contain
   // node_name, context, or namespace, because
   // they ae always needed and have no reasonable default.
@@ -54,11 +54,8 @@ impl NodeOptions {
       automatically_declare_parameters_from_overrides: false,
     }
   }
-  pub fn enable_rosout(self, enable: bool) -> NodeOptions {
-    NodeOptions {
-      enable_rosout: enable,
-      ..self
-    }
+  pub fn enable_rosout(self, enable:bool) -> NodeOptions {
+    NodeOptions{ enable_rosout: enable, .. self }
   }
 }
 
@@ -73,22 +70,23 @@ impl Default for NodeOptions {
 /// Enumerate supported service mappings
 ///
 /// There are different and incompatible ways to map Services onto DDS Topics.
+/// The mapping used by ROS2 depends on the DDS implementation used and its configuration.
 /// For details, see OMG Specification
 /// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
-pub enum ServiceMappings {
-  /// Supposed to work with RTI Connext with
-  /// `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended` , but untested.
-  Basic,
+pub enum ServiceMappings { 
+  /// "Basic" service mapping from RPC over DDS specification.
+  /// * RTI Connext with `RMW_CONNEXT_REQUEST_REPLY_MAPPING=basic`, but this is not tested, so may not work.
+  Basic, 
 
-  /// * ROS2 Foxy with eProsima DDS,
-  /// * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) -
-  ///   set environment variable `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended`
-  ///   before running ROS2 executable.
-  Enhanced,
+  /// "Enhanced" service mapping from RPC over DDS specification.
+  /// * ROS2 Foxy with eProsima DDS, 
+  /// * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) - set environment variable `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended` before running ROS2 executable.
+  Enhanced, 
 
-  /// ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not
-  /// over actual network.
-  Cyclone,
+  /// CycloneDDS-specific service mapping. 
+  /// Specification for this mapping is unknown, technical details are reverse-engineered from ROS2 sources.
+  /// * ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not over actual network.
+  Cyclone, 
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -112,7 +110,7 @@ pub struct Node {
 
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
-  #[allow(dead_code)]
+  #[allow(dead_code)] 
   rosout_reader: Option<Subscription<Log>>,
   parameter_events_writer: Publisher<raw::ParameterEvent>,
 }
@@ -130,7 +128,7 @@ impl Node {
     let rosout_writer = if options.enable_rosout {
       Some(
         // topic already has QoS defined
-        ros_context.create_publisher(&rosout_topic, None)?,
+        ros_context.create_publisher(&rosout_topic, None )?,
       )
     } else {
       None
@@ -175,29 +173,39 @@ impl Node {
 
   fn add_reader(&mut self, reader: GUID) {
     self.readers.insert(reader);
-    self.ros_context.add_node_info(self.generate_node_info());
+    self
+      .ros_context
+      .add_node_info(self.generate_node_info());
   }
 
   pub fn remove_reader(&mut self, reader: &GUID) {
     self.readers.remove(reader);
-    self.ros_context.add_node_info(self.generate_node_info());
+    self
+      .ros_context
+      .add_node_info(self.generate_node_info());
   }
 
   fn add_writer(&mut self, writer: GUID) {
     self.writers.insert(writer);
-    self.ros_context.add_node_info(self.generate_node_info());
+    self
+      .ros_context
+      .add_node_info(self.generate_node_info());
   }
 
   pub fn remove_writer(&mut self, writer: &GUID) {
     self.writers.remove(writer);
-    self.ros_context.add_node_info(self.generate_node_info());
+    self
+      .ros_context
+      .add_node_info(self.generate_node_info());
   }
 
   /// Clears both all reader and writer guids from this node.
   pub fn clear_node(&mut self) {
     self.readers.clear();
     self.writers.clear();
-    self.ros_context.add_node_info(self.generate_node_info());
+    self
+      .ros_context
+      .add_node_info(self.generate_node_info());
   }
 
   pub fn name(&self) -> &str {
@@ -258,13 +266,11 @@ impl Node {
   ) -> Result<Topic, dds::Error> {
     let oname = Self::check_name_and_add_prefix("rt/".to_owned(), name)?;
     info!("Creating topic, DDS name: {}", oname);
-    let topic = self.ros_context.domain_participant().create_topic(
-      oname,
-      type_name,
-      qos,
-      TopicKind::NoKey,
-    )?;
-    // ROS2 does not use WithKey topics, so always NoKey
+    let topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(oname, type_name, qos, TopicKind::NoKey)?;
+      // ROS2 does not use WithKey topics, so always NoKey
     info!("Created topic");
     Ok(topic)
   }
@@ -281,12 +287,13 @@ impl Node {
     topic: &Topic,
     qos: Option<QosPolicies>,
   ) -> Result<Subscription<D>, dds::Error> {
-    let sub = self.ros_context.create_subscription(topic, qos)?;
+    let sub = self
+      .ros_context.create_subscription(topic, qos)?;
     self.add_reader(sub.guid());
     Ok(sub)
   }
 
-  fn check_name_and_add_prefix(mut prefix: String, name: &str) -> Result<String, dds::Error> {
+  fn check_name_and_add_prefix(mut prefix: String , name: &str) -> Result<String, dds::Error> {
     if name.is_empty() {
       return dds::Error::bad_parameter("Topic name must not be empty.");
     }
@@ -295,7 +302,7 @@ impl Node {
     prefix.push_str(name.strip_prefix('/').unwrap_or(name));
     Ok(prefix)
   }
-
+  
   /// Creates ROS2 Publisher to no key topic.
   ///
   /// # Arguments
@@ -309,7 +316,8 @@ impl Node {
     topic: &Topic,
     qos: Option<QosPolicies>,
   ) -> Result<Publisher<D>, dds::Error> {
-    let p = self.ros_context.create_publisher(topic, qos)?;
+    let p = self
+      .ros_context.create_publisher(topic, qos)?;
     self.add_writer(p.guid());
     Ok(p)
   }
@@ -320,164 +328,107 @@ impl Node {
   ///
   /// * `service_mapping` - ServiceMapping to be used
   /// * `service_name` -
-  /// * `qos`-
-  pub fn create_client<S>(
-    &mut self,
-    service_mapping: ServiceMappings,
-    service_name: &str,
-    request_qos: QosPolicies,
-    response_qos: QosPolicies,
-  ) -> Result<Client<S>, dds::Error>
+  /// * `qos`- 
+  ///
+  pub fn create_client<S>(&mut self, service_mapping: ServiceMappings, service_name:&str, 
+    request_qos: QosPolicies, response_qos: QosPolicies, ) 
+    -> Result<Client<S>, dds::Error> 
   where
-    S: Service + 'static,
-    S::Request: Clone,
+      S: Service + 'static,
+      S::Request: Clone,
   {
-    let inner: Box<dyn ClientT<S>> = match service_mapping {
-      ServiceMappings::Basic => Box::new(self.create_client_generic::<S, BasicServiceMapping<S>>(
-        service_name,
-        request_qos,
-        response_qos,
-      )?),
-      ServiceMappings::Enhanced => {
-        Box::new(self.create_client_generic::<S, EnhancedServiceMapping<S>>(
-          service_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-      ServiceMappings::Cyclone => {
-        Box::new(self.create_client_generic::<S, CycloneServiceMapping<S>>(
-          service_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-    };
+    let inner :Box<dyn ClientT<S>> = 
+      match service_mapping {
+        ServiceMappings::Basic => 
+          Box::new( self.create_client_generic::<S,BasicServiceMapping<S>>(service_name, request_qos, response_qos)?),
+        ServiceMappings::Enhanced => 
+          Box::new( self.create_client_generic::<S,EnhancedServiceMapping<S>>(service_name, request_qos, response_qos)?),
+        ServiceMappings::Cyclone => 
+          Box::new(self.create_client_generic::<S,CycloneServiceMapping<S>>(service_name, request_qos, response_qos)?),
+      };
 
-    Ok(Client { inner })
+    Ok( Client { inner } )
   }
 
-  fn create_client_generic<S, W>(
-    &mut self,
-    service_name: &str,
-    request_qos: QosPolicies,
-    response_qos: QosPolicies,
-  ) -> Result<ClientGeneric<S, W>, dds::Error>
+  fn create_client_generic<S,W>(&mut self, service_name:&str, 
+    request_qos: QosPolicies, response_qos: QosPolicies, ) 
+    -> Result<ClientGeneric<S,W>, dds::Error> 
   where
-    S: Service + 'static,
-    S::Request: Clone,
-    W: 'static + ServiceMapping<S>,
+      S: Service + 'static,
+      S::Request: Clone,
+      W: 'static + ServiceMapping<S>,
   {
     // Add rq/ and rr/ prefixes as documented in
     // https://design.ros2.org/articles/topic_and_service_names.html
     // Where are the suffixes documented?
     // And why "Reply" and not "Response" ?
-    let rq_name =
-      Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
-    let rs_name =
-      Self::check_name_and_add_prefix("rr/".to_owned(), &(service_name.to_owned() + "Reply"))?;
+    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
+    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), &(service_name.to_owned() + "Reply"))?;
 
-    let rq_topic = self.ros_context.domain_participant().create_topic(
-      rq_name,
-      S::request_type_name(),
-      &request_qos,
-      TopicKind::NoKey,
-    )?;
-    let rs_topic = self.ros_context.domain_participant().create_topic(
-      rs_name,
-      S::response_type_name(),
-      &response_qos,
-      TopicKind::NoKey,
-    )?;
+    let rq_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rq_name, S::request_type_name(), &request_qos, TopicKind::NoKey)?;
+    let rs_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rs_name, S::response_type_name(), &response_qos, TopicKind::NoKey)?;
 
-    ClientGeneric::<S, W>::new(
-      self,
-      &rq_topic,
-      &rs_topic,
-      Some(request_qos),
-      Some(response_qos),
-    )
+    ClientGeneric::<S,W>
+      ::new(self, &rq_topic, &rs_topic, Some(request_qos), Some(response_qos))
   }
+
 
   /// Creates ROS2 Service Server
   ///
   /// # Arguments
   ///
-  /// * `service_mapping` - ServiceMapping to be used. See
-  ///   [`Self.create_client`].
+  /// * `service_mapping` - ServiceMapping to be used. See [`Self.create_client`].
   /// * `service_name` -
-  /// * `qos`-
-  pub fn create_server<S>(
-    &mut self,
-    service_mapping: ServiceMappings,
-    service_name: &str,
-    request_qos: QosPolicies,
-    response_qos: QosPolicies,
-  ) -> Result<Server<S>, dds::Error>
+  /// * `qos`- 
+  ///
+  pub fn create_server<S>(&mut self, service_mapping: ServiceMappings, service_name:&str,
+       request_qos: QosPolicies, response_qos: QosPolicies, ) 
+    -> Result<Server<S>, dds::Error> 
   where
-    S: Service + 'static,
-    S::Request: Clone,
+      S: Service + 'static,
+      S::Request: Clone,
   {
-    let inner: Box<dyn ServerT<S>> = match service_mapping {
-      ServiceMappings::Basic => Box::new(self.create_server_generic::<S, BasicServiceMapping<S>>(
-        service_name,
-        request_qos,
-        response_qos,
-      )?),
-      ServiceMappings::Enhanced => {
-        Box::new(self.create_server_generic::<S, EnhancedServiceMapping<S>>(
-          service_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-      ServiceMappings::Cyclone => {
-        Box::new(self.create_server_generic::<S, CycloneServiceMapping<S>>(
-          service_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-    };
+    let inner :Box<dyn ServerT<S>> = 
+      match service_mapping {
+        ServiceMappings::Basic => 
+          Box::new( self.create_server_generic::<S,BasicServiceMapping<S>>(service_name, request_qos, response_qos)?),
+        ServiceMappings::Enhanced => 
+          Box::new( self.create_server_generic::<S,EnhancedServiceMapping<S>>(service_name, request_qos, response_qos)?),
+        ServiceMappings::Cyclone => 
+          Box::new(self.create_server_generic::<S,CycloneServiceMapping<S>>(service_name, request_qos, response_qos)?),
+      };
 
-    Ok(Server { inner })
+    Ok( Server { inner } )
   }
 
-  fn create_server_generic<S, SW>(
-    &mut self,
-    service_name: &str,
-    request_qos: QosPolicies,
-    response_qos: QosPolicies,
-  ) -> Result<ServerGeneric<S, SW>, dds::Error>
-  where
-    S: Service + 'static,
-    S::Request: Clone,
-    SW: 'static + ServiceMapping<S>,
+  fn create_server_generic<S,SW>(&mut self, service_name:&str, 
+      request_qos: QosPolicies, response_qos: QosPolicies, )  
+    -> Result<ServerGeneric<S,SW>, dds::Error>
+    where
+      S: Service + 'static,
+      S::Request: Clone,
+      SW: 'static + ServiceMapping<S>,
   {
-    let rq_name =
-      Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
-    let rs_name =
-      Self::check_name_and_add_prefix("rr/".to_owned(), &(service_name.to_owned() + "Reply"))?;
+    let rq_name = Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
+    let rs_name = Self::check_name_and_add_prefix("rr/".to_owned(), &(service_name.to_owned() + "Reply"))?;
 
-    let rq_topic = self.ros_context.domain_participant().create_topic(
-      rq_name,
-      S::request_type_name(),
-      &request_qos,
-      TopicKind::NoKey,
-    )?;
-    let rs_topic = self.ros_context.domain_participant().create_topic(
-      rs_name,
-      S::response_type_name(),
-      &response_qos,
-      TopicKind::NoKey,
-    )?;
+    let rq_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rq_name, S::request_type_name(), &request_qos, TopicKind::NoKey)?;
+    let rs_topic = self
+      .ros_context
+      .domain_participant()
+      .create_topic(rs_name, S::response_type_name(), &response_qos, TopicKind::NoKey)?;
 
-    ServerGeneric::<S, SW>::new(
-      self,
-      &rq_topic,
-      &rs_topic,
-      Some(request_qos),
-      Some(response_qos),
-    )
+    ServerGeneric::<S,SW>
+      ::new(self, &rq_topic, &rs_topic, Some(request_qos), Some(response_qos) )
   }
+  
 }
