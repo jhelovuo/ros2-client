@@ -64,8 +64,8 @@ fn main() {
       match event.token() {
         Token(1) => {
           count += 1;
-          let message = format!("count={} {}",count,filler);
-          println!("Talking, count={}",count);
+          let message = format!("count={} {}",count, filler);
+          println!("Talking, count={} len={}",count, message.len());
           chatter_publisher.publish(message)
             .unwrap_or_else(|e| error!("publish failed: {:?}",e));
           talk_timer.set_timeout(std::time::Duration::from_secs(2), ());
