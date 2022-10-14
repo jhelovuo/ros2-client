@@ -267,7 +267,7 @@ fn ros2_loop(
       "turtlesim::srv::dds_::SetPen_Request_".to_owned()
     }
     fn response_type_name() -> String {
-      "std_srvs::srv::dds_::Empty_Response_".to_owned()
+      "turtlesim::srv::dds_::SetPen_Response_".to_owned()
     }
   }
 
@@ -292,7 +292,7 @@ fn ros2_loop(
       "turtlesim::srv::dds_::Spawn_Request_".to_owned()
     }
     fn response_type_name() -> String {
-      "std_srvs::srv::dds_::Spawn_Response_".to_owned()
+      "turtlesim::srv::dds_::Spawn_Response_".to_owned()
     }
   }
 
@@ -332,7 +332,7 @@ fn ros2_loop(
       "turtlesim::srv::dds_::Kill_Request_".to_owned()
     }
     fn response_type_name() -> String {
-      "std_srvs::srv::dds_::Kill_Response_".to_owned()
+      "turtlesim::srv::dds_::Kill_Response_".to_owned()
     }
   }
 
@@ -516,6 +516,14 @@ fn ros2_loop(
               .send(format!("set_pen acknowledged: {:?}", id))
               .unwrap();
             info!("set_pen acknowledged: {:?}", id);
+          }
+        }
+        KILL_CLIENT_TOKEN => {
+          while let Ok(Some(id)) = kill_client.receive_response() {
+            message_sender
+              .send(format!("Turtle kill acknowledged: {:?}", id))
+              .unwrap();
+            info!("Turtle kill acknowledged: {:?}", id);
           }
         }
 
