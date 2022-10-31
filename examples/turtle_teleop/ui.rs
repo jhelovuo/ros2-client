@@ -277,7 +277,7 @@ impl UiController {
                 }
 
                 Key::Up => {
-                  debug!("Move left.");
+                  debug!("Move up.");
                   let twist = MOVE_FORWARD;
                   self.print_sent_turtle_cmd_vel(&twist);
                   self.send_command(RosCommand::TurtleCmdVel { turtle_id, twist })
