@@ -56,6 +56,7 @@ fn main() {
   let filler :String = 
     "All work and no play makes ROS a dull boy. All play and no work makes RTPS a mere toy. "
     .repeat(2);
+    // Change repeat count to e.g. 100 to test data fragmentation.
 
   loop {
     poll.poll(&mut events, None).unwrap();
