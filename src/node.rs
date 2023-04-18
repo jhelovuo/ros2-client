@@ -21,6 +21,7 @@ use crate::{
     enhanced::{EnhancedServiceMapping, },
     basic::{BasicServiceMapping, },
   },
+  action::*,
 };
 
 
@@ -430,5 +431,24 @@ impl Node {
     ServerGeneric::<S,SW>
       ::new(self, &rq_topic, &rs_topic, Some(request_qos), Some(response_qos) )
   }
-  
+
+  pub fn create_action_client<A>(&mut self, service_mapping: ServiceMappings, action_name:&str, 
+    action_qos: ActionClientQosPolicies) 
+    -> Result<ActionClient<A>, dds::Error> 
+  where
+      A: ActionTypes + 'static,
+  {
+    todo!()
+  }
+
+  // pub fn create_action_server<A>(&mut self, service_mapping: ServiceMappings, action_name:&str, 
+  //   action_qos: ActionServerQosPolicies) 
+  //   -> Result<ActionServer<A>, dds::Error> 
+  // where
+  //     A: ActionTypes + 'static,
+  // {
+  //   todo!()
+  // }
+
+
 }

@@ -13,6 +13,7 @@ use crate::{
   message::Message,
   node::Node,
   pubsub::{Publisher, Subscription},
+  action::*,
 };
 
 pub mod request_id;
@@ -38,6 +39,41 @@ pub trait Service {
 
 // --------------------------------------------
 // --------------------------------------------
+
+pub struct AService<Q,S> 
+where
+  Q : Message,
+  S : Message,
+{
+  q : PhantomData<Q>,
+  s : PhantomData<S>,
+}
+
+impl<Q,S> Service for AService<Q,S>
+where
+  Q : Message,
+  S : Message,
+{
+  type Request = Q;
+  type Response = S;
+
+  fn request_type_name() -> String {
+    //QN.clone()
+    // placeholder
+    "foo".to_string()
+  }
+
+  fn response_type_name() -> String {
+    //SN.clone()
+    // placeholder
+    "foo".to_string()
+  }
+}
+
+
+// --------------------------------------------
+// --------------------------------------------
+
 
 /// Server trait defines the behavior for a "Server". It is required so that we
 /// can hide away the ServiceMapping in a Server

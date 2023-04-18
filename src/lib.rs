@@ -52,6 +52,7 @@ pub mod participant_entities_info;
 #[doc(hidden)]
 pub mod pubsub;
 pub mod service;
+pub mod action;
 
 #[doc(hidden)]
 pub(crate) mod node;
