@@ -41,6 +41,10 @@ pub mod builtin_topics;
 #[doc(hidden)]
 pub mod context;
 /// Some builtin interfaces for ROS2 communication
+pub mod builtin_interfaces;
+pub mod unique_identifier_msgs;
+pub mod action_msgs;
+
 pub mod interfaces;
 
 mod gid;

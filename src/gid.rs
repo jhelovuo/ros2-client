@@ -9,6 +9,9 @@ use rustdds::*;
 )]
 pub struct Gid {
   data: [u8; 24],
+  // TODO: ROS2 seems to be changing this to 16 bytes.
+  // https://github.com/ros2/rmw_dds_common/commit/5ab4f5944e4442fe0188e15b10cf11377fb45801
+  // As of Jan 2023
 }
 
 impl Gid {

@@ -29,17 +29,20 @@ pub use request_id::*;
 
 /// Service trait pairs the Request and Response types together.
 /// Additonally, it ensures that Response and Request are Messages
-/// (serializable) and we have a menas to name the types.
+/// (serializable) and we have a means to name the types.
 pub trait Service {
   type Request: Message;
   type Response: Message;
-  fn request_type_name() -> String;
-  fn response_type_name() -> String;
+  fn request_type_name(&self) -> &str;
+  fn response_type_name(&self) -> &str;
 }
 
 // --------------------------------------------
 // --------------------------------------------
 
+/// AService is a means of constructing a descriptor for a Service on the fly.
+/// This allows generic code to construct a Service from the types of
+/// request and response. 
 pub struct AService<Q,S> 
 where
   Q : Message,
@@ -47,6 +50,23 @@ where
 {
   q : PhantomData<Q>,
   s : PhantomData<S>,
+  req_type_name : String,
+  resp_type_name : String,
+}
+
+impl<Q,S> AService<Q,S> 
+where
+  Q : Message,
+  S : Message,
+{
+  pub fn new(req_type_name: String, resp_type_name: String) -> Self {
+    Self {
+      req_type_name, 
+      resp_type_name,
+      q : PhantomData, 
+      s: PhantomData,
+    }
+  }
 }
 
 impl<Q,S> Service for AService<Q,S>
@@ -57,16 +77,12 @@ where
   type Request = Q;
   type Response = S;
 
-  fn request_type_name() -> String {
-    //QN.clone()
-    // placeholder
-    "foo".to_string()
+  fn request_type_name(&self) -> &str {
+    &self.req_type_name
   }
 
-  fn response_type_name() -> String {
-    //SN.clone()
-    // placeholder
-    "foo".to_string()
+  fn response_type_name(&self) -> &str {
+    &self.resp_type_name
   }
 }
 
