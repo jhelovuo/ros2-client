@@ -1,4 +1,4 @@
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use crate::message::Message;
 
 /// From https://docs.ros2.org/foxy/api/action_msgs/msg/GoalInfo.html

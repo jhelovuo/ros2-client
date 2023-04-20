@@ -1,5 +1,5 @@
 use rustdds::{*};
-use crate::action_msgs;
+use crate::{action_msgs, unique_identifier_msgs, builtin_interfaces,};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -36,15 +36,44 @@ pub struct ActionServerQosPolicies {
   status_publication_qos: QosPolicies,
 }
 
+
+/// Emulating ROS2 IDL code generator: Goal sending/setting service
 #[derive(Clone, Serialize, Deserialize)]
-struct GoalResponse {} // placeholder - how is this defined??
-impl Message for GoalResponse {}
+pub struct SendGoalRequest<G> 
+{
+  pub goal_id : unique_identifier_msgs::UUID,
+  pub goal : G,
+}
+impl<G:Message> Message for SendGoalRequest<G> {}
 
 #[derive(Clone, Serialize, Deserialize)]
-struct ResultRequest {} // placeholder - how is this defined??
-impl Message for ResultRequest {}
+pub struct SendGoalResponse {
+  pub accepted: bool,
+  pub stamp: builtin_interfaces::Time,
+}
+impl Message for SendGoalResponse {}
 
+/// Emulating ROS2 IDL code generator: Result getting service
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GetResultRequest {
+  pub goal_id : unique_identifier_msgs::UUID,
+}
+impl Message for GetResultRequest {}
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GetResultResponse<R> {
+  pub status: i8, // interpretation same as in GoalStatus message?
+  pub result: R,
+}
+impl<R:Message> Message for GetResultResponse<R> {}
+
+/// Emulating ROS2 IDL code generator: Feedback Topic message type
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FeedbackMessage<F> {
+  pub goal_id : unique_identifier_msgs::UUID,
+  pub feedback: F,
+}
+impl<F:Message> Message for FeedbackMessage<F> {}
 
 pub struct ActionClient<A> 
 where 
@@ -54,15 +83,16 @@ where
   A::FeedbackType: Message,
 {
   goal_client: 
-    Client<AService< A::GoalType, GoalResponse >>,
+    Client<AService< SendGoalRequest<A::GoalType>, SendGoalResponse >>,
 
   cancel_client: 
     Client<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>>,
 
   result_client:
-    Client<AService<ResultRequest, A::ResultType>>,
+    Client<AService<GetResultRequest, GetResultResponse<A::ResultType> >>,
 
-  feedback_subscription: Subscription<A::FeedbackType>, 
+  feedback_subscription: Subscription< FeedbackMessage<A::FeedbackType> >,
+
   status_subscription: Subscription<action_msgs::GoalStatusArray>, 
 
   action_name: String,
