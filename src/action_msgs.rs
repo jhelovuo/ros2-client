@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_repr::{Serialize_repr, Deserialize_repr};
+
 use crate::message::Message;
 
 /// From https://docs.ros2.org/foxy/api/action_msgs/msg/GoalInfo.html
@@ -9,29 +11,27 @@ pub struct GoalInfo {
 }
 impl Message for GoalInfo {}
 
+#[derive(Clone, Copy, Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[repr(i8)]
+pub enum GoalStatusEnum {
+  Unknown = 0,
+  Accepted = 1,
+  Executing = 2,
+  Canceling = 3,
+  Succeeded = 4,
+  Canceled = 5,
+  Aborted = 6,
+}
+
 
 
 /// https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatus.html
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GoalStatus {
   goal_info: GoalInfo,
-  status: i8,
+  status: GoalStatusEnum,
 }
 impl Message for GoalStatus {}
-
-// TODO: Make this more Rust-like. E.g. an enum to avoid dealing with
-// raw integers. And some serialization and deserialization.
-
-impl GoalStatus {
-  pub const UNKNOWN : i8 =  0 ;
-  pub const ACCEPTED : i8 = 1 ;  
-  pub const EXECUTING : i8 = 2 ;  
-  pub const CANCELING : i8 = 3 ;  
-  pub const SUCCEEDED : i8 = 4 ;  
-  pub const CANCELED : i8 = 5 ;  
-  pub const ABORTED : i8 = 6 ;  
-}
-
 
 
 /// https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatusArray.html
@@ -43,26 +43,44 @@ impl Message for GoalStatusArray {}
 
 
 
-
+///https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CancelGoalRequest {
   goal_info : GoalInfo,
 }
 impl Message for CancelGoalRequest {}
 
+/// https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
+#[derive(Clone, Copy, Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[repr(i8)]
+pub enum CancelGoalResponseEnum {
+  // Doc comments here copied from ROS2 message definition.
 
+  /// Indicates the request was accepted without any errors. 
+  /// One or more goals have transitioned to the CANCELING state. 
+  /// The goals_canceling list is not empty.
+  None = 0, 
 
+  /// Indicates the request was rejected.
+  /// No goals have transitioned to the CANCELING state. The goals_canceling list is
+  /// empty.
+  Rejected = 1,
 
+  /// Indicates the requested goal ID does not exist.
+  /// No goals have transitioned to the CANCELING state. The goals_canceling list is
+  /// empty.
+  UnknownGoal = 2,
+
+  /// Indicates the goal is not cancelable because it is already in a terminal state.
+  /// No goals have transitioned to the CANCELING state. The goals_canceling list is
+  /// empty.
+  GoalTerminated = 3,
+}
+
+/// https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CancelGoalResponse {
-  return_code: i8,
+  return_code: CancelGoalResponseEnum,
   goals_canceling: Vec<GoalInfo>  
 }
 impl Message for CancelGoalResponse {}
-
-impl CancelGoalResponse {
-  pub const ERROR_NONE: i8 = 0; // Indicates the request was accepted without any errors.
-  pub const ERROR_REJECTED: i8 = 1; // 
-  pub const ERROR_UNKNOWN_GOAL: i8 = 2;
-  pub const ERROR_GOAL_TERMINATED: i8 = 3;
-}

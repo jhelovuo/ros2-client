@@ -1,7 +1,7 @@
 use rustdds::{*};
 use crate::{action_msgs, unique_identifier_msgs, builtin_interfaces,};
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
   message::Message,
@@ -108,6 +108,9 @@ where
 
 }
 
+
+
+
 // Example topic names and types at DDS level:
 
 // rq/turtle1/rotate_absolute/_action/send_goalRequest : turtlesim::action::dds_::RotateAbsolute_SendGoal_Request_
@@ -124,14 +127,37 @@ where
 // rt/turtle1/rotate_absolute/_action/status : action_msgs::srv::dds_::GoalStatusArray_
 
 
+pub struct ActionServer<A> 
+where 
+  A: ActionTypes,
+  A::GoalType: Message + Clone,
+  A::ResultType: Message + Clone,
+  A::FeedbackType: Message,
+{
+  goal_server: 
+    Server<AService< SendGoalRequest<A::GoalType>, SendGoalResponse >>,
+
+  cancel_server: 
+    Server<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>>,
+
+  result_server:
+    Server<AService<GetResultRequest, GetResultResponse<A::ResultType> >>,
+
+  feedback_publisher: Publisher< FeedbackMessage<A::FeedbackType> >,
+
+  status_publisher: Publisher<action_msgs::GoalStatusArray>, 
+
+  action_name: String,
+}
+
+impl<A> ActionClient<A> 
+where
+  A: ActionTypes,
+  A::GoalType: Message + Clone,
+  A::ResultType: Message + Clone,
+  A::FeedbackType: Message,
+{
+
+}
 
 
-// pub struct ActionServer<A> 
-// where A: ActionTypes,
-// {
-//   a: Phant
-// }
-
-// impl<A> ActionServer<A> {
-
-// }

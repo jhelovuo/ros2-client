@@ -170,6 +170,14 @@ pub struct Client<S> {
   pub(crate) inner: Box<dyn ClientT<S>>,
 }
 
+// impl<S> Client<S> {
+//   pub async fn async_call(request: S::Request) -> dds::Result<S::Response> {
+//     let req_id = self.send_request(request)?; // TODO: async write here
+//     // async read response
+
+//   }
+// }
+
 impl<S> Deref for Client<S> {
   type Target = dyn ClientT<S>;
   fn deref(&self) -> &Self::Target {
