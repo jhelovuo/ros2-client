@@ -22,6 +22,7 @@ use crate::{
     basic::{BasicServiceMapping, },
   },
   action::*,
+  message::MessageTypeName,
 };
 
 
@@ -68,12 +69,14 @@ impl Default for NodeOptions {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+
 /// Enumerate supported service mappings
 ///
 /// There are different and incompatible ways to map Services onto DDS Topics.
 /// The mapping used by ROS2 depends on the DDS implementation used and its configuration.
 /// For details, see OMG Specification
 /// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ServiceMappings { 
   /// "Basic" service mapping from RPC over DDS specification.
   /// * RTI Connext with `RMW_CONNEXT_REQUEST_REPLY_MAPPING=basic`, but this is not tested, so may not work.
@@ -440,13 +443,59 @@ impl Node {
       ::new(self, &rq_topic, &rs_topic, Some(request_qos), Some(response_qos) )
   }
 
-  pub fn create_action_client<A>(&mut self, service_mapping: ServiceMappings, action_name:&str, 
+  pub fn create_action_client<A>(&mut self, service_mapping: ServiceMappings, action_name:&str,
+    action_type_name: &MessageTypeName,
     action_qos: ActionClientQosPolicies) 
     -> Result<ActionClient<A>, dds::Error> 
   where
       A: ActionTypes + 'static,
   {
-    todo!()
+    // action name is e.g. "/turtle1/rotate_absolute"
+    // action type name is e.g. "turtlesim/action/RotateAbsolute"
+
+    let goal_service_name = action_name.to_owned() + "/_action/send_goal";
+    let goal_service_req_type = action_type_name.dds_action_type() + "_SendGoal_Request_";
+    let goal_service_resp_type = action_type_name.dds_action_type() + "_SendGoal_Response_";
+    let my_goal_client = 
+      self.create_client(service_mapping, &goal_service_name, &goal_service_req_type, &goal_service_resp_type,
+        action_qos.goal_service.clone(), action_qos.goal_service)?;
+
+    let cancel_service_name = action_name.to_owned() + "/_action/cancel_goal";
+    let cancel_goal_type = MessageTypeName::new("action_msgs","CancelGoal");
+    let cancel_service_req_type = cancel_goal_type.dds_request_type();
+    let cancel_service_resp_type = cancel_goal_type.dds_response_type();
+    let my_cancel_client = 
+      self.create_client(service_mapping, &cancel_service_name, &cancel_service_req_type, &cancel_service_resp_type,
+        action_qos.cancel_service.clone(), action_qos.cancel_service)?;
+
+    let result_service_name = action_name.to_owned() + "/_action/get_result";
+    let result_service_req_type = action_type_name.dds_action_type() + "_GetResult_Request_";
+    let result_service_resp_type = action_type_name.dds_action_type() + "_GetResult_Response_";
+    let my_result_client = 
+      self.create_client(service_mapping, &result_service_name, &result_service_req_type, &result_service_resp_type,
+        action_qos.result_service.clone(), action_qos.result_service)?;
+
+    let feedback_topic_name = action_name.to_owned() + "/_action/feedback";
+    let feedback_topic_type = action_type_name.dds_action_type() + "_FeedbackMessage_";
+    let feedback_topic = self.create_topic(&feedback_topic_name, feedback_topic_type, &action_qos.feedback_subscription )?; 
+    let my_feedback_subscription = 
+      self.create_subscription(&feedback_topic, Some(action_qos.feedback_subscription))?;
+
+    let status_topic_name = action_name.to_owned() + "/_action/status";
+    let status_topic_type = 
+      MessageTypeName::new("action_msgs","GoalStatusArray").dds_msg_type();
+    let status_topic = self.create_topic(&status_topic_name, status_topic_type, &action_qos.status_subscription )?; 
+    let my_status_subscription = 
+      self.create_subscription(&status_topic, Some(action_qos.status_subscription))?;
+
+    Ok( ActionClient {
+      my_goal_client,
+      my_cancel_client,
+      my_result_client,
+      my_feedback_subscription,
+      my_status_subscription,
+      my_action_name: action_name.to_owned(),
+    })
   }
 
   // pub fn create_action_server<A>(&mut self, service_mapping: ServiceMappings, action_name:&str, 

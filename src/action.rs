@@ -21,19 +21,20 @@ pub trait ActionTypes {
 
 
 pub struct ActionClientQosPolicies {
-  goal_service_qos: QosPolicies,
-  result_service_qos: QosPolicies,
-  cancel_service_qos: QosPolicies,
-  feedback_subscription_qos: QosPolicies,
-  status_subscription_qos: QosPolicies,
+  pub(crate) goal_service: QosPolicies,
+  pub(crate) result_service: QosPolicies,
+  pub(crate) cancel_service: QosPolicies,
+  pub(crate) feedback_subscription: QosPolicies,
+  pub(crate) status_subscription: QosPolicies,
 }
 
+#[allow(dead_code)] // TODO: Use this
 pub struct ActionServerQosPolicies {
-  goal_service_qos: QosPolicies,
-  result_service_qos: QosPolicies,
-  cancel_service_qos: QosPolicies,
-  feedback_publication_qos: QosPolicies,
-  status_publication_qos: QosPolicies,
+  pub(crate) goal_service: QosPolicies,
+  pub(crate) result_service: QosPolicies,
+  pub(crate) cancel_service: QosPolicies,
+  pub(crate) feedback_publication: QosPolicies,
+  pub(crate) status_publication: QosPolicies,
 }
 
 
@@ -82,20 +83,20 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message,
 {
-  goal_client: 
+  pub(crate) my_goal_client: 
     Client<AService< SendGoalRequest<A::GoalType>, SendGoalResponse >>,
 
-  cancel_client: 
+  pub(crate)my_cancel_client: 
     Client<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>>,
 
-  result_client:
+  pub(crate) my_result_client:
     Client<AService<GetResultRequest, GetResultResponse<A::ResultType> >>,
 
-  feedback_subscription: Subscription< FeedbackMessage<A::FeedbackType> >,
+  pub(crate) my_feedback_subscription: Subscription< FeedbackMessage<A::FeedbackType> >,
 
-  status_subscription: Subscription<action_msgs::GoalStatusArray>, 
+  pub(crate) my_status_subscription: Subscription<action_msgs::GoalStatusArray>, 
 
-  action_name: String,
+  pub(crate) my_action_name: String,
 }
 
 impl<A> ActionClient<A> 
@@ -105,6 +106,26 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message,
 {
+
+  pub fn name(&self) -> &str {
+    &self.my_action_name
+  }
+
+  pub fn goal_client(&self) -> &Client<AService< SendGoalRequest<A::GoalType>, SendGoalResponse >> {
+    &self.my_goal_client
+  }
+  pub fn cancel_client(&self) -> &Client<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>> {
+    &self.my_cancel_client
+  }
+  pub fn result_client(&self) -> &Client<AService<GetResultRequest, GetResultResponse<A::ResultType> >> {
+    &self.my_result_client
+  }
+  pub fn feedback_subscription(&self) -> &Subscription< FeedbackMessage<A::FeedbackType> > {
+    &self.my_feedback_subscription
+  }
+  pub fn status_subscription(&self) -> &Subscription<action_msgs::GoalStatusArray> {
+    &self.my_status_subscription
+  }
 
 }
 
@@ -124,9 +145,9 @@ where
 
 // rt/turtle1/rotate_absolute/_action/feedback : turtlesim::action::dds_::RotateAbsolute_FeedbackMessage_
 
-// rt/turtle1/rotate_absolute/_action/status : action_msgs::srv::dds_::GoalStatusArray_
+// rt/turtle1/rotate_absolute/_action/status : action_msgs::msg::dds_::GoalStatusArray_
 
-
+#[allow(dead_code)] // TODO: Use this
 pub struct ActionServer<A> 
 where 
   A: ActionTypes,

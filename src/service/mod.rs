@@ -13,7 +13,6 @@ use crate::{
   message::Message,
   node::Node,
   pubsub::{Publisher, Subscription},
-  action::*,
 };
 
 pub mod request_id;
@@ -101,6 +100,8 @@ where
   fn send_response(&self, id: RmwRequestId, response: S::Response) -> dds::Result<()>;
 }
 
+// --------------------------------------------
+// --------------------------------------------
 /// Server end of a ROS2 Service
 pub struct Server<S> {
   pub(crate) inner: Box<dyn ServerT<S>>,
