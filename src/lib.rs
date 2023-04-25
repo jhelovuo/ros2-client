@@ -65,13 +65,14 @@ pub(crate) mod node;
 #[doc(inline)]
 pub use context::*;
 #[doc(inline)]
-pub use message::Message;
+pub use message::{Message, MessageTypeName};
 #[doc(inline)]
 pub use node::*;
 #[doc(inline)]
 pub use pubsub::*;
 #[doc(inline)]
-pub use service::{Client, Server, Service};
+pub use service::{Client, Server, Service, AService};
+
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {

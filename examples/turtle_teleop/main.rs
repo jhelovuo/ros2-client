@@ -193,8 +193,8 @@ fn ros2_loop(
     .unwrap();
 
   // Turtle has services, let's construct some clients.
-
-  pub struct EmptyService {}
+  
+  //pub struct EmptyService {}
 
   #[derive(Debug, Clone, Serialize, Deserialize)]
   // ROS2 Foxy with eProsima DDS crashes if the EmptyMessage is really empty,
@@ -209,22 +209,6 @@ fn ros2_loop(
   }
 
   impl Message for EmptyMessage {}
-
-  impl Service for EmptyService {
-    type Request = EmptyMessage;
-    type Response = EmptyMessage;
-
-    // TODO: ROS2 seems to append _Request_ and  _Response_ to type names?
-    // TODO: Where is this documented and who should do it?
-    // TODO: Where does the "dds_" name fragment come from?
-
-    fn request_type_name() -> String {
-      "std_srvs::srv::dds_::Empty_Request_".to_owned()
-    }
-    fn response_type_name() -> String {
-      "std_srvs::srv::dds_::Empty_Response_".to_owned()
-    }
-  }
 
   let service_qos: QosPolicies = {
     QosPolicyBuilder::new()
@@ -246,10 +230,13 @@ fn ros2_loop(
   //
   // * create_client basic version is untested.
   // Service responses do not fully work yet.
+  let empty_srv_name = MessageTypeName::new("std_srvs", "Empty");
   let mut reset_client = ros_node
-    .create_client::<EmptyService>(
+    .create_client::<AService<EmptyMessage, EmptyMessage>>(
       ServiceMappings::Enhanced,
       "/reset",
+      &empty_srv_name.dds_request_type(),
+      &empty_srv_name.dds_response_type(),
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -258,23 +245,13 @@ fn ros2_loop(
   // another client
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/SetPen.html
-  pub struct SetPenService {}
-
-  impl Service for SetPenService {
-    type Request = PenRequest;
-    type Response = ();
-    fn request_type_name() -> String {
-      "turtlesim::srv::dds_::SetPen_Request_".to_owned()
-    }
-    fn response_type_name() -> String {
-      "turtlesim::srv::dds_::SetPen_Response_".to_owned()
-    }
-  }
-
+  let set_pen_srv_name = MessageTypeName::new("turtlesim", "SetPen");
   let mut set_pen_client = ros_node
-    .create_client::<SetPenService>(
+    .create_client::<AService< PenRequest , () >>(
       ServiceMappings::Enhanced,
       "turtle1/set_pen",
+      &set_pen_srv_name.dds_request_type(),
+      &set_pen_srv_name.dds_response_type(),
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -283,18 +260,6 @@ fn ros2_loop(
   // third client
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/Spawn.html
-  pub struct SpawnService {}
-
-  impl Service for SpawnService {
-    type Request = SpawnRequest;
-    type Response = SpawnResponse;
-    fn request_type_name() -> String {
-      "turtlesim::srv::dds_::Spawn_Request_".to_owned()
-    }
-    fn response_type_name() -> String {
-      "turtlesim::srv::dds_::Spawn_Response_".to_owned()
-    }
-  }
 
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct SpawnRequest {
@@ -311,41 +276,39 @@ fn ros2_loop(
   }
   impl Message for SpawnResponse {}
 
+  type SpawnService = AService<SpawnRequest, SpawnResponse>;
+
+  let spawn_srv_name = MessageTypeName::new("turtlesim", "Spawn");
   let mut spawn_client = ros_node
     .create_client::<SpawnService>(
       ServiceMappings::Enhanced,
       "spawn",
+      &spawn_srv_name.dds_request_type(),
+      &spawn_srv_name.dds_response_type(),
       service_qos.clone(),
       service_qos.clone(),
     )
     .unwrap();
 
+
   // kill client
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/Spawn.html
-  pub struct KillService {}
-
-  impl Service for KillService {
-    type Request = KillRequest;
-    type Response = EmptyMessage;
-    fn request_type_name() -> String {
-      "turtlesim::srv::dds_::Kill_Request_".to_owned()
-    }
-    fn response_type_name() -> String {
-      "turtlesim::srv::dds_::Kill_Response_".to_owned()
-    }
-  }
-
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct KillRequest {
     pub name: String,
   }
   impl Message for KillRequest {}
 
+  type KillService = AService<KillRequest,EmptyMessage>;
+
+  let kill_srv_name = MessageTypeName::new("turtlesim", "Kill");
   let mut kill_client = ros_node
     .create_client::<KillService>(
       ServiceMappings::Enhanced,
       "kill",
+      &kill_srv_name.dds_request_type(),
+      &kill_srv_name.dds_response_type(),
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -388,7 +351,6 @@ fn ros2_loop(
       PollOpt::edge(),
     )
     .unwrap();
-
   poll
     .register(
       &set_pen_client,
@@ -481,15 +443,17 @@ fn ros2_loop(
                   }
                 }
               }
-              RosCommand::Kill(name) => match kill_client.send_request(KillRequest { name }) {
-                Ok(id) => {
-                  info!("kill request sent {:?} ", id);
+              RosCommand::Kill(name) => {
+                match kill_client.send_request(KillRequest { name }) {
+                  Ok(id) => {
+                    info!("kill request sent {:?} ", id);
+                  }
+                  Err(e) => {
+                    error!("Failed to send request: {:?}", e);
+                  }
                 }
-                Err(e) => {
-                  error!("Failed to send request: {:?}", e);
-                }
-              },
-            };
+              }
+            }
           }
         }
         TURTLE_CMD_VEL_READER_TOKEN => {
