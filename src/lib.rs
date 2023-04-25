@@ -72,7 +72,8 @@ pub use node::*;
 pub use pubsub::*;
 #[doc(inline)]
 pub use service::{Client, Server, Service, AService};
-
+#[doc(inline)]
+pub use action::{ActionTypes, Action};
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {

@@ -26,6 +26,9 @@ pub enum RosCommand {
   SetPen(PenRequest),
   Spawn(String),
   Kill(String),
+  RotateAbsolute{ heading: f32 },
+  #[allow(non_camel_case_types)]
+  RotateAbsolute_Cancel,
 }
 
 // Define turtle movement commands as Twist values
@@ -274,6 +277,19 @@ impl UiController {
 
                 Key::Char('2') => {
                   turtle_id = 2;
+                }
+
+                Key::Char('d') => {
+                  debug!("Rotate West");
+                  self.send_command(RosCommand::RotateAbsolute{heading: std::f32::consts::PI} );
+                }
+                Key::Char('g') => {
+                  debug!("Rotate East");
+                  self.send_command(RosCommand::RotateAbsolute{heading: 0.0} );
+                }
+                Key::Char('f') => {
+                  debug!("Cancel Rotate");
+                  self.send_command(RosCommand::RotateAbsolute_Cancel );
                 }
 
                 Key::Up => {

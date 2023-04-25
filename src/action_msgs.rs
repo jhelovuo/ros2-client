@@ -3,11 +3,14 @@ use serde_repr::{Serialize_repr, Deserialize_repr};
 
 use crate::message::Message;
 
+
+pub type GoalId = crate::unique_identifier_msgs::UUID;
+
 /// From https://docs.ros2.org/foxy/api/action_msgs/msg/GoalInfo.html
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalInfo {
-  goal_id : crate::unique_identifier_msgs::UUID,
-  stamp: crate::builtin_interfaces::Time,
+  pub goal_id : GoalId,
+  pub stamp: crate::builtin_interfaces::Time,
 }
 impl Message for GoalInfo {}
 
@@ -26,27 +29,27 @@ pub enum GoalStatusEnum {
 
 
 /// https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatus.html
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalStatus {
-  goal_info: GoalInfo,
-  status: GoalStatusEnum,
+  pub goal_info: GoalInfo,
+  pub status: GoalStatusEnum,
 }
 impl Message for GoalStatus {}
 
 
 /// https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatusArray.html
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalStatusArray {
-  status_list : Vec<GoalStatus>,
+  pub status_list : Vec<GoalStatus>,
 }
 impl Message for GoalStatusArray {}
 
 
 
 ///https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CancelGoalRequest {
-  goal_info : GoalInfo,
+  pub(crate) goal_info : GoalInfo,
 }
 impl Message for CancelGoalRequest {}
 
@@ -78,7 +81,7 @@ pub enum CancelGoalResponseEnum {
 }
 
 /// https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CancelGoalResponse {
   return_code: CancelGoalResponseEnum,
   goals_canceling: Vec<GoalInfo>  
