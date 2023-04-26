@@ -196,8 +196,7 @@ where
   /// Request id can be used to recognize correct response from Action Server.
   /// Goal id is later used to communicate Goal status and result.
   pub fn send_goal(&mut self, goal: A::GoalType) -> dds::Result<(RmwRequestId,GoalId)> {
-    // TODO: actually generate uniquely
-    let goal_id = unique_identifier_msgs::UUID{uuid: [0xcc;16]}; 
+    let goal_id = unique_identifier_msgs::UUID::new_random(); 
     self.my_goal_client.send_request(SendGoalRequest{ goal_id: goal_id.clone(), goal })
       .map( |req_id| (req_id, goal_id))
   }
@@ -353,14 +352,5 @@ where
   action_name: String,
 }
 
-impl<A> ActionClient<A> 
-where
-  A: ActionTypes,
-  A::GoalType: Message + Clone,
-  A::ResultType: Message + Clone,
-  A::FeedbackType: Message,
-{
-
-}
 
 
