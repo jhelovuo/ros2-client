@@ -266,7 +266,7 @@ where
     request: S::Request,
   ) -> (Self::RequestWrapper, Option<RmwRequestId>);
   fn request_id_after_wrap(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     write_result: SampleIdentity,
   ) -> RmwRequestId;
   fn unwrap_response(
@@ -427,7 +427,7 @@ where
     let sample_id = self
       .request_sender
       .publish_with_options(wrapped, write_opt.build())?;
-    Ok(SW::request_id_after_wrap(&mut self.client_state, sample_id))
+    Ok(SW::request_id_after_wrap(&self.client_state, sample_id))
   }
 
   fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>>

@@ -115,7 +115,7 @@ where
   }
 
   fn request_id_after_wrap(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     _write_result: SampleIdentity,
   ) -> RmwRequestId {
     // Request id is what we generated into header.

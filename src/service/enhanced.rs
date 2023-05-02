@@ -80,7 +80,7 @@ where
   }
 
   fn request_id_after_wrap(
-    _state: &mut Self::ClientState,
+    _state: &Self::ClientState,
     write_result: SampleIdentity,
   ) -> RmwRequestId {
     RmwRequestId::from(write_result)
