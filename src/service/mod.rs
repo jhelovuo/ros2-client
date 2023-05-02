@@ -96,7 +96,7 @@ pub trait ServerT<S>: Evented
 where
   S: Service,
 {
-  fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId, S::Request)>>;
+  fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>>;
   fn send_response(&self, id: RmwRequestId, response: S::Response) -> dds::Result<()>;
 }
 
@@ -124,7 +124,7 @@ impl<S> ServerT<S> for Server<S>
 where
   S: 'static + Service,
 {
-  fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId, S::Request)>> {
+  fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>> {
     self.inner.receive_request()
   }
 
@@ -325,7 +325,7 @@ where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
 {
-  fn receive_request(&mut self) -> dds::Result<Option<(RmwRequestId, S::Request)>>
+  fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>>
   where
     <S as Service>::Request: 'static,
   {
