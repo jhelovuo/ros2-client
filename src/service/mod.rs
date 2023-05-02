@@ -12,7 +12,7 @@ use rustdds::{rpc::*, *};
 use crate::{
   message::Message,
   node::Node,
-  pubsub::{Publisher, Subscription},
+  pubsub::{Publisher, Subscription, MessageInfo},
 };
 
 pub mod request_id;
@@ -245,7 +245,7 @@ where
   // Server operations
   fn unwrap_request(
     wrapped: &Self::RequestWrapper,
-    sample_info: &SampleInfo,
+    sample_info: &MessageInfo,
   ) -> (RmwRequestId, S::Request);
   // Unwrapping will clone the request
   // This is reasonable, because we may have to take it out of another struct
@@ -272,7 +272,7 @@ where
   fn unwrap_response(
     state: &mut Self::ClientState,
     wrapped: Self::ResponseWrapper,
-    sample_info: SampleInfo,
+    sample_info: MessageInfo,
   ) -> (RmwRequestId, S::Response);
 }
 
@@ -331,7 +331,7 @@ where
   {
     let next_sample = self.request_receiver.take()?;
 
-    Ok(next_sample.map(|(s, mi)| SW::unwrap_request(&s, &mi.sample_info)))
+    Ok(next_sample.map(|(s, mi)| SW::unwrap_request(&s, &mi)))
   }
 
   fn send_response(&self, id: RmwRequestId, response: S::Response) -> dds::Result<()> {
@@ -436,7 +436,11 @@ where
   {
     let next_sample = self.response_receiver.take()?;
 
-    Ok(next_sample.map(|(s, mi)| SW::unwrap_response(&mut self.client_state, s, mi.sample_info)))
+    Ok(next_sample.map(|(rw,msg_info)| {
+        //let msg_info = MessageInfo::from(s);
+        SW::unwrap_response(&mut self.client_state, rw , msg_info)
+      }
+    ))
   }
 }
 

@@ -45,10 +45,10 @@ where
 
   fn unwrap_request(
     wrapped: &Self::RequestWrapper,
-    sample_info: &SampleInfo,
+    message_info: &MessageInfo,
   ) -> (RmwRequestId, S::Request) {
     (
-      RmwRequestId::from(sample_info.sample_identity()),
+      RmwRequestId::from(message_info.sample_identity()),
       wrapped.response_or_request.clone(),
     )
   }
@@ -89,9 +89,9 @@ where
   fn unwrap_response(
     _state: &mut Self::ClientState,
     wrapped: Self::ResponseWrapper,
-    sample_info: SampleInfo,
+    message_info: MessageInfo,
   ) -> (RmwRequestId, S::Response) {
-    let r_id = sample_info
+    let r_id = message_info
       .related_sample_identity()
       .map(RmwRequestId::from)
       .unwrap_or_default();

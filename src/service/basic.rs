@@ -6,6 +6,7 @@ use rustdds::{rpc::*, *};
 use serde::{Deserialize, Serialize};
 
 use crate::message::Message;
+use crate::MessageInfo;
 use super::{
   request_id::{RmwRequestId, SequenceNumber},
   ClientGeneric, ServerGeneric, Service, ServiceMapping,
@@ -68,7 +69,7 @@ where
 
   fn unwrap_request(
     wrapped: &Self::RequestWrapper,
-    _sample_info: &SampleInfo,
+    _sample_info: &MessageInfo, // not needed in Basic Mapping
   ) -> (RmwRequestId, S::Request) {
     (
       RmwRequestId::from(wrapped.request_id),
@@ -128,7 +129,7 @@ where
   fn unwrap_response(
     _state: &mut Self::ClientState,
     wrapped: Self::ResponseWrapper,
-    _sample_info: SampleInfo,
+    _sample_info: MessageInfo, // not needed in Basic Mapping
   ) -> (RmwRequestId, S::Response) {
     let r_id = RmwRequestId {
       writer_guid: wrapped.related_request_id.writer_guid,

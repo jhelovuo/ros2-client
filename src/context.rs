@@ -90,7 +90,7 @@ impl Context {
   {
     let datareader = self
       .get_ros_default_subscriber()
-      .create_datareader_no_key(topic, qos)?;
+      .create_simple_datareader_no_key(topic, qos)?;
     Ok(Subscription::new(datareader))
   }
 

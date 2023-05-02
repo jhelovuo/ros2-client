@@ -6,6 +6,7 @@ use rustdds::{rpc::*, *};
 use serde::{Deserialize, Serialize};
 
 use crate::message::Message;
+use crate::MessageInfo;
 use super::{
   request_id::{RmwRequestId, SequenceNumber},
   ClientGeneric, ServerGeneric, Service, ServiceMapping,
@@ -56,10 +57,10 @@ where
 
   fn unwrap_request(
     wrapped: &Self::RequestWrapper,
-    sample_info: &SampleInfo,
+    message_info: &MessageInfo,
   ) -> (RmwRequestId, S::Request) {
     let r_id = RmwRequestId {
-      writer_guid: sample_info.writer_guid(),
+      writer_guid: message_info.writer_guid(),
       // Last 8 bytes of writer (client) GUID should be in the wrapper also
       sequence_number: SequenceNumber::from_high_low(
         wrapped.sequence_number_high,
@@ -109,7 +110,7 @@ where
   fn unwrap_response(
     state: &mut Self::ClientState,
     wrapped: Self::ResponseWrapper,
-    sample_info: SampleInfo,
+    message_info: MessageInfo,
   ) -> (RmwRequestId, S::Response) {
     let mut client_guid_bytes = [0; 16];
     {
@@ -121,7 +122,7 @@ where
       first_half.copy_from_slice(&state.client_guid.to_bytes().as_slice()[0..8]);
 
       // This is received in the wrapper header
-      second_half.copy_from_slice(&sample_info.writer_guid().to_bytes()[8..16]);
+      second_half.copy_from_slice(&message_info.writer_guid().to_bytes()[8..16]);
     }
 
     let r_id = RmwRequestId {
