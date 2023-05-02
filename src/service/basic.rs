@@ -127,7 +127,7 @@ where
   }
 
   fn unwrap_response(
-    _state: &mut Self::ClientState,
+    _state: &Self::ClientState,
     wrapped: Self::ResponseWrapper,
     _sample_info: MessageInfo, // not needed in Basic Mapping
   ) -> (RmwRequestId, S::Response) {

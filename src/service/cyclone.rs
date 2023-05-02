@@ -108,7 +108,7 @@ where
   }
 
   fn unwrap_response(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     wrapped: Self::ResponseWrapper,
     message_info: MessageInfo,
   ) -> (RmwRequestId, S::Response) {

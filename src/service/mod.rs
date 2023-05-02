@@ -163,7 +163,7 @@ where
   S: Service,
 {
   fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId>;
-  fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId, S::Response)>>;
+  fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>>;
 }
 
 /// Client end of a ROS2 Service
@@ -200,7 +200,7 @@ where
     self.inner.send_request(request)
   }
 
-  fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId, S::Response)>> {
+  fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>> {
     self.inner.receive_response()
   }
 }
@@ -270,7 +270,7 @@ where
     write_result: SampleIdentity,
   ) -> RmwRequestId;
   fn unwrap_response(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     wrapped: Self::ResponseWrapper,
     sample_info: MessageInfo,
   ) -> (RmwRequestId, S::Response);
@@ -430,15 +430,14 @@ where
     Ok(SW::request_id_after_wrap(&mut self.client_state, sample_id))
   }
 
-  fn receive_response(&mut self) -> dds::Result<Option<(RmwRequestId, S::Response)>>
+  fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>>
   where
     <S as Service>::Response: 'static,
   {
     let next_sample = self.response_receiver.take()?;
 
     Ok(next_sample.map(|(rw,msg_info)| {
-        //let msg_info = MessageInfo::from(s);
-        SW::unwrap_response(&mut self.client_state, rw , msg_info)
+        SW::unwrap_response(&self.client_state, rw , msg_info)
       }
     ))
   }
