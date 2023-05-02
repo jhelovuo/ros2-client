@@ -28,7 +28,7 @@ fn main() {
       &topic_qos,
     )
     .unwrap();
-  let mut chatter_subscription = node
+  let chatter_subscription = node
     .create_subscription::<String>(&chatter_topic, None)
     .unwrap();
 

@@ -1,8 +1,9 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
+use serde::{Deserialize, Serialize};
+
 use ros2_client::{
-  interfaces::{AddTwoIntsResponse, AddTwoIntsService},
-  Context, Node, NodeOptions, ServiceMappings,
+  Context, Node, NodeOptions, ServiceMappings, Message, AService
 };
 use rustdds::{
   policy::{self, Deadline, Lifespan},
@@ -17,6 +18,20 @@ use rustdds::{
 // or
 // % ros2 run examples_rclcpp_minimal_client client_main
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTwoIntsRequest {
+  pub a: i64,
+  pub b: i64,
+}
+impl Message for AddTwoIntsRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTwoIntsResponse {
+  pub sum: i64,
+}
+impl Message for AddTwoIntsResponse {}
+
+
 fn main() {
   pretty_env_logger::init();
 
@@ -26,10 +41,12 @@ fn main() {
 
   println!(">>> ros2_service node started");
 
-  let mut server = node
-    .create_server::<AddTwoIntsService>(
+  let server = node
+    .create_server::<AService<AddTwoIntsRequest,AddTwoIntsResponse> >(
       ServiceMappings::Enhanced,
       "/add_two_ints",
+      "example_interfaces::srv::dds_::AddTwoInts_Request_", // req type name
+      "example_interfaces::srv::dds_::AddTwoInts_Response_", // resp type name
       service_qos.clone(),
       service_qos.clone(),
     )

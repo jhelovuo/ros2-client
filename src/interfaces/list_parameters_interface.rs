@@ -7,11 +7,11 @@ pub struct ListParametersService {}
 impl Service for ListParametersService {
   type Request = ListParametersRequest;
   type Response = ListParametersResponse;
-  fn request_type_name() -> String {
-    "rcl_interfaces::srv::dds_::ListParameters_Request_".to_owned()
+  fn request_type_name(&self) -> &str {
+    "rcl_interfaces::srv::dds_::ListParameters_Request_"
   }
-  fn response_type_name() -> String {
-    "rcl_interfaces::srv::dds_::ListParameters_Response_".to_owned()
+  fn response_type_name(&self) -> &str {
+    "rcl_interfaces::srv::dds_::ListParameters_Response_"
   }
 }
 

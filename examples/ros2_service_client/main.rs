@@ -1,10 +1,12 @@
 use std::time::{Duration, Instant};
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
+use serde::{Deserialize, Serialize};
+
 use ros2_client::{
-  interfaces::{AddTwoIntsRequest, AddTwoIntsService},
-  Context, Node, NodeOptions, ServiceMappings,
+  Context, Node, NodeOptions, ServiceMappings, Message, AService
 };
+
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 const RESPONSE_TOKEN: Token = Token(7); // Just an arbitrary value
@@ -18,6 +20,19 @@ const RESPONSE_TOKEN: Token = Token(7); // Just an arbitrary value
 //
 // Then run this example.
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTwoIntsRequest {
+  pub a: i64,
+  pub b: i64,
+}
+impl Message for AddTwoIntsRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTwoIntsResponse {
+  pub sum: i64,
+}
+impl Message for AddTwoIntsResponse {}
+
 fn main() {
   pretty_env_logger::init();
 
@@ -27,10 +42,12 @@ fn main() {
 
   println!(">>> ros2_service node started");
 
-  let mut client = node
-    .create_client::<AddTwoIntsService>(
+  let client = node
+    .create_client::<AService<AddTwoIntsRequest,AddTwoIntsResponse>>(
       ServiceMappings::Enhanced,
       "/add_two_ints",
+      "example_interfaces::srv::dds_::AddTwoInts_Request_", // req type name
+      "example_interfaces::srv::dds_::AddTwoInts_Response_", // resp type name
       service_qos.clone(),
       service_qos.clone(),
     )

@@ -1,6 +1,6 @@
 [package]
 name = "ros2-client"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2018"
 authors = ["Juhana Helovuo <juhana.helovuo@atostek.com>"]
 description = "ROS2 client library based on RustDDS"
@@ -15,7 +15,7 @@ categories = ["network-programming", "science::robotics"]
 
 [dependencies]
 #rustdds ="~0.7"
-rustdds = { version = "~0.7", path = "../RustDDS" }
+rustdds = { version = "~0.8", path = "../RustDDS" }
 mio = "^0.6.23"
 mio-extras = "2.0.6"
 log = "0.4.11"

@@ -7,11 +7,11 @@ pub struct BasicTypesService {}
 impl Service for BasicTypesService {
   type Request = BasicTypesRequest;
   type Response = BasicTypesResponse;
-  fn request_type_name() -> String {
-    "test_msgs::srv::dds_::BasicTypes_Request_".to_owned()
+  fn request_type_name(&self) -> &str {
+    "test_msgs::srv::dds_::BasicTypes_Request_"
   }
-  fn response_type_name() -> String {
-    "test_msgs::srv::dds_::BasicTypes_Response_".to_owned()
+  fn response_type_name(&self) -> &str {
+    "test_msgs::srv::dds_::BasicTypes_Response_"
   }
 }
 
