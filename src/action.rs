@@ -336,21 +336,98 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message,
 {
-  goal_server: 
+  my_goal_server: 
     Server<AService< SendGoalRequest<A::GoalType>, SendGoalResponse >>,
 
-  cancel_server: 
+  my_cancel_server: 
     Server<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>>,
 
-  result_server:
+  my_result_server:
     Server<AService<GetResultRequest, GetResultResponse<A::ResultType> >>,
 
-  feedback_publisher: Publisher< FeedbackMessage<A::FeedbackType> >,
+  my_feedback_publisher: Publisher< FeedbackMessage<A::FeedbackType> >,
 
-  status_publisher: Publisher<action_msgs::GoalStatusArray>, 
+  my_status_publisher: Publisher<action_msgs::GoalStatusArray>, 
 
-  action_name: String,
+  my_action_name: String,
 }
 
 
+impl<A> ActionServer<A> 
+where
+  A: ActionTypes,
+  A::GoalType: Message + Clone,
+  A::ResultType: Message + Clone,
+  A::FeedbackType: Message,
+{
+
+  pub fn name(&self) -> &str {
+    &self.my_action_name
+  }
+
+  pub fn goal_server(&mut self) -> &mut Server<AService< SendGoalRequest<A::GoalType>, SendGoalResponse >> {
+    &mut self.my_goal_server
+  }
+  pub fn cancel_server(&mut self) -> &mut Server<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>> {
+    &mut self.my_cancel_server
+  }
+  pub fn result_server(&mut self) -> &mut Server<AService<GetResultRequest, GetResultResponse<A::ResultType> >> {
+    &mut self.my_result_server
+  }
+  pub fn feedback_publisher(&mut self) -> &mut Publisher< FeedbackMessage<A::FeedbackType> > {
+    &mut self.my_feedback_publisher
+  }
+  pub fn my_status_publisher(&mut self) -> &mut Publisher<action_msgs::GoalStatusArray> {
+    &mut self.my_status_publisher
+  }
+
+  /// Receive a new goal, if available.
+  pub fn receive_goal(&mut self) -> dds::Result<Option<(RmwRequestId,SendGoalRequest<A::GoalType>)>> {
+    self.my_goal_server.receive_request()
+  }
+
+  /// Send a response for the specified goal request
+  pub fn send_goal_response(&mut self, req_id: RmwRequestId, resp: SendGoalResponse) 
+    -> dds::Result<()> 
+  {
+    self.my_goal_server.send_response(req_id, resp)
+  }
+
+
+  /// Receive a cancel request, if available.
+  pub fn receive_cancel_request(&mut self) -> dds::Result<Option<(RmwRequestId,action_msgs::CancelGoalRequest)>> {
+    self.my_cancel_server.receive_request()
+  }
+
+  // Respond to a received cancel request
+  pub fn send_cancel_response(&mut self, req_id: RmwRequestId, resp: action_msgs::CancelGoalResponse) 
+    -> dds::Result<()> 
+  {
+    self.my_cancel_server.send_response(req_id, resp)
+  }
+
+
+
+  pub fn receive_result_request(&mut self) -> dds::Result<Option<(RmwRequestId, GetResultRequest)>> {
+    self.my_result_server.receive_request()
+  }
+
+  pub fn send_result(&mut self, result_request_id: RmwRequestId, resp: GetResultResponse<A::ResultType>) 
+    -> dds::Result<()> 
+  {
+    self.my_result_server.send_response(result_request_id, resp)
+  } 
+
+
+  pub fn send_feedback(&mut self, goal_id: GoalId, feedback: A::FeedbackType) -> dds::Result<()> 
+  {
+    self.my_feedback_publisher.publish(FeedbackMessage{ goal_id , feedback })
+  }
+
+  // Send the status of all known goals.
+  pub fn send_goal_statuses(&mut self, goal_statuses: action_msgs::GoalStatusArray) -> dds::Result<()> {
+    self.my_status_publisher.publish(goal_statuses)
+  }
+
+} // impl
 

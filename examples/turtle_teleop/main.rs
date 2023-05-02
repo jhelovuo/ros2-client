@@ -172,7 +172,7 @@ fn ros2_loop(
   // But here is how to read it also, if anyone is interested.
   // This should show what is the turle command in case someone else is
   // also issuing commands, i.e. there are two turtla controllers running.
-  let mut turtle_cmd_vel_reader = ros_node
+  let turtle_cmd_vel_reader = ros_node
     .create_subscription::<Twist>(&turtle_cmd_vel_topic, None)
     .unwrap();
 
@@ -183,7 +183,7 @@ fn ros2_loop(
       &topic_qos,
     )
     .unwrap();
-  let mut turtle_pose_reader = ros_node
+  let turtle_pose_reader = ros_node
     .create_subscription::<Pose>(&turtle_pose_topic, None)
     .unwrap();
 
