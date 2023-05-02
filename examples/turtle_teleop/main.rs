@@ -238,7 +238,7 @@ fn ros2_loop(
   // * create_client basic version is untested.
   // Service responses do not fully work yet.
   let empty_srv_name = MessageTypeName::new("std_srvs", "Empty");
-  let mut reset_client = ros_node
+  let reset_client = ros_node
     .create_client::<AService<EmptyMessage, EmptyMessage>>(
       ServiceMappings::Enhanced,
       "/reset",
@@ -253,7 +253,7 @@ fn ros2_loop(
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/SetPen.html
   let set_pen_srv_name = MessageTypeName::new("turtlesim", "SetPen");
-  let mut set_pen_client = ros_node
+  let set_pen_client = ros_node
     .create_client::<AService< PenRequest , () >>(
       ServiceMappings::Enhanced,
       "turtle1/set_pen",
@@ -286,7 +286,7 @@ fn ros2_loop(
   type SpawnService = AService<SpawnRequest, SpawnResponse>;
 
   let spawn_srv_name = MessageTypeName::new("turtlesim", "Spawn");
-  let mut spawn_client = ros_node
+  let spawn_client = ros_node
     .create_client::<SpawnService>(
       ServiceMappings::Enhanced,
       "spawn",
@@ -310,7 +310,7 @@ fn ros2_loop(
   type KillService = AService<KillRequest,EmptyMessage>;
 
   let kill_srv_name = MessageTypeName::new("turtlesim", "Kill");
-  let mut kill_client = ros_node
+  let kill_client = ros_node
     .create_client::<KillService>(
       ServiceMappings::Enhanced,
       "kill",

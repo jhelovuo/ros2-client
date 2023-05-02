@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::atomic;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
@@ -35,16 +36,27 @@ pub type CycloneClient<S> = ClientGeneric<S, CycloneServiceMapping<S>>;
 
 pub struct CycloneClientState {
   client_guid: GUID,
-  sequence_number_counter: SequenceNumber,
+  sequence_number_counter: atomic::AtomicI64,
+  //sequence_number_counter: SequenceNumber,
 }
 
 impl CycloneClientState {
   pub fn new(client_guid: GUID) -> CycloneClientState {
     CycloneClientState {
       client_guid,
-      sequence_number_counter: SequenceNumber::zero(),
+      sequence_number_counter: atomic::AtomicI64::new( SequenceNumber::default().into() )
+      //sequence_number_counter: SequenceNumber::zero(),
     }
   }
+
+  pub fn next_sequence_number(&self) -> SequenceNumber {
+    SequenceNumber::from( self.sequence_number_counter.fetch_add(1, atomic::Ordering::Acquire) )
+  }
+
+  pub fn sequence_number(&self) -> SequenceNumber {
+     SequenceNumber::from( self.sequence_number_counter.load(atomic::Ordering::Acquire) )
+  }
+
 }
 
 impl<S> ServiceMapping<S> for CycloneServiceMapping<S>
@@ -81,15 +93,15 @@ where
   type ClientState = CycloneClientState;
 
   fn wrap_request(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     request: S::Request,
   ) -> (Self::RequestWrapper, Option<RmwRequestId>) {
-    state.sequence_number_counter = state.sequence_number_counter.next();
+    let sequence_number = state.next_sequence_number();
 
     // Generate new request id
     let request_id = RmwRequestId {
       writer_guid: state.client_guid,
-      sequence_number: state.sequence_number_counter,
+      sequence_number,
     };
 
     (cyclone_wrap(request_id, request), Some(request_id))
@@ -103,7 +115,7 @@ where
     // write_result is irrelevant, so we discard it.
     RmwRequestId {
       writer_guid: state.client_guid,
-      sequence_number: state.sequence_number_counter,
+      sequence_number: state.sequence_number(),
     }
   }
 
@@ -137,10 +149,7 @@ where
   }
 
   fn new_client_state(request_sender: GUID) -> Self::ClientState {
-    CycloneClientState {
-      client_guid: request_sender,
-      sequence_number_counter: SequenceNumber::zero(),
-    }
+    CycloneClientState::new(request_sender)
   }
 }
 

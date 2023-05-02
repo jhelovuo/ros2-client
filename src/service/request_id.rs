@@ -49,6 +49,12 @@ impl From<SequenceNumber> for i64 {
   }
 }
 
+impl From<i64> for SequenceNumber {
+  fn from(i: i64) -> SequenceNumber {
+    SequenceNumber::new(i)
+  }
+}
+
 impl From<rustdds::SequenceNumber> for SequenceNumber {
   fn from(sn: rustdds::SequenceNumber) -> SequenceNumber {
     SequenceNumber::new(i64::from(sn))

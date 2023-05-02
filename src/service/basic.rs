@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::atomic;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
@@ -47,15 +48,23 @@ pub type BasicClient<S> = ClientGeneric<S, BasicServiceMapping<S>>;
 
 pub struct BasicClientState {
   client_guid: GUID,
-  sequence_number_counter: SequenceNumber,
+  sequence_number_counter: atomic::AtomicI64,
 }
 
 impl BasicClientState {
   pub fn new(client_guid: GUID) -> BasicClientState {
     BasicClientState {
       client_guid,
-      sequence_number_counter: SequenceNumber::default(),
+      sequence_number_counter: atomic::AtomicI64::new( SequenceNumber::default().into() ) ,
     }
+  }
+
+  pub fn increment_sequence_number(&self) {
+    self.sequence_number_counter.fetch_add(1, atomic::Ordering::Acquire);
+  }
+
+  pub fn sequence_number(&self) -> SequenceNumber {
+     SequenceNumber::from( self.sequence_number_counter.load(atomic::Ordering::Acquire) )
   }
 }
 
@@ -94,14 +103,15 @@ where
   type ClientState = BasicClientState;
 
   fn wrap_request(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     request: S::Request,
   ) -> (Self::RequestWrapper, Option<RmwRequestId>) {
-    state.sequence_number_counter = state.sequence_number_counter.next();
+    state.increment_sequence_number();
+    //state.sequence_number_counter = state.sequence_number_counter.next();
 
     let rmw_request_id = RmwRequestId {
       writer_guid: state.client_guid,
-      sequence_number: state.sequence_number_counter,
+      sequence_number: state.sequence_number(),
     };
 
     (
@@ -122,7 +132,7 @@ where
     // write_result is irrelevant, so we discard it.
     RmwRequestId {
       writer_guid: state.client_guid,
-      sequence_number: state.sequence_number_counter,
+      sequence_number: state.sequence_number(),
     }
   }
 

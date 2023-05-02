@@ -162,7 +162,7 @@ pub trait ClientT<S>: Evented
 where
   S: Service,
 {
-  fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId>;
+  fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId>;
   fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>>;
 }
 
@@ -196,7 +196,7 @@ impl<S> ClientT<S> for Client<S>
 where
   S: 'static + Service,
 {
-  fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
+  fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
     self.inner.send_request(request)
   }
 
@@ -262,7 +262,7 @@ where
   // If wrap_requests returns request id, then that will be used. If None, then
   // use return value from request_id_after_wrap
   fn wrap_request(
-    state: &mut Self::ClientState,
+    state: &Self::ClientState,
     request: S::Request,
   ) -> (Self::RequestWrapper, Option<RmwRequestId>);
   fn request_id_after_wrap(
@@ -420,8 +420,8 @@ where
   S: 'static + Service,
   SW: 'static + ServiceMapping<S>,
 {
-  fn send_request(&mut self, request: S::Request) -> dds::Result<RmwRequestId> {
-    let (wrapped, rsi_opt) = SW::wrap_request(&mut self.client_state, request);
+  fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
+    let (wrapped, rsi_opt) = SW::wrap_request(&self.client_state, request);
     let write_opt =
       WriteOptionsBuilder::new().related_sample_identity_opt(rsi_opt.map(SampleIdentity::from));
     let sample_id = self

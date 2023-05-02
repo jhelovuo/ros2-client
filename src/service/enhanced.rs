@@ -68,7 +68,7 @@ where
   type ClientState = EnhancedClientState;
 
   fn wrap_request(
-    _state: &mut Self::ClientState,
+    _state: &Self::ClientState,
     request: S::Request,
   ) -> (Self::RequestWrapper, Option<RmwRequestId>) {
     (

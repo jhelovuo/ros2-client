@@ -195,7 +195,7 @@ where
   /// Returns and id of the Request and id for the Goal.
   /// Request id can be used to recognize correct response from Action Server.
   /// Goal id is later used to communicate Goal status and result.
-  pub fn send_goal(&mut self, goal: A::GoalType) -> dds::Result<(RmwRequestId,GoalId)> {
+  pub fn send_goal(&self, goal: A::GoalType) -> dds::Result<(RmwRequestId,GoalId)> {
     let goal_id = unique_identifier_msgs::UUID::new_random(); 
     self.my_goal_client.send_request(SendGoalRequest{ goal_id: goal_id.clone(), goal })
       .map( |req_id| (req_id, goal_id))
@@ -203,7 +203,7 @@ where
 
   /// Receive a response for the specified goal request, or None if response is not yet
   /// available
-  pub fn receive_goal_response(&mut self, req_id: RmwRequestId) 
+  pub fn receive_goal_response(&self, req_id: RmwRequestId) 
     -> dds::Result<Option<SendGoalResponse>> 
   {
     loop {
@@ -230,27 +230,27 @@ where
   // - If the goal ID is not zero and timestamp is zero, cancel the goal with the given ID regardless of the time it was accepted.
   // - If the goal ID is not zero and timestamp is not zero, cancel the goal with the given ID and all goals accepted at or before the timestamp.
 
-  fn cancel_goal_raw(&mut self, goal_id: GoalId, timestamp: Time) -> dds::Result<RmwRequestId> 
+  fn cancel_goal_raw(&self, goal_id: GoalId, timestamp: Time) -> dds::Result<RmwRequestId> 
   {
     let goal_info = GoalInfo{ goal_id , stamp: timestamp };
     self.my_cancel_client.send_request( CancelGoalRequest{ goal_info} )
   }
 
-  pub fn cancel_goal(&mut self, goal_id: GoalId) -> dds::Result<RmwRequestId> {
+  pub fn cancel_goal(&self, goal_id: GoalId) -> dds::Result<RmwRequestId> {
     self.cancel_goal_raw(goal_id, Time::ZERO)
   }
 
-  pub fn cancel_all_goals_before(&mut self, timestamp: Time) -> dds::Result<RmwRequestId> {
+  pub fn cancel_all_goals_before(&self, timestamp: Time) -> dds::Result<RmwRequestId> {
     self.cancel_goal_raw(GoalId::ZERO, timestamp)
   }
 
-  pub fn cancel_all_goals(&mut self,) -> dds::Result<RmwRequestId> {
+  pub fn cancel_all_goals(&self,) -> dds::Result<RmwRequestId> {
     self.cancel_goal_raw(GoalId::ZERO, Time::ZERO)
   }
 
   // TODO: The result type is ugly C++ typing. Rewrite to a proper enum, possibly
   // in a higher-level library.
-  pub fn receive_cancel_response(&mut self, cancel_request_id: RmwRequestId) 
+  pub fn receive_cancel_response(&self, cancel_request_id: RmwRequestId) 
     -> dds::Result<Option<CancelGoalResponse>> 
   { 
     loop {
@@ -266,11 +266,11 @@ where
     }    
   }
 
-  pub fn request_result(&mut self, goal_id: GoalId) -> dds::Result<RmwRequestId> {
+  pub fn request_result(&self, goal_id: GoalId) -> dds::Result<RmwRequestId> {
     self.my_result_client.send_request( GetResultRequest{ goal_id } )
   }
 
-  pub fn receive_result(&mut self, result_request_id: RmwRequestId) 
+  pub fn receive_result(&self, result_request_id: RmwRequestId) 
     -> dds::Result<Option<(GoalStatusEnum, A::ResultType)>> 
   {
     loop {
@@ -287,7 +287,7 @@ where
   } 
 
 
-  pub fn receive_feedback(&mut self, goal_id: GoalId) -> dds::Result<Option<A::FeedbackType>> 
+  pub fn receive_feedback(&self, goal_id: GoalId) -> dds::Result<Option<A::FeedbackType>> 
   where
     <A as ActionTypes>::FeedbackType: 'static,
   {
@@ -303,7 +303,7 @@ where
   }
 
   /// Note: This does not take GoalId and will therefore report status of all Goals.
-  pub fn receive_status(&mut self,) -> dds::Result<Option<action_msgs::GoalStatusArray>> {
+  pub fn receive_status(&self,) -> dds::Result<Option<action_msgs::GoalStatusArray>> {
     self.my_status_subscription.take()
       .map( |r| r.map( |(gsa,_msg_info)| gsa ) )
   }
@@ -382,12 +382,12 @@ where
   }
 
   /// Receive a new goal, if available.
-  pub fn receive_goal(&mut self) -> dds::Result<Option<(RmwRequestId,SendGoalRequest<A::GoalType>)>> {
+  pub fn receive_goal(&self) -> dds::Result<Option<(RmwRequestId,SendGoalRequest<A::GoalType>)>> {
     self.my_goal_server.receive_request()
   }
 
   /// Send a response for the specified goal request
-  pub fn send_goal_response(&mut self, req_id: RmwRequestId, resp: SendGoalResponse) 
+  pub fn send_goal_response(&self, req_id: RmwRequestId, resp: SendGoalResponse) 
     -> dds::Result<()> 
   {
     self.my_goal_server.send_response(req_id, resp)
@@ -395,12 +395,12 @@ where
 
 
   /// Receive a cancel request, if available.
-  pub fn receive_cancel_request(&mut self) -> dds::Result<Option<(RmwRequestId,action_msgs::CancelGoalRequest)>> {
+  pub fn receive_cancel_request(&self) -> dds::Result<Option<(RmwRequestId,action_msgs::CancelGoalRequest)>> {
     self.my_cancel_server.receive_request()
   }
 
   // Respond to a received cancel request
-  pub fn send_cancel_response(&mut self, req_id: RmwRequestId, resp: action_msgs::CancelGoalResponse) 
+  pub fn send_cancel_response(&self, req_id: RmwRequestId, resp: action_msgs::CancelGoalResponse) 
     -> dds::Result<()> 
   {
     self.my_cancel_server.send_response(req_id, resp)
@@ -408,24 +408,24 @@ where
 
 
 
-  pub fn receive_result_request(&mut self) -> dds::Result<Option<(RmwRequestId, GetResultRequest)>> {
+  pub fn receive_result_request(&self) -> dds::Result<Option<(RmwRequestId, GetResultRequest)>> {
     self.my_result_server.receive_request()
   }
 
-  pub fn send_result(&mut self, result_request_id: RmwRequestId, resp: GetResultResponse<A::ResultType>) 
+  pub fn send_result(&self, result_request_id: RmwRequestId, resp: GetResultResponse<A::ResultType>) 
     -> dds::Result<()> 
   {
     self.my_result_server.send_response(result_request_id, resp)
   } 
 
 
-  pub fn send_feedback(&mut self, goal_id: GoalId, feedback: A::FeedbackType) -> dds::Result<()> 
+  pub fn send_feedback(&self, goal_id: GoalId, feedback: A::FeedbackType) -> dds::Result<()> 
   {
     self.my_feedback_publisher.publish(FeedbackMessage{ goal_id , feedback })
   }
 
   // Send the status of all known goals.
-  pub fn send_goal_statuses(&mut self, goal_statuses: action_msgs::GoalStatusArray) -> dds::Result<()> {
+  pub fn send_goal_statuses(&self, goal_statuses: action_msgs::GoalStatusArray) -> dds::Result<()> {
     self.my_status_publisher.publish(goal_statuses)
   }
 
