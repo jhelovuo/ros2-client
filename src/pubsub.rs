@@ -1,8 +1,8 @@
 use std::io;
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
-use rustdds::*;
-use rustdds::rpc::SampleIdentity;
+use futures::{pin_mut, stream::StreamExt};
+use rustdds::{rpc::SampleIdentity, *};
 use serde::{de::DeserializeOwned, Serialize};
 
 //use crate::action::*;
@@ -22,7 +22,7 @@ impl<M: Serialize> Publisher<M> {
   }
 
   pub fn publish(&self, message: M) -> dds::Result<()> {
-    self.datawriter.write(message, None)
+    self.datawriter.write(message, Some(Timestamp::now()))
   }
 
   pub(crate) fn publish_with_options(
@@ -39,6 +39,22 @@ impl<M: Serialize> Publisher<M> {
 
   pub fn guid(&self) -> rustdds::GUID {
     self.datawriter.guid()
+  }
+
+  pub async fn async_publish(&self, message: M) -> dds::Result<()> {
+    self
+      .datawriter
+      .async_write(message, Some(Timestamp::now()))
+      .await
+  }
+
+  #[allow(dead_code)] // This is for async Service implementation. Remove this when it is implemented.
+  pub(crate) async fn async_publish_with_options(
+    &self,
+    message: M,
+    wo: WriteOptions,
+  ) -> dds::Result<rustdds::rpc::SampleIdentity> {
+    self.datawriter.async_write_with_options(message, wo).await
   }
 }
 // ----------------------------------------------------
@@ -67,6 +83,20 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
       let mi = MessageInfo::from(&ds);
       (ds.into_value(), mi)
     }))
+  }
+
+  pub async fn async_take(&self) -> dds::Result<(M, MessageInfo)> {
+    let async_stream = self.datareader.as_async_stream();
+    pin_mut!(async_stream);
+    let (item, _stream) = async_stream.into_future().await;
+    match item {
+      Some(Err(e)) => Err(e),
+      Some(Ok(ds)) => Ok({
+        let mi = MessageInfo::from(&ds);
+        (ds.into_value(), mi)
+      }),
+      None => unimplemented!(), // This should be safe, because DataReader stream cannot end.
+    }
   }
 
   pub fn guid(&self) -> rustdds::GUID {
@@ -123,11 +153,10 @@ impl MessageInfo {
   }
 
   pub fn sample_identity(&self) -> rustdds::rpc::SampleIdentity {
-    rustdds::rpc::SampleIdentity
-      {
-        writer_guid: self.writer_guid(),
-        sequence_number: self.sequence_number,
-      }
+    rustdds::rpc::SampleIdentity {
+      writer_guid: self.writer_guid(),
+      sequence_number: self.sequence_number,
+    }
   }
 
   pub fn related_sample_identity(&self) -> Option<SampleIdentity> {

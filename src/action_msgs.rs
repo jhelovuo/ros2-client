@@ -1,15 +1,14 @@
 use serde::{Deserialize, Serialize};
-use serde_repr::{Serialize_repr, Deserialize_repr};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::message::Message;
 
-
 pub type GoalId = crate::unique_identifier_msgs::UUID;
 
-/// From https://docs.ros2.org/foxy/api/action_msgs/msg/GoalInfo.html
+/// From [GoalInfo](https://docs.ros2.org/foxy/api/action_msgs/msg/GoalInfo.html)
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalInfo {
-  pub goal_id : GoalId,
+  pub goal_id: GoalId,
   pub stamp: crate::builtin_interfaces::Time,
 }
 impl Message for GoalInfo {}
@@ -26,9 +25,7 @@ pub enum GoalStatusEnum {
   Aborted = 6,
 }
 
-
-
-/// https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatus.html
+/// From [GoalStatus](https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatus.html)
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalStatus {
   pub goal_info: GoalInfo,
@@ -36,54 +33,50 @@ pub struct GoalStatus {
 }
 impl Message for GoalStatus {}
 
-
-/// https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatusArray.html
+/// From [GoalStatusArray](https://docs.ros2.org/foxy/api/action_msgs/msg/GoalStatusArray.html)
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalStatusArray {
-  pub status_list : Vec<GoalStatus>,
+  pub status_list: Vec<GoalStatus>,
 }
 impl Message for GoalStatusArray {}
 
-
-
-///https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
+/// From [CancelGoal](https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.html)
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CancelGoalRequest {
-  pub(crate) goal_info : GoalInfo,
+  pub(crate) goal_info: GoalInfo,
 }
 impl Message for CancelGoalRequest {}
 
-/// https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
+/// From [CancelGoal](https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.html)
 #[derive(Clone, Copy, Serialize_repr, Deserialize_repr, PartialEq, Debug)]
 #[repr(i8)]
 pub enum CancelGoalResponseEnum {
   // Doc comments here copied from ROS2 message definition.
-
-  /// Indicates the request was accepted without any errors. 
-  /// One or more goals have transitioned to the CANCELING state. 
+  /// Indicates the request was accepted without any errors.
+  /// One or more goals have transitioned to the CANCELING state.
   /// The goals_canceling list is not empty.
-  None = 0, 
+  None = 0,
 
   /// Indicates the request was rejected.
-  /// No goals have transitioned to the CANCELING state. The goals_canceling list is
-  /// empty.
+  /// No goals have transitioned to the CANCELING state. The goals_canceling
+  /// list is empty.
   Rejected = 1,
 
   /// Indicates the requested goal ID does not exist.
-  /// No goals have transitioned to the CANCELING state. The goals_canceling list is
-  /// empty.
+  /// No goals have transitioned to the CANCELING state. The goals_canceling
+  /// list is empty.
   UnknownGoal = 2,
 
-  /// Indicates the goal is not cancelable because it is already in a terminal state.
-  /// No goals have transitioned to the CANCELING state. The goals_canceling list is
-  /// empty.
+  /// Indicates the goal is not cancelable because it is already in a terminal
+  /// state. No goals have transitioned to the CANCELING state. The
+  /// goals_canceling list is empty.
   GoalTerminated = 3,
 }
 
-/// https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.htm
+/// From [CancelGoal](https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.html)
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CancelGoalResponse {
   return_code: CancelGoalResponseEnum,
-  goals_canceling: Vec<GoalInfo>  
+  goals_canceling: Vec<GoalInfo>,
 }
 impl Message for CancelGoalResponse {}

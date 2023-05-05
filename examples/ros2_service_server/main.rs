@@ -1,10 +1,7 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde::{Deserialize, Serialize};
-
-use ros2_client::{
-  Context, Node, NodeOptions, ServiceMappings, Message, AService
-};
+use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMappings};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -31,7 +28,6 @@ pub struct AddTwoIntsResponse {
 }
 impl Message for AddTwoIntsResponse {}
 
-
 fn main() {
   pretty_env_logger::init();
 
@@ -42,7 +38,7 @@ fn main() {
   println!(">>> ros2_service node started");
 
   let server = node
-    .create_server::<AService<AddTwoIntsRequest,AddTwoIntsResponse> >(
+    .create_server::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMappings::Enhanced,
       "/add_two_ints",
       "example_interfaces::srv::dds_::AddTwoInts_Request_", // req type name

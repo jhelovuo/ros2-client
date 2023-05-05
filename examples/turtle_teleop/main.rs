@@ -6,7 +6,7 @@ use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::channel as mio_channel;
 use serde::{Deserialize, Serialize};
 use termion::raw::*;
-use ros2_client::{ros2, action, *};
+use ros2_client::{action, ros2, *};
 use rustdds::*;
 use ui::{RosCommand, UiController};
 
@@ -26,7 +26,6 @@ const ROTATE_ABSOLUTE_RESULT_RESPONSE_TOKEN: Token = Token(9);
 const ROTATE_ABSOLUTE_FEEDBACK_TOKEN: Token = Token(10);
 const ROTATE_ABSOLUTE_STATUS_TOKEN: Token = Token(11);
 const ROTATE_ABSOLUTE_CANCEL_RESPONSE_TOKEN: Token = Token(12);
-
 
 // This corresponds to ROS2 message type
 // https://github.com/ros2/common_interfaces/blob/master/geometry_msgs/msg/Twist.msg
@@ -200,7 +199,7 @@ fn ros2_loop(
     .unwrap();
 
   // Turtle has services, let's construct some clients.
-  
+
   //pub struct EmptyService {}
 
   #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,7 +253,7 @@ fn ros2_loop(
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/SetPen.html
   let set_pen_srv_name = MessageTypeName::new("turtlesim", "SetPen");
   let set_pen_client = ros_node
-    .create_client::<AService< PenRequest , () >>(
+    .create_client::<AService<PenRequest, ()>>(
       ServiceMappings::Enhanced,
       "turtle1/set_pen",
       &set_pen_srv_name.dds_request_type(),
@@ -297,7 +296,6 @@ fn ros2_loop(
     )
     .unwrap();
 
-
   // kill client
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/Spawn.html
@@ -307,7 +305,7 @@ fn ros2_loop(
   }
   impl Message for KillRequest {}
 
-  type KillService = AService<KillRequest,EmptyMessage>;
+  type KillService = AService<KillRequest, EmptyMessage>;
 
   let kill_srv_name = MessageTypeName::new("turtlesim", "Kill");
   let kill_client = ros_node
@@ -323,14 +321,14 @@ fn ros2_loop(
 
   // Try an Action
 
-
   // https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Actions/Understanding-ROS2-Actions.html
   //
   //
   // Note: The action component types could be named anything.
   // The field naming is also arbitrary.
   // The important thing is that the types serialize to/from the same as the
-  // definition at the other end of the wire. In this case, a simple "f32" would do.
+  // definition at the other end of the wire. In this case, a simple "f32" would
+  // do.
   #[derive(Debug, Clone, Serialize, Deserialize)]
   struct RotateAbsoluteGoal {
     theta: f32,
@@ -345,14 +343,12 @@ fn ros2_loop(
 
   #[derive(Debug, Clone, Serialize, Deserialize)]
   struct RotateAbsoluteFeedback {
-    remaining: f32
+    remaining: f32,
   }
   impl Message for RotateAbsoluteFeedback {}
 
-
   type RotateAbsoluteAction =
     Action<RotateAbsoluteGoal, RotateAbsoluteResult, RotateAbsoluteFeedback>;
-
 
   //TODO: There should be an easier way to do this.
   let rotate_action_qos = action::ActionClientQosPolicies {
@@ -363,15 +359,14 @@ fn ros2_loop(
     status_subscription: service_qos.clone(),
   };
 
-  let mut rotate_action_client =  ros_node.
-    create_action_client::<RotateAbsoluteAction>(
+  let mut rotate_action_client = ros_node
+    .create_action_client::<RotateAbsoluteAction>(
       ServiceMappings::Enhanced,
       "turtle1/rotate_absolute",
       &MessageTypeName::new("turtlesim", "RotateAbsolute"),
       rotate_action_qos,
     )
     .unwrap();
-
 
   // Set up event loop
 
@@ -439,45 +434,44 @@ fn ros2_loop(
 
   poll
     .register(
-      rotate_action_client.goal_client() ,
-      ROTATE_ABSOLUTE_GOAL_RESPONSE_TOKEN ,
+      rotate_action_client.goal_client(),
+      ROTATE_ABSOLUTE_GOAL_RESPONSE_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
     .unwrap();
   poll
     .register(
-      rotate_action_client.result_client() ,
-      ROTATE_ABSOLUTE_RESULT_RESPONSE_TOKEN ,
+      rotate_action_client.result_client(),
+      ROTATE_ABSOLUTE_RESULT_RESPONSE_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
     .unwrap();
   poll
     .register(
-      rotate_action_client.cancel_client() ,
-      ROTATE_ABSOLUTE_CANCEL_RESPONSE_TOKEN ,
+      rotate_action_client.cancel_client(),
+      ROTATE_ABSOLUTE_CANCEL_RESPONSE_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
     .unwrap();
   poll
     .register(
-      rotate_action_client.status_subscription() ,
-      ROTATE_ABSOLUTE_STATUS_TOKEN ,
+      rotate_action_client.status_subscription(),
+      ROTATE_ABSOLUTE_STATUS_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
     .unwrap();
   poll
     .register(
-      rotate_action_client.feedback_subscription() ,
-      ROTATE_ABSOLUTE_FEEDBACK_TOKEN ,
+      rotate_action_client.feedback_subscription(),
+      ROTATE_ABSOLUTE_FEEDBACK_TOKEN,
       Ready::readable(),
       PollOpt::edge(),
     )
     .unwrap();
-
 
   // some state variables
 
@@ -553,21 +547,21 @@ fn ros2_loop(
                   }
                 }
               }
-              RosCommand::Kill(name) => {
-                match kill_client.send_request(KillRequest { name }) {
-                  Ok(id) => {
-                    info!("kill request sent {:?} ", id);
-                  }
-                  Err(e) => {
-                    error!("Failed to send request: {:?}", e);
-                  }
+              RosCommand::Kill(name) => match kill_client.send_request(KillRequest { name }) {
+                Ok(id) => {
+                  info!("kill request sent {:?} ", id);
                 }
-              }
+                Err(e) => {
+                  error!("Failed to send request: {:?}", e);
+                }
+              },
 
-              RosCommand::RotateAbsolute{ heading } => {
-                match rotate_action_client.send_goal( RotateAbsoluteGoal{theta: heading} ) {
-                  Err(e) => { error!("Failed to send RotateAbsoluteGoal: {:?}", e); }
-                  Ok( (req_id, ref goal_id) ) => {
+              RosCommand::RotateAbsolute { heading } => {
+                match rotate_action_client.send_goal(RotateAbsoluteGoal { theta: heading }) {
+                  Err(e) => {
+                    error!("Failed to send RotateAbsoluteGoal: {:?}", e);
+                  }
+                  Ok((req_id, ref goal_id)) => {
                     rotate_goal_req_id = Some(req_id);
                     rotate_goal_id = Some(goal_id.clone());
                     info!("RotateAbsoluteGoal sent.");
@@ -575,20 +569,18 @@ fn ros2_loop(
                 }
               }
 
-              RosCommand::RotateAbsolute_Cancel => {
-                match rotate_goal_id {
-                  None => info!("No goal to cancel!"),
-                  Some(ref goal_id) => {
-                    match rotate_action_client.cancel_goal( goal_id.clone() ) {
-                      Err(e) => {error!("Failed to cancel RotateAbsoluteGoal: {:?}", e); }
-                      Ok( req_id ) => {
-                        rotate_cancel_req_id = Some(req_id);
-                        info!("RotateAbsolute cancel request sent.");     
-                      }
-                    }                    
+              RosCommand::RotateAbsolute_Cancel => match rotate_goal_id {
+                None => info!("No goal to cancel!"),
+                Some(ref goal_id) => match rotate_action_client.cancel_goal(goal_id.clone()) {
+                  Err(e) => {
+                    error!("Failed to cancel RotateAbsoluteGoal: {:?}", e);
                   }
-                }
-              }
+                  Ok(req_id) => {
+                    rotate_cancel_req_id = Some(req_id);
+                    info!("RotateAbsolute cancel request sent.");
+                  }
+                },
+              },
             }
           }
         }
@@ -627,57 +619,50 @@ fn ros2_loop(
           }
         }
 
-        ROTATE_ABSOLUTE_GOAL_RESPONSE_TOKEN => {
-          match (rotate_goal_req_id, &rotate_goal_id) {
-            (Some(req_id), Some(goal_id)) => {
-              while let Ok(Some(goal_resp)) = rotate_action_client.receive_goal_response(req_id) {
-                message_sender
-                  .send(format!("RotateAbsolute goal acknowledged: {:?}", goal_resp))
-                  .unwrap();
-                info!("RotateAbsolute goal acknowledged: {:?}", goal_resp);
-                match rotate_action_client.request_result(goal_id.clone()) {
-                  Err(e) => info!("Cannot request result: {:?}", e),
-                  Ok(result_req_id) => {
-                    rotate_result_req_id = Some(result_req_id);
-                    info!("Requested RotateAbsoulte action result.")
-                  }
+        ROTATE_ABSOLUTE_GOAL_RESPONSE_TOKEN => match (rotate_goal_req_id, &rotate_goal_id) {
+          (Some(req_id), Some(goal_id)) => {
+            while let Ok(Some(goal_resp)) = rotate_action_client.receive_goal_response(req_id) {
+              message_sender
+                .send(format!("RotateAbsolute goal acknowledged: {:?}", goal_resp))
+                .unwrap();
+              info!("RotateAbsolute goal acknowledged: {:?}", goal_resp);
+              match rotate_action_client.request_result(goal_id.clone()) {
+                Err(e) => info!("Cannot request result: {:?}", e),
+                Ok(result_req_id) => {
+                  rotate_result_req_id = Some(result_req_id);
+                  info!("Requested RotateAbsoulte action result.")
                 }
               }
             }
-            (_, None)  => info!("Goal response, but for what goal?"),
-            (None, _)  => info!("Goal response, but don't know goal request id!"),
           }
+          (_, None) => info!("Goal response, but for what goal?"),
+          (None, _) => info!("Goal response, but don't know goal request id!"),
+        },
 
-        }
-
-        ROTATE_ABSOLUTE_RESULT_RESPONSE_TOKEN => {
-          match rotate_result_req_id {
-            None => info!("Where is my result response id?"),
-            Some(req_id) => {
-              while let Ok(Some(result_resp)) = rotate_action_client.receive_result(req_id) {
-                message_sender
-                  .send(format!("RotateAbsolute result: {:?}", result_resp))
-                  .unwrap();
-                info!("RotateAbsolute result: {:?}", result_resp);
-                rotate_cancel_req_id = None;
-              }
+        ROTATE_ABSOLUTE_RESULT_RESPONSE_TOKEN => match rotate_result_req_id {
+          None => info!("Where is my result response id?"),
+          Some(req_id) => {
+            while let Ok(Some(result_resp)) = rotate_action_client.receive_result(req_id) {
+              message_sender
+                .send(format!("RotateAbsolute result: {:?}", result_resp))
+                .unwrap();
+              info!("RotateAbsolute result: {:?}", result_resp);
+              rotate_cancel_req_id = None;
             }
           }
-        }
-        ROTATE_ABSOLUTE_CANCEL_RESPONSE_TOKEN => {
-          match rotate_cancel_req_id {
-            None => info!("Where is my cancel response id?"),
-            Some(req_id) => {
-              while let Ok(Some(cancel_resp)) = rotate_action_client.receive_cancel_response(req_id) {
-                message_sender
-                  .send(format!("RotateAbsolute cancel response: {:?}", cancel_resp))
-                  .unwrap();
-                info!("RotateAbsolute cancel response: {:?}", cancel_resp);
-                rotate_cancel_req_id = None;
-              }
+        },
+        ROTATE_ABSOLUTE_CANCEL_RESPONSE_TOKEN => match rotate_cancel_req_id {
+          None => info!("Where is my cancel response id?"),
+          Some(req_id) => {
+            while let Ok(Some(cancel_resp)) = rotate_action_client.receive_cancel_response(req_id) {
+              message_sender
+                .send(format!("RotateAbsolute cancel response: {:?}", cancel_resp))
+                .unwrap();
+              info!("RotateAbsolute cancel response: {:?}", cancel_resp);
+              rotate_cancel_req_id = None;
             }
           }
-        }
+        },
 
         ROTATE_ABSOLUTE_STATUS_TOKEN => {
           while let Ok(Some(status)) = rotate_action_client.receive_status() {
@@ -685,17 +670,15 @@ fn ros2_loop(
           }
         }
 
-        ROTATE_ABSOLUTE_FEEDBACK_TOKEN => {
-          match rotate_goal_id {
-            Some(ref rotate_goal_id) => {
-              while let Ok(Some(f)) = rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
-                info!("RotateAbsolute feedback = {:?}", f);
-              }
+        ROTATE_ABSOLUTE_FEEDBACK_TOKEN => match rotate_goal_id {
+          Some(ref rotate_goal_id) => {
+            while let Ok(Some(f)) = rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
+              info!("RotateAbsolute feedback = {:?}", f);
             }
-            None => info!("Feedback, but no goal!"),
           }
-        }
-        
+          None => info!("Feedback, but no goal!"),
+        },
+
         _ => {
           error!("Unknown poll token {:?}", event.token())
         }

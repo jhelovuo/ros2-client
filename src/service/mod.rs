@@ -12,7 +12,7 @@ use rustdds::{rpc::*, *};
 use crate::{
   message::Message,
   node::Node,
-  pubsub::{Publisher, Subscription, MessageInfo},
+  pubsub::{MessageInfo, Publisher, Subscription},
 };
 
 pub mod request_id;
@@ -41,37 +41,37 @@ pub trait Service {
 
 /// AService is a means of constructing a descriptor for a Service on the fly.
 /// This allows generic code to construct a Service from the types of
-/// request and response. 
-pub struct AService<Q,S> 
+/// request and response.
+pub struct AService<Q, S>
 where
-  Q : Message,
-  S : Message,
+  Q: Message,
+  S: Message,
 {
-  q : PhantomData<Q>,
-  s : PhantomData<S>,
-  req_type_name : String,
-  resp_type_name : String,
+  q: PhantomData<Q>,
+  s: PhantomData<S>,
+  req_type_name: String,
+  resp_type_name: String,
 }
 
-impl<Q,S> AService<Q,S> 
+impl<Q, S> AService<Q, S>
 where
-  Q : Message,
-  S : Message,
+  Q: Message,
+  S: Message,
 {
   pub fn new(req_type_name: String, resp_type_name: String) -> Self {
     Self {
-      req_type_name, 
+      req_type_name,
       resp_type_name,
-      q : PhantomData, 
+      q: PhantomData,
       s: PhantomData,
     }
   }
 }
 
-impl<Q,S> Service for AService<Q,S>
+impl<Q, S> Service for AService<Q, S>
 where
-  Q : Message,
-  S : Message,
+  Q: Message,
+  S: Message,
 {
   type Request = Q;
   type Response = S;
@@ -85,10 +85,8 @@ where
   }
 }
 
-
 // --------------------------------------------
 // --------------------------------------------
-
 
 /// Server trait defines the behavior for a "Server". It is required so that we
 /// can hide away the ServiceMapping in a Server
@@ -265,10 +263,8 @@ where
     state: &Self::ClientState,
     request: S::Request,
   ) -> (Self::RequestWrapper, Option<RmwRequestId>);
-  fn request_id_after_wrap(
-    state: &Self::ClientState,
-    write_result: SampleIdentity,
-  ) -> RmwRequestId;
+  fn request_id_after_wrap(state: &Self::ClientState, write_result: SampleIdentity)
+    -> RmwRequestId;
   fn unwrap_response(
     state: &Self::ClientState,
     wrapped: Self::ResponseWrapper,
@@ -436,10 +432,7 @@ where
   {
     let next_sample = self.response_receiver.take()?;
 
-    Ok(next_sample.map(|(rw,msg_info)| {
-        SW::unwrap_response(&self.client_state, rw , msg_info)
-      }
-    ))
+    Ok(next_sample.map(|(rw, msg_info)| SW::unwrap_response(&self.client_state, rw, msg_info)))
   }
 }
 
