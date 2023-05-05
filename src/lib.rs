@@ -38,15 +38,16 @@ extern crate lazy_static;
 /// Some convenience topic infos for ROS2 communication
 pub mod builtin_topics;
 
-#[doc(hidden)]
-pub mod context;
+pub mod action_msgs;
 /// Some builtin interfaces for ROS2 communication
 pub mod builtin_interfaces;
+#[doc(hidden)]
+pub mod context;
 pub mod unique_identifier_msgs;
-pub mod action_msgs;
 
 pub mod interfaces;
 
+pub mod action;
 mod gid;
 pub mod log;
 pub mod message;
@@ -56,7 +57,6 @@ pub mod participant_entities_info;
 #[doc(hidden)]
 pub mod pubsub;
 pub mod service;
-pub mod action;
 
 #[doc(hidden)]
 pub(crate) mod node;
@@ -71,9 +71,9 @@ pub use node::*;
 #[doc(inline)]
 pub use pubsub::*;
 #[doc(inline)]
-pub use service::{Client, Server, Service, AService};
+pub use service::{AService, Client, Server, Service};
 #[doc(inline)]
-pub use action::{ActionTypes, Action};
+pub use action::{Action, ActionTypes};
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {

@@ -1,10 +1,7 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::timer;
-
-use ros2_client::{
-  Context, Node, NodeOptions,
-};
+use ros2_client::{Context, Node, NodeOptions};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -38,9 +35,7 @@ fn main() {
     .create_publisher::<String>(&chatter_topic, None)
     .unwrap();
 
-
-  let mut talk_timer :timer::Timer<()> = timer::Builder::default()
-    .build();
+  let mut talk_timer: timer::Timer<()> = timer::Builder::default().build();
 
   let poll = Poll::new().unwrap();
 
@@ -53,10 +48,10 @@ fn main() {
   let mut events = Events::with_capacity(8);
   let mut count = 0;
 
-  let filler :String = 
+  let filler: String =
     "All work and no play makes ROS a dull boy. All play and no work makes RTPS a mere toy. "
-    .repeat(2);
-    // Change repeat count to e.g. 100 to test data fragmentation.
+      .repeat(2);
+  // Change repeat count to e.g. 100 to test data fragmentation.
 
   loop {
     poll.poll(&mut events, None).unwrap();
@@ -65,10 +60,11 @@ fn main() {
       match event.token() {
         Token(1) => {
           count += 1;
-          let message = format!("count={} {}",count, filler);
-          println!("Talking, count={} len={}",count, message.len());
-          chatter_publisher.publish(message)
-            .unwrap_or_else(|e| error!("publish failed: {:?}",e));
+          let message = format!("count={} {}", count, filler);
+          println!("Talking, count={} len={}", count, message.len());
+          chatter_publisher
+            .publish(message)
+            .unwrap_or_else(|e| error!("publish failed: {:?}", e));
           talk_timer.set_timeout(std::time::Duration::from_secs(2), ());
         }
         _ => println!(">>> Unknown poll token {:?}", event.token()),

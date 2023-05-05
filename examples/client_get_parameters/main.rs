@@ -3,7 +3,7 @@ use std::env;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
   interfaces::{GetParametersRequest, GetParametersService},
-  Context, Node, NodeOptions, ServiceMappings, Service,
+  Context, Node, NodeOptions, Service, ServiceMappings,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
 
@@ -28,7 +28,7 @@ fn main() {
       ServiceMappings::Enhanced,
       &args[1],
       service_dummy.request_type_name(),
-      service_dummy.response_type_name(),      
+      service_dummy.response_type_name(),
       service_qos.clone(),
       service_qos.clone(),
     )

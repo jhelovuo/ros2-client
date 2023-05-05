@@ -15,7 +15,7 @@ impl Service for BasicTypesService {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BasicTypesRequest {
   pub bool_value: bool,
   pub byte_value: Vec<u8>,
@@ -54,7 +54,7 @@ impl BasicTypesRequest {
 }
 impl Message for BasicTypesRequest {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BasicTypesResponse {
   pub bool_value: bool,
   pub byte_value: Vec<u8>,

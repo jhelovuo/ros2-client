@@ -1,13 +1,12 @@
 //use log::error;
+use core::cmp::min;
+
 use mio::{Events, Poll, PollOpt, Ready, Token};
-use ros2_client::{
-  Context, Node, NodeOptions,
-};
+use ros2_client::{Context, Node, NodeOptions};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
 };
-use core::cmp::min;
 
 // Simple demo program.
 // Test this against ROS2 "talker" demo node.
@@ -35,7 +34,12 @@ fn main() {
   let poll = Poll::new().unwrap();
 
   poll
-    .register(&chatter_subscription, Token(1), Ready::readable(), PollOpt::edge())
+    .register(
+      &chatter_subscription,
+      Token(1),
+      Ready::readable(),
+      PollOpt::edge(),
+    )
     .unwrap();
   let mut events = Events::with_capacity(8);
 
@@ -47,7 +51,7 @@ fn main() {
         Token(1) => match chatter_subscription.take() {
           Ok(Some((message, _messafe_info))) => {
             let l = message.len();
-            println!("message len={} : {:?}", l, &message[..min(l,50)]);
+            println!("message len={} : {:?}", l, &message[..min(l, 50)]);
           }
           Ok(None) => println!("No message?!"),
           Err(e) => {

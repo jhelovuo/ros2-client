@@ -1,13 +1,11 @@
-use std::marker::PhantomData;
-use std::sync::atomic;
+use std::{marker::PhantomData, sync::atomic};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use rustdds::{rpc::*, *};
 use serde::{Deserialize, Serialize};
 
-use crate::message::Message;
-use crate::MessageInfo;
+use crate::{message::Message, MessageInfo};
 use super::{
   request_id::{RmwRequestId, SequenceNumber},
   ClientGeneric, ServerGeneric, Service, ServiceMapping,
@@ -44,19 +42,21 @@ impl CycloneClientState {
   pub fn new(client_guid: GUID) -> CycloneClientState {
     CycloneClientState {
       client_guid,
-      sequence_number_counter: atomic::AtomicI64::new( SequenceNumber::default().into() )
-      //sequence_number_counter: SequenceNumber::zero(),
+      sequence_number_counter: atomic::AtomicI64::new(SequenceNumber::default().into()), /* sequence_number_counter: SequenceNumber::zero(), */
     }
   }
 
   pub fn next_sequence_number(&self) -> SequenceNumber {
-    SequenceNumber::from( self.sequence_number_counter.fetch_add(1, atomic::Ordering::Acquire) )
+    SequenceNumber::from(
+      self
+        .sequence_number_counter
+        .fetch_add(1, atomic::Ordering::Acquire),
+    )
   }
 
   pub fn sequence_number(&self) -> SequenceNumber {
-     SequenceNumber::from( self.sequence_number_counter.load(atomic::Ordering::Acquire) )
+    SequenceNumber::from(self.sequence_number_counter.load(atomic::Ordering::Acquire))
   }
-
 }
 
 impl<S> ServiceMapping<S> for CycloneServiceMapping<S>

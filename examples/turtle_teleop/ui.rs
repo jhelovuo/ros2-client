@@ -21,12 +21,17 @@ use crate::{PenRequest, Pose, Twist, Vector3};
 #[derive(Debug)]
 pub enum RosCommand {
   StopEventLoop,
-  TurtleCmdVel { turtle_id: i32, twist: Twist },
+  TurtleCmdVel {
+    turtle_id: i32,
+    twist: Twist,
+  },
   Reset,
   SetPen(PenRequest),
   Spawn(String),
   Kill(String),
-  RotateAbsolute{ heading: f32 },
+  RotateAbsolute {
+    heading: f32,
+  },
   #[allow(non_camel_case_types)]
   RotateAbsolute_Cancel,
 }
@@ -281,15 +286,17 @@ impl UiController {
 
                 Key::Char('d') => {
                   debug!("Rotate West");
-                  self.send_command(RosCommand::RotateAbsolute{heading: std::f32::consts::PI} );
+                  self.send_command(RosCommand::RotateAbsolute {
+                    heading: std::f32::consts::PI,
+                  });
                 }
                 Key::Char('g') => {
                   debug!("Rotate East");
-                  self.send_command(RosCommand::RotateAbsolute{heading: 0.0} );
+                  self.send_command(RosCommand::RotateAbsolute { heading: 0.0 });
                 }
                 Key::Char('f') => {
                   debug!("Cancel Rotate");
-                  self.send_command(RosCommand::RotateAbsolute_Cancel );
+                  self.send_command(RosCommand::RotateAbsolute_Cancel);
                 }
 
                 Key::Up => {
