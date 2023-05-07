@@ -1,7 +1,9 @@
+use serde::{Serialize, Deserialize};
+
 use rustdds::{rpc::*, *};
 
 // This replicates SequenceNumber from DDS
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SequenceNumber {
   number: i64,
 }
@@ -64,7 +66,7 @@ impl From<rustdds::SequenceNumber> for SequenceNumber {
 /// [Original](https://docs.ros2.org/foxy/api/rmw/structrmw__request__id__t.html)
 /// This structure seems to be identical in structure and function to
 /// SampleIdentity defined by the RPC over DDS Spec.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RmwRequestId {
   pub writer_guid: GUID,
   pub sequence_number: SequenceNumber,

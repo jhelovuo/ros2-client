@@ -18,6 +18,8 @@ root:
     - file_appender
 
 loggers:
+  ros2-client::action:
+    level: debug
   rustdds:
     level: warn
 #  rustdds::dds::reader:

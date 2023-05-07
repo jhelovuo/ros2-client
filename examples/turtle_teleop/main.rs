@@ -239,7 +239,7 @@ fn ros2_loop(
   let empty_srv_name = MessageTypeName::new("std_srvs", "Empty");
   let reset_client = ros_node
     .create_client::<AService<EmptyMessage, EmptyMessage>>(
-      ServiceMappings::Enhanced,
+      ServiceMapping::Enhanced,
       "/reset",
       &empty_srv_name.dds_request_type(),
       &empty_srv_name.dds_response_type(),
@@ -254,7 +254,7 @@ fn ros2_loop(
   let set_pen_srv_name = MessageTypeName::new("turtlesim", "SetPen");
   let set_pen_client = ros_node
     .create_client::<AService<PenRequest, ()>>(
-      ServiceMappings::Enhanced,
+      ServiceMapping::Enhanced,
       "turtle1/set_pen",
       &set_pen_srv_name.dds_request_type(),
       &set_pen_srv_name.dds_response_type(),
@@ -287,7 +287,7 @@ fn ros2_loop(
   let spawn_srv_name = MessageTypeName::new("turtlesim", "Spawn");
   let spawn_client = ros_node
     .create_client::<SpawnService>(
-      ServiceMappings::Enhanced,
+      ServiceMapping::Enhanced,
       "spawn",
       &spawn_srv_name.dds_request_type(),
       &spawn_srv_name.dds_response_type(),
@@ -310,7 +310,7 @@ fn ros2_loop(
   let kill_srv_name = MessageTypeName::new("turtlesim", "Kill");
   let kill_client = ros_node
     .create_client::<KillService>(
-      ServiceMappings::Enhanced,
+      ServiceMapping::Enhanced,
       "kill",
       &kill_srv_name.dds_request_type(),
       &kill_srv_name.dds_response_type(),
@@ -361,7 +361,7 @@ fn ros2_loop(
 
   let mut rotate_action_client = ros_node
     .create_action_client::<RotateAbsoluteAction>(
-      ServiceMappings::Enhanced,
+      ServiceMapping::Enhanced,
       "turtle1/rotate_absolute",
       &MessageTypeName::new("turtlesim", "RotateAbsolute"),
       rotate_action_qos,
@@ -562,9 +562,10 @@ fn ros2_loop(
                     error!("Failed to send RotateAbsoluteGoal: {:?}", e);
                   }
                   Ok((req_id, ref goal_id)) => {
+                    info!("RotateAbsoluteGoal sent. req_id={:?}  goal_id={:?}", 
+                      req_id, goal_id);
                     rotate_goal_req_id = Some(req_id);
                     rotate_goal_id = Some(goal_id.clone());
-                    info!("RotateAbsoluteGoal sent.");
                   }
                 }
               }
@@ -619,26 +620,40 @@ fn ros2_loop(
           }
         }
 
-        ROTATE_ABSOLUTE_GOAL_RESPONSE_TOKEN => match (rotate_goal_req_id, &rotate_goal_id) {
-          (Some(req_id), Some(goal_id)) => {
-            while let Ok(Some(goal_resp)) = rotate_action_client.receive_goal_response(req_id) {
-              message_sender
-                .send(format!("RotateAbsolute goal acknowledged: {:?}", goal_resp))
-                .unwrap();
-              info!("RotateAbsolute goal acknowledged: {:?}", goal_resp);
-              match rotate_action_client.request_result(goal_id.clone()) {
-                Err(e) => info!("Cannot request result: {:?}", e),
-                Ok(result_req_id) => {
-                  rotate_result_req_id = Some(result_req_id);
-                  info!("Requested RotateAbsoulte action result.")
-                }
-              }
+        ROTATE_ABSOLUTE_GOAL_RESPONSE_TOKEN => {
+          info!("ROTATE_ABSOLUTE_GOAL_RESPONSE triggered");
+          match (rotate_goal_req_id, &rotate_goal_id) {
+            (Some(req_id), Some(goal_id)) => {
+              loop {
+                match rotate_action_client.receive_goal_response(req_id) {
+                  Ok(Some(goal_resp)) => {
+                    message_sender
+                      .send(format!("RotateAbsolute goal acknowledged: {:?}", goal_resp))
+                      .unwrap();
+                    info!("RotateAbsolute goal acknowledged: {:?}", goal_resp);
+                    match rotate_action_client.request_result(goal_id.clone()) {
+                      Err(e) => info!("Cannot request result: {:?}", e),
+                      Ok(result_req_id) => {
+                        rotate_result_req_id = Some(result_req_id);
+                        info!("Requested RotateAbsoulte action result.")
+                      }
+                    }
+                  }
+                  Ok(None) => {
+                    // no more data to read
+                    info!("ROTATE_ABSOLUTE_GOAL_RESPONSE no more data");
+                    break
+                  } 
+                  Err(e) => {
+                    error!("Error receiveing RotateAbsolutegoal: {e}")
+                  }
+                } // match
+              } // loop
             }
+            (_, None) => info!("Goal response, but for what goal?"),
+            (None, _) => info!("Goal response, but don't know goal request id!"),
           }
-          (_, None) => info!("Goal response, but for what goal?"),
-          (None, _) => info!("Goal response, but don't know goal request id!"),
-        },
-
+        }
         ROTATE_ABSOLUTE_RESULT_RESPONSE_TOKEN => match rotate_result_req_id {
           None => info!("Where is my result response id?"),
           Some(req_id) => {
@@ -669,11 +684,14 @@ fn ros2_loop(
             info!("RotateAbsolute status = {:?}", status);
           }
         }
-
         ROTATE_ABSOLUTE_FEEDBACK_TOKEN => match rotate_goal_id {
           Some(ref rotate_goal_id) => {
-            while let Ok(Some(f)) = rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
-              info!("RotateAbsolute feedback = {:?}", f);
+            loop {
+              match rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
+                Ok(Some(f)) => info!("RotateAbsolute feedback = {:?}", f),
+                Ok(None) => break,
+                Err(e) => error!("Bad feedback: {:?}",e),
+              }
             }
           }
           None => info!("Feedback, but no goal!"),

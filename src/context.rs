@@ -7,7 +7,9 @@ use std::{
 use log::{debug, error, info, trace, warn};
 use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
+
 use rustdds::{policy::*, *};
+use rustdds::no_key::{SerializerAdapter, DeserializerAdapter};
 
 use crate::{
   builtin_topics,
@@ -93,6 +95,35 @@ impl Context {
       .create_simple_datareader_no_key(topic, qos)?;
     Ok(Subscription::new(datareader))
   }
+
+  pub(crate) fn create_datawriter<M,SA>(
+    &self,
+    topic: &Topic,
+    qos: Option<QosPolicies>,
+  ) -> dds::Result<no_key::DataWriter<M,SA>>
+  where
+    M: Serialize,
+    SA: SerializerAdapter<M>,
+  {
+    self
+      .get_ros_default_publisher()
+      .create_datawriter_no_key(topic, qos)
+  }
+
+  pub fn create_simpledatareader<M,DA>(
+    &self,
+    topic: &Topic,
+    qos: Option<QosPolicies>,
+  ) -> dds::Result<no_key::SimpleDataReader<M,DA>>
+  where
+    M: 'static + DeserializeOwned,
+    DA: 'static + DeserializerAdapter<M>,
+  {
+    self
+      .get_ros_default_subscriber()
+      .create_simple_datareader_no_key(topic, qos)
+  }
+
 
   pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
     self.inner.lock().unwrap().handle_node_read()

@@ -25,13 +25,13 @@ impl<M: Serialize> Publisher<M> {
     self.datawriter.write(message, Some(Timestamp::now()))
   }
 
-  pub(crate) fn publish_with_options(
-    &self,
-    message: M,
-    wo: WriteOptions,
-  ) -> dds::Result<rustdds::rpc::SampleIdentity> {
-    self.datawriter.write_with_options(message, wo)
-  }
+  // pub(crate) fn publish_with_options(
+  //   &self,
+  //   message: M,
+  //   wo: WriteOptions,
+  // ) -> dds::Result<rustdds::rpc::SampleIdentity> {
+  //   self.datawriter.write_with_options(message, wo)
+  // }
 
   pub fn assert_liveliness(&self) -> dds::Result<()> {
     self.datawriter.assert_liveliness()
@@ -78,6 +78,7 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
   }
 
   pub fn take(&self) -> dds::Result<Option<(M, MessageInfo)>> {
+    self.datareader.drain_read_notifications();
     let ds: Option<no_key::DeserializedCacheChange<M>> = self.datareader.try_take_one()?;
     Ok(ds.map(|ds| {
       let mi = MessageInfo::from(&ds);
