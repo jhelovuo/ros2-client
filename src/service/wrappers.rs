@@ -193,7 +193,7 @@ impl<R:Message> ResponseWrapper<R> {
     }
   }
 
-  // Server creaates new ResponseWrapper from Response
+  // Server creates new ResponseWrapper from Response
   pub(super) fn new(
     service_mapping: ServiceMapping,
     r_id: RmwRequestId,

@@ -7,7 +7,7 @@ use std::{
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{StreamExt, pin_mut};
+use futures::{Stream, StreamExt, pin_mut};
 
 use rustdds::{rpc::*, *,};
 
@@ -170,6 +170,8 @@ where
     })
   }
 
+  /// Receive a request from Client.
+  /// Returns `Ok(None)` if no new requests have arrived.
   pub fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>> {
     self.request_receiver.drain_read_notifications();
     let dcc_rw: Option<no_key::DeserializedCacheChange<RequestWrapper<S::Request>>> 
@@ -186,6 +188,8 @@ where
     } // match
   }
 
+  /// Send response to request by Client.
+  /// rmw_req_id identifies request being responded.
   pub fn send_response(&self, rmw_req_id: RmwRequestId, response: S::Response) -> dds::Result<()> {
     let resp_wrapper = 
       ResponseWrapper::<S::Response>::new(
@@ -205,6 +209,8 @@ where
       .map(|_| ())  // lose SampleIdentity result
   }
 
+  /// The request_id must be sent back with the response to identify which 
+  /// request and response belong together.
   pub async fn async_receive_request(&self) -> dds::Result<(RmwRequestId, S::Request)> {
     let dcc_stream = self.request_receiver.as_async_stream();
     pin_mut!(dcc_stream);
@@ -226,6 +232,26 @@ where
     } // match
   }
 
+  /// Returns a never-ending stream of (request_id, request)
+  /// The request_id must be sent back with the response to identify which 
+  /// request and response belong together.
+  pub fn receive_request_stream(&self) -> impl Stream<Item=dds::Result<(RmwRequestId, S::Request)> > + '_ {
+    Box::pin( self.request_receiver.as_async_stream() )
+      .then( move |dcc_r| async move
+        {
+          match dcc_r {
+            Err(e) => Err(e),
+            Ok(dcc) => {
+              let mi = MessageInfo::from(&dcc);
+              let req_wrapper = dcc.into_value();
+              req_wrapper.unwrap(self.service_mapping, &mi)
+            }
+          } // match 
+        } // async 
+      )
+  }
+
+  /// Asynchronous response sending
   pub async fn async_send_response(&self, rmw_req_id: RmwRequestId, response: S::Response) -> dds::Result<()> {
     let resp_wrapper = 
       ResponseWrapper::<S::Response>::new(
@@ -324,6 +350,8 @@ where
     })
   }
 
+  /// Send a request to Service Server.
+  /// The returned `RmwRequestId` is a token to identify the correct response.
   pub fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
     self.increment_sequence_number();
     let gen_rmw_req_id = 
@@ -357,6 +385,10 @@ where
     }  
   }
 
+  /// Receive a response from Server
+  /// Returns `Ok(None)` if no new responses have arrived.
+  /// Note: The response may to someone else's request. Check received `RmWRequestId`
+  /// against the one you got when sending request to identify the correct response.
   pub fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>> {
     self.response_receiver.drain_read_notifications();
     let dcc_rw: Option<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>> 
@@ -374,6 +406,8 @@ where
     } // match
   }
 
+  /// Send a request to Service Server asynchronously.
+  /// The returned `RmwRequestId` is a token to identify the correct response.
   pub async fn async_send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
     self.increment_sequence_number();
     let gen_rmw_req_id = 
@@ -408,6 +442,11 @@ where
     }  
   }
 
+  /// Receive a response from Server
+  /// The returned Future does not complete until a response has been received.
+  /// Note: The response may to someone else's request. Check received `RmWRequestId`
+  /// against the one you got when sending request to identify the correct response.
+  /// In case you receive someone else's response, please do receive again.
   pub async fn async_receive_response(&self) -> dds::Result<(RmwRequestId, S::Response)> {
     let dcc_stream = self.response_receiver.as_async_stream();
     pin_mut!(dcc_stream);
