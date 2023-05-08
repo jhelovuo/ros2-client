@@ -9,9 +9,11 @@ use std::{
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
+use futures::{StreamExt, pin_mut};
+use bytes::{Bytes,BytesMut,BufMut};
+
 use rustdds::{rpc::*, *, serialization::{deserialize_from_cdr}};
 
-use bytes::{Bytes,BytesMut,BufMut};
 
 use crate::{
   message::Message,
@@ -539,6 +541,7 @@ where
         RepresentationIdentifier::CDR_LE,
         response)?;
     let write_opts = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()) // always add source timestamp
       .related_sample_identity(SampleIdentity::from(rmw_req_id))
       // TODO: Check if this is right. Cyclone mapping does not send 
       // Related Sample Identity in
@@ -546,6 +549,47 @@ where
       // But maybe it is not harmful to send it in both?
       .build();
     self.response_sender.write_with_options(resp_wrapper, write_opts)
+      .map(|_| ())  // lose SampleIdentity result
+  }
+
+  pub async fn async_receive_request(&self) -> dds::Result<(RmwRequestId, S::Request)> {
+    let dcc_stream = self.request_receiver.as_async_stream();
+    pin_mut!(dcc_stream);
+    let (dcc_rw, _tail) : (Option<dds::Result<no_key::DeserializedCacheChange<RequestWrapper<S::Request>>>> , _ )= 
+      dcc_stream.into_future().await;
+
+    match dcc_rw {
+      None => Err(dds::Error::Internal{ reason:
+        "SimpleDataReader value stream unexpectedly ended!".to_string() }),
+        // This should never occur, because topic do not "end". 
+      Some(Err(e)) => Err(e),
+      Some(Ok(dcc)) => {
+        let mi = MessageInfo::from(&dcc);
+        let req_wrapper = dcc.into_value();
+        let (ri,req) = req_wrapper
+          .unwrap(self.service_mapping, &mi)?;
+        Ok((ri,req))
+      }
+    } // match
+  }
+
+  pub async fn async_send_response(&self, rmw_req_id: RmwRequestId, response: S::Response) -> dds::Result<()> {
+    let resp_wrapper = 
+      ResponseWrapper::<S::Response>::new(
+        self.service_mapping, 
+        rmw_req_id, 
+        RepresentationIdentifier::CDR_LE,
+        response)?;
+    let write_opts = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()) // always add source timestamp
+      .related_sample_identity(SampleIdentity::from(rmw_req_id))
+      // TODO: Check if this is right. Cyclone mapping does not send 
+      // Related Sample Identity in
+      // WriteOptions (QoS ParameterList), but within data payload.
+      // But maybe it is not harmful to send it in both?
+      .build();
+    self.response_sender.async_write_with_options(resp_wrapper, write_opts)
+      .await
       .map(|_| ())  // lose SampleIdentity result
   }
 
@@ -640,8 +684,9 @@ where
         gen_rmw_req_id, 
         RepresentationIdentifier::CDR_LE,
         request)?;
-    let write_opts_builder = WriteOptionsBuilder::new();
-      //TODO: Add source timestamp always?
+    let write_opts_builder = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()); // always add source timestamp
+
     let write_opts_builder = 
       if self.service_mapping == ServiceMapping::Enhanced {
         write_opts_builder
@@ -676,13 +721,69 @@ where
     } // match
   }
 
-  pub fn increment_sequence_number(&self) {
+  pub async fn async_send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
+    self.increment_sequence_number();
+    let gen_rmw_req_id = 
+      RmwRequestId {
+        writer_guid: self.client_guid,
+        sequence_number: self.sequence_number(),
+      };
+    let req_wrapper = 
+      RequestWrapper::<S::Request>::new(
+        self.service_mapping, 
+        gen_rmw_req_id, 
+        RepresentationIdentifier::CDR_LE,
+        request)?;
+    let write_opts_builder = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()); // always add source timestamp
+
+    let write_opts_builder = 
+      if self.service_mapping == ServiceMapping::Enhanced {
+        write_opts_builder
+      } else {
+        write_opts_builder.related_sample_identity(SampleIdentity::from(gen_rmw_req_id))
+      };
+    let sent_rmw_req_id =
+      self.request_sender.async_write_with_options(req_wrapper, write_opts_builder.build())
+        .await
+        .map( RmwRequestId::from )?;
+
+    match self.service_mapping {
+      ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
+      ServiceMapping::Basic |
+      ServiceMapping::Cyclone => Ok(gen_rmw_req_id),
+    }  
+  }
+
+  pub async fn async_receive_response(&self) -> dds::Result<(RmwRequestId, S::Response)> {
+    let dcc_stream = self.response_receiver.as_async_stream();
+    pin_mut!(dcc_stream);
+    let (dcc_rw, _tail) : (Option<dds::Result<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>>> , _ )= 
+      dcc_stream.into_future().await;
+
+    match dcc_rw {
+      None => Err(dds::Error::Internal{ reason:
+        "SimpleDataReader value stream unexpectedly ended!".to_string() }),
+        // This should never occur, because topic do not "end". 
+      Some(Err(e)) => Err(e),
+      Some(Ok(dcc)) => {
+        let mi = MessageInfo::from(&dcc);
+        let res_wrapper = dcc.into_value();
+        let (ri,res) = res_wrapper
+          .unwrap(self.service_mapping, mi , self.client_guid)?;
+        Ok((ri,res))
+      }
+    } // match
+  }
+
+
+  fn increment_sequence_number(&self) {
     self
       .sequence_number_gen
       .fetch_add(1, atomic::Ordering::Acquire);
   }
 
-  pub fn sequence_number(&self) -> request_id::SequenceNumber {
+  fn sequence_number(&self) -> request_id::SequenceNumber {
     SequenceNumber::from(self.sequence_number_gen.load(atomic::Ordering::Acquire)).into()
   }
 }
