@@ -85,13 +85,12 @@ pub struct ActionClientQosPolicies {
   pub status_subscription: QosPolicies,
 }
 
-#[allow(dead_code)] // TODO: Use this
 pub struct ActionServerQosPolicies {
   pub(crate) goal_service: QosPolicies,
   pub(crate) result_service: QosPolicies,
   pub(crate) cancel_service: QosPolicies,
-  pub(crate) feedback_publication: QosPolicies,
-  pub(crate) status_publication: QosPolicies,
+  pub(crate) feedback_publisher: QosPolicies,
+  pub(crate) status_publisher: QosPolicies,
 }
 
 /// Emulating ROS2 IDL code generator: Goal sending/setting service
@@ -369,7 +368,6 @@ where
 // rt/turtle1/rotate_absolute/_action/status :
 // action_msgs::msg::dds_::GoalStatusArray_
 
-#[allow(dead_code)] // TODO: Use this
 pub struct ActionServer<A>
 where
   A: ActionTypes,
@@ -377,18 +375,18 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message,
 {
-  my_goal_server: Server<AService<SendGoalRequest<A::GoalType>, SendGoalResponse>>,
+  pub(crate) my_goal_server: Server<AService<SendGoalRequest<A::GoalType>, SendGoalResponse>>,
 
-  my_cancel_server:
+  pub(crate) my_cancel_server:
     Server<AService<action_msgs::CancelGoalRequest, action_msgs::CancelGoalResponse>>,
 
-  my_result_server: Server<AService<GetResultRequest, GetResultResponse<A::ResultType>>>,
+  pub(crate) my_result_server: Server<AService<GetResultRequest, GetResultResponse<A::ResultType>>>,
 
-  my_feedback_publisher: Publisher<FeedbackMessage<A::FeedbackType>>,
+  pub(crate) my_feedback_publisher: Publisher<FeedbackMessage<A::FeedbackType>>,
 
-  my_status_publisher: Publisher<action_msgs::GoalStatusArray>,
+  pub(crate) my_status_publisher: Publisher<action_msgs::GoalStatusArray>,
 
-  my_action_name: String,
+  pub(crate) my_action_name: String,
 }
 
 impl<A> ActionServer<A>

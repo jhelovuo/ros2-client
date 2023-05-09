@@ -504,12 +504,80 @@ impl Node {
     })
   }
 
-  // pub fn create_action_server<A>(&mut self, service_mapping: ServiceMappings,
-  // action_name:&str,   action_qos: ActionServerQosPolicies)
-  //   -> Result<ActionServer<A>, dds::Error>
-  // where
-  //     A: ActionTypes + 'static,
-  // {
-  //   todo!()
-  // }
+  pub fn create_action_server<A>(
+    &mut self,
+    service_mapping: ServiceMapping,
+    action_name: &str,
+    action_type_name: &MessageTypeName,
+    action_qos: ActionServerQosPolicies,
+  ) -> Result<ActionServer<A>, dds::Error>
+  where
+    A: ActionTypes + 'static,
+  {
+    let goal_service_name = action_name.to_owned() + "/_action/send_goal";
+    let goal_service_req_type = action_type_name.dds_action_type() + "_SendGoal_Request_";
+    let goal_service_resp_type = action_type_name.dds_action_type() + "_SendGoal_Response_";
+    let my_goal_server = self.create_server(
+      service_mapping,
+      &goal_service_name,
+      &goal_service_req_type,
+      &goal_service_resp_type,
+      action_qos.goal_service.clone(),
+      action_qos.goal_service,
+    )?;
+
+    let cancel_service_name = action_name.to_owned() + "/_action/cancel_goal";
+    let cancel_goal_type = MessageTypeName::new("action_msgs", "CancelGoal");
+    let cancel_service_req_type = cancel_goal_type.dds_request_type();
+    let cancel_service_resp_type = cancel_goal_type.dds_response_type();
+    let my_cancel_server = self.create_server(
+      service_mapping,
+      &cancel_service_name,
+      &cancel_service_req_type,
+      &cancel_service_resp_type,
+      action_qos.cancel_service.clone(),
+      action_qos.cancel_service,
+    )?;
+
+    let result_service_name = action_name.to_owned() + "/_action/get_result";
+    let result_service_req_type = action_type_name.dds_action_type() + "_GetResult_Request_";
+    let result_service_resp_type = action_type_name.dds_action_type() + "_GetResult_Response_";
+    let my_result_server = self.create_server(
+      service_mapping,
+      &result_service_name,
+      &result_service_req_type,
+      &result_service_resp_type,
+      action_qos.result_service.clone(),
+      action_qos.result_service,
+    )?;
+
+    let feedback_topic_name = action_name.to_owned() + "/_action/feedback";
+    let feedback_topic_type = action_type_name.dds_action_type() + "_FeedbackMessage_";
+    let feedback_topic = self.create_topic(
+      &feedback_topic_name,
+      feedback_topic_type,
+      &action_qos.feedback_publisher,
+    )?;
+    let my_feedback_publisher =
+      self.create_publisher(&feedback_topic, Some(action_qos.feedback_publisher))?;
+
+    let status_topic_name = action_name.to_owned() + "/_action/status";
+    let status_topic_type = MessageTypeName::new("action_msgs", "GoalStatusArray").dds_msg_type();
+    let status_topic = self.create_topic(
+      &status_topic_name,
+      status_topic_type,
+      &action_qos.status_publisher,
+    )?;
+    let my_status_publisher =
+      self.create_publisher(&status_topic, Some(action_qos.status_publisher))?;
+
+    Ok(ActionServer {
+      my_goal_server,
+      my_cancel_server,
+      my_result_server,
+      my_feedback_publisher,
+      my_status_publisher,
+      my_action_name: action_name.to_owned(),
+    })
+  }
 }
