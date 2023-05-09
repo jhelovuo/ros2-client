@@ -1,34 +1,25 @@
-use std::{
-  io,
-  marker::PhantomData,
-  ops::{Deref, DerefMut},
-};
+use std::{io, marker::PhantomData, sync::atomic};
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
+use futures::{pin_mut, Stream, StreamExt};
 use rustdds::{rpc::*, *};
 
-use crate::{
-  message::Message,
-  node::Node,
-  pubsub::{MessageInfo, Publisher, Subscription},
-};
+use crate::{message::Message, node::Node, pubsub::MessageInfo};
 
 pub mod request_id;
-
-pub mod basic;
-pub mod cyclone;
-pub mod enhanced;
+mod wrappers;
 
 pub use request_id::*;
+use wrappers::*;
 
 // --------------------------------------------
 // --------------------------------------------
 
 /// Service trait pairs the Request and Response types together.
 /// Additonally, it ensures that Response and Request are Messages
-/// (serializable) and we have a means to name the types.
+/// (Serializable), and we have a means to name the types.
 pub trait Service {
   type Request: Message;
   type Response: Message;
@@ -88,262 +79,196 @@ where
 // --------------------------------------------
 // --------------------------------------------
 
-/// Server trait defines the behavior for a "Server". It is required so that we
-/// can hide away the ServiceMapping in a Server
-pub trait ServerT<S>: Evented
-where
-  S: Service,
-{
-  fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>>;
-  fn send_response(&self, id: RmwRequestId, response: S::Response) -> dds::Result<()>;
+/// There are different and incompatible ways to map Services onto DDS Topics.
+/// The mapping used by ROS2 depends on the DDS implementation used and its
+/// configuration. For details, see OMG Specification
+/// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
+/// RPC over DDS" . which defines Service Mappings "Basic" and "Enhanced"
+/// ServiceMapping::Cyclone reporesents a third mapping used by RMW for
+/// CycloneDDS.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ServiceMapping {
+  /// "Basic" service mapping from RPC over DDS specification.
+  /// * RTI Connext with `RMW_CONNEXT_REQUEST_REPLY_MAPPING=basic`, but this is
+  ///   not tested, so may not work.
+  Basic,
+
+  /// "Enhanced" service mapping from RPC over DDS specification.
+  /// * ROS2 Foxy with eProsima DDS,
+  /// * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) -
+  ///   set environment variable `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended`
+  ///   before running ROS2 executable.
+  Enhanced,
+
+  /// CycloneDDS-specific service mapping.
+  /// Specification for this mapping is unknown, technical details are
+  /// reverse-engineered from ROS2 sources.
+  /// * ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not
+  ///   over actual network.
+  Cyclone,
 }
 
 // --------------------------------------------
 // --------------------------------------------
 /// Server end of a ROS2 Service
-pub struct Server<S> {
-  pub(crate) inner: Box<dyn ServerT<S>>,
+pub struct Server<S>
+where
+  S: Service,
+  S::Request: Message,
+  S::Response: Message,
+{
+  service_mapping: ServiceMapping,
+  request_receiver: SimpleDataReaderR<RequestWrapper<S::Request>>,
+  response_sender: DataWriterR<ResponseWrapper<S::Response>>,
 }
 
-impl<S> Deref for Server<S> {
-  type Target = dyn ServerT<S>;
-  fn deref(&self) -> &Self::Target {
-    &*self.inner
-  }
-}
-
-impl<S> DerefMut for Server<S> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut *self.inner
-  }
-}
-
-impl<S> ServerT<S> for Server<S>
+impl<S> Server<S>
 where
   S: 'static + Service,
 {
-  fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>> {
-    self.inner.receive_request()
+  pub(crate) fn new(
+    service_mapping: ServiceMapping,
+    node: &mut Node,
+    request_topic: &Topic,
+    response_topic: &Topic,
+    qos_request: Option<QosPolicies>,
+    qos_response: Option<QosPolicies>,
+  ) -> dds::Result<Self> {
+    let request_receiver =
+      node.create_simpledatareader
+      ::<RequestWrapper<S::Request>, ServiceDeserializerAdapter<RequestWrapper<S::Request>>>(
+        request_topic, qos_request)?;
+    let response_sender =
+      node.create_datawriter
+      ::<ResponseWrapper<S::Response>, ServiceSerializerAdapter<ResponseWrapper<S::Response>>>(
+        response_topic, qos_response)?;
+
+    debug!(
+      "Created new Server: requests={} response={}",
+      request_topic.name(),
+      response_topic.name()
+    );
+
+    Ok(Server::<S> {
+      service_mapping,
+      request_receiver,
+      response_sender,
+    })
   }
 
-  fn send_response(&self, id: RmwRequestId, response: S::Response) -> dds::Result<()> {
-    self.inner.send_response(id, response)
+  /// Receive a request from Client.
+  /// Returns `Ok(None)` if no new requests have arrived.
+  pub fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>> {
+    self.request_receiver.drain_read_notifications();
+    let dcc_rw: Option<no_key::DeserializedCacheChange<RequestWrapper<S::Request>>> =
+      self.request_receiver.try_take_one()?;
+
+    match dcc_rw {
+      None => Ok(None),
+      Some(dcc) => {
+        let mi = MessageInfo::from(&dcc);
+        let req_wrapper = dcc.into_value();
+        let (ri, req) = req_wrapper.unwrap(self.service_mapping, &mi)?;
+        Ok(Some((ri, req)))
+      }
+    } // match
+  }
+
+  /// Send response to request by Client.
+  /// rmw_req_id identifies request being responded.
+  pub fn send_response(&self, rmw_req_id: RmwRequestId, response: S::Response) -> dds::Result<()> {
+    let resp_wrapper = ResponseWrapper::<S::Response>::new(
+      self.service_mapping,
+      rmw_req_id,
+      RepresentationIdentifier::CDR_LE,
+      response,
+    )?;
+    let write_opts = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()) // always add source timestamp
+      .related_sample_identity(SampleIdentity::from(rmw_req_id))
+      // TODO: Check if this is right. Cyclone mapping does not send
+      // Related Sample Identity in
+      // WriteOptions (QoS ParameterList), but within data payload.
+      // But maybe it is not harmful to send it in both?
+      .build();
+    self
+      .response_sender
+      .write_with_options(resp_wrapper, write_opts)
+      .map(|_| ()) // lose SampleIdentity result
+  }
+
+  /// The request_id must be sent back with the response to identify which
+  /// request and response belong together.
+  pub async fn async_receive_request(&self) -> dds::Result<(RmwRequestId, S::Request)> {
+    let dcc_stream = self.request_receiver.as_async_stream();
+    pin_mut!(dcc_stream);
+
+    match dcc_stream.next().await {
+      None => Err(dds::Error::Internal {
+        reason: "SimpleDataReader value stream unexpectedly ended!".to_string(),
+      }),
+      // This should never occur, because topic do not "end".
+      Some(Err(e)) => Err(e),
+      Some(Ok(dcc)) => {
+        let mi = MessageInfo::from(&dcc);
+        let req_wrapper = dcc.into_value();
+        let (ri, req) = req_wrapper.unwrap(self.service_mapping, &mi)?;
+        Ok((ri, req))
+      }
+    } // match
+  }
+
+  /// Returns a never-ending stream of (request_id, request)
+  /// The request_id must be sent back with the response to identify which
+  /// request and response belong together.
+  pub fn receive_request_stream(
+    &self,
+  ) -> impl Stream<Item = dds::Result<(RmwRequestId, S::Request)>> + '_ {
+    Box::pin(self.request_receiver.as_async_stream()).then(
+      move |dcc_r| async move {
+        match dcc_r {
+          Err(e) => Err(e),
+          Ok(dcc) => {
+            let mi = MessageInfo::from(&dcc);
+            let req_wrapper = dcc.into_value();
+            req_wrapper.unwrap(self.service_mapping, &mi)
+          }
+        } // match
+      }, // async
+    )
+  }
+
+  /// Asynchronous response sending
+  pub async fn async_send_response(
+    &self,
+    rmw_req_id: RmwRequestId,
+    response: S::Response,
+  ) -> dds::Result<()> {
+    let resp_wrapper = ResponseWrapper::<S::Response>::new(
+      self.service_mapping,
+      rmw_req_id,
+      RepresentationIdentifier::CDR_LE,
+      response,
+    )?;
+    let write_opts = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()) // always add source timestamp
+      .related_sample_identity(SampleIdentity::from(rmw_req_id))
+      // TODO: Check if this is right. Cyclone mapping does not send
+      // Related Sample Identity in
+      // WriteOptions (QoS ParameterList), but within data payload.
+      // But maybe it is not harmful to send it in both?
+      .build();
+    self
+      .response_sender
+      .async_write_with_options(resp_wrapper, write_opts)
+      .await
+      .map(|_| ()) // lose SampleIdentity result
   }
 }
 
 impl<S> Evented for Server<S>
 where
   S: 'static + Service,
-{
-  fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
-    self.inner.register(poll, token, interest, opts)
-  }
-
-  fn reregister(
-    &self,
-    poll: &Poll,
-    token: Token,
-    interest: Ready,
-    opts: PollOpt,
-  ) -> io::Result<()> {
-    self.inner.reregister(poll, token, interest, opts)
-  }
-
-  fn deregister(&self, poll: &Poll) -> io::Result<()> {
-    self.inner.deregister(poll)
-  }
-}
-
-/// Client trait defines the behavior for a "Client". It is required so that we
-/// can hide away the ServiceMapping in a Client
-pub trait ClientT<S>: Evented
-where
-  S: Service,
-{
-  fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId>;
-  fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>>;
-}
-
-/// Client end of a ROS2 Service
-pub struct Client<S> {
-  pub(crate) inner: Box<dyn ClientT<S>>,
-}
-
-// impl<S> Client<S> {
-//   pub async fn async_call(request: S::Request) -> dds::Result<S::Response> {
-//     let req_id = self.send_request(request)?; // TODO: async write here
-//     // async read response
-
-//   }
-// }
-
-impl<S> Deref for Client<S> {
-  type Target = dyn ClientT<S>;
-  fn deref(&self) -> &Self::Target {
-    &*self.inner
-  }
-}
-
-impl<S> DerefMut for Client<S> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut *self.inner
-  }
-}
-
-impl<S> ClientT<S> for Client<S>
-where
-  S: 'static + Service,
-{
-  fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
-    self.inner.send_request(request)
-  }
-
-  fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>> {
-    self.inner.receive_response()
-  }
-}
-
-impl<S> Evented for Client<S>
-where
-  S: 'static + Service,
-{
-  fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
-    self.inner.register(poll, token, interest, opts)
-  }
-
-  fn reregister(
-    &self,
-    poll: &Poll,
-    token: Token,
-    interest: Ready,
-    opts: PollOpt,
-  ) -> io::Result<()> {
-    self.inner.reregister(poll, token, interest, opts)
-  }
-
-  fn deregister(&self, poll: &Poll) -> io::Result<()> {
-    self.inner.deregister(poll)
-  }
-}
-
-// --------------------------------------------------------------------------------
-// --------------------------------------------------------------------------------
-
-// See Spec RPC over DDS Section "7.2.4 Basic and Enhanced Service Mapping for
-// RPC over DDS"
-pub trait ServiceMapping<S>
-where
-  S: Service,
-  Self::RequestWrapper: Message,
-  Self::ResponseWrapper: Message,
-{
-  type RequestWrapper;
-  type ResponseWrapper;
-
-  // Server operations
-  fn unwrap_request(
-    wrapped: &Self::RequestWrapper,
-    sample_info: &MessageInfo,
-  ) -> (RmwRequestId, S::Request);
-  // Unwrapping will clone the request
-  // This is reasonable, because we may have to take it out of another struct
-  fn wrap_response(
-    r_id: RmwRequestId,
-    response: S::Response,
-  ) -> (Self::ResponseWrapper, Option<SampleIdentity>);
-
-  // Client operations
-  type ClientState;
-  // ClientState persists between requests.
-  fn new_client_state(request_sender: GUID) -> Self::ClientState;
-
-  // If wrap_requests returns request id, then that will be used. If None, then
-  // use return value from request_id_after_wrap
-  fn wrap_request(
-    state: &Self::ClientState,
-    request: S::Request,
-  ) -> (Self::RequestWrapper, Option<RmwRequestId>);
-  fn request_id_after_wrap(state: &Self::ClientState, write_result: SampleIdentity)
-    -> RmwRequestId;
-  fn unwrap_response(
-    state: &Self::ClientState,
-    wrapped: Self::ResponseWrapper,
-    sample_info: MessageInfo,
-  ) -> (RmwRequestId, S::Response);
-}
-
-// --------------------------------------------
-// --------------------------------------------
-
-pub struct ServerGeneric<S, SW>
-where
-  S: Service,
-  SW: ServiceMapping<S>,
-{
-  request_receiver: Subscription<SW::RequestWrapper>,
-  response_sender: Publisher<SW::ResponseWrapper>,
-  phantom: PhantomData<SW>,
-}
-
-impl<S, SW> ServerGeneric<S, SW>
-where
-  S: 'static + Service,
-  SW: 'static + ServiceMapping<S>,
-{
-  pub(crate) fn new(
-    node: &mut Node,
-    request_topic: &Topic,
-    response_topic: &Topic,
-    qos_request: Option<QosPolicies>,
-    qos_response: Option<QosPolicies>,
-  ) -> dds::Result<ServerGeneric<S, SW>> {
-    let request_receiver =
-      node.create_subscription::<SW::RequestWrapper>(request_topic, qos_request)?;
-    let response_sender =
-      node.create_publisher::<SW::ResponseWrapper>(response_topic, qos_response)?;
-
-    info!(
-      "Created new ServerGeneric: requests={} response={}",
-      request_topic.name(),
-      response_topic.name()
-    );
-
-    Ok(ServerGeneric {
-      request_receiver,
-      response_sender,
-      phantom: PhantomData,
-    })
-  }
-}
-
-impl<S, SW> ServerT<S> for ServerGeneric<S, SW>
-where
-  S: 'static + Service,
-  SW: 'static + ServiceMapping<S>,
-{
-  fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>>
-  where
-    <S as Service>::Request: 'static,
-  {
-    let next_sample = self.request_receiver.take()?;
-
-    Ok(next_sample.map(|(s, mi)| SW::unwrap_request(&s, &mi)))
-  }
-
-  fn send_response(&self, id: RmwRequestId, response: S::Response) -> dds::Result<()> {
-    let (wrapped_response, rsi_opt) = SW::wrap_response(id, response);
-    let write_opt = WriteOptionsBuilder::new().related_sample_identity_opt(rsi_opt);
-    self
-      .response_sender
-      .publish_with_options(wrapped_response, write_opt.build())?;
-    Ok(())
-  }
-}
-
-impl<S, SW> Evented for ServerGeneric<S, SW>
-where
-  S: 'static + Service,
-  SW: 'static + ServiceMapping<S>,
 {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self.request_receiver.register(poll, token, interest, opts)
@@ -366,80 +291,190 @@ where
   }
 }
 
-// -------------------------------------------------------------------
-// -------------------------------------------------------------------
-
-pub struct ClientGeneric<S, SW>
+/// Client end of a ROS2 Service
+pub struct Client<S>
 where
   S: Service,
-  SW: ServiceMapping<S>,
+  S::Request: Message,
+  S::Response: Message,
 {
-  request_sender: Publisher<SW::RequestWrapper>,
-  response_receiver: Subscription<SW::ResponseWrapper>,
-  client_state: SW::ClientState,
-  phantom: PhantomData<SW>,
+  service_mapping: ServiceMapping,
+  request_sender: DataWriterR<RequestWrapper<S::Request>>,
+  response_receiver: SimpleDataReaderR<ResponseWrapper<S::Response>>,
+  sequence_number_gen: atomic::AtomicI64, // used by basic and cyclone
+  client_guid: GUID,                      // used by the Cyclone ServiceMapping
 }
 
-impl<S, SW> ClientGeneric<S, SW>
+impl<S> Client<S>
 where
   S: 'static + Service,
-  SW: 'static + ServiceMapping<S>,
 {
   pub(crate) fn new(
+    service_mapping: ServiceMapping,
     node: &mut Node,
     request_topic: &Topic,
     response_topic: &Topic,
     qos_request: Option<QosPolicies>,
     qos_response: Option<QosPolicies>,
-  ) -> dds::Result<ClientGeneric<S, SW>> {
-    let request_sender = node.create_publisher::<SW::RequestWrapper>(request_topic, qos_request)?;
+  ) -> dds::Result<Self> {
+    let request_sender =
+      node.create_datawriter
+      ::<RequestWrapper<S::Request>, ServiceSerializerAdapter<RequestWrapper<S::Request>>>(
+        request_topic, qos_request)?;
     let response_receiver =
-      node.create_subscription::<SW::ResponseWrapper>(response_topic, qos_response)?;
-    info!(
-      "Created new ClientGeneric: request topic={} response topic={}",
+      node.create_simpledatareader
+      ::<ResponseWrapper<S::Response>, ServiceDeserializerAdapter<ResponseWrapper<S::Response>>>(
+        response_topic, qos_response)?;
+
+    debug!(
+      "Created new Client: request={} response={}",
       request_topic.name(),
       response_topic.name()
     );
-
-    let request_sender_guid = request_sender.guid();
-    Ok(ClientGeneric {
+    let client_guid = request_sender.guid();
+    Ok(Client::<S> {
+      service_mapping,
       request_sender,
       response_receiver,
-      client_state: SW::new_client_state(request_sender_guid),
-      phantom: PhantomData,
+      sequence_number_gen: atomic::AtomicI64::new(SequenceNumber::default().into()),
+      client_guid,
     })
   }
-}
 
-impl<S, SW> ClientT<S> for ClientGeneric<S, SW>
-where
-  S: 'static + Service,
-  SW: 'static + ServiceMapping<S>,
-{
-  fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
-    let (wrapped, rsi_opt) = SW::wrap_request(&self.client_state, request);
-    let write_opt =
-      WriteOptionsBuilder::new().related_sample_identity_opt(rsi_opt.map(SampleIdentity::from));
-    let sample_id = self
+  /// Send a request to Service Server.
+  /// The returned `RmwRequestId` is a token to identify the correct response.
+  pub fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
+    self.increment_sequence_number();
+    let gen_rmw_req_id = RmwRequestId {
+      writer_guid: self.client_guid,
+      sequence_number: self.sequence_number(),
+    };
+    let req_wrapper = RequestWrapper::<S::Request>::new(
+      self.service_mapping,
+      gen_rmw_req_id,
+      RepresentationIdentifier::CDR_LE,
+      request,
+    )?;
+    let write_opts_builder = WriteOptionsBuilder::new().source_timestamp(Timestamp::now()); // always add source timestamp
+
+    let write_opts_builder = if self.service_mapping == ServiceMapping::Enhanced {
+      write_opts_builder
+    } else {
+      write_opts_builder.related_sample_identity(SampleIdentity::from(gen_rmw_req_id))
+    };
+    let sent_rmw_req_id = self
       .request_sender
-      .publish_with_options(wrapped, write_opt.build())?;
-    Ok(SW::request_id_after_wrap(&self.client_state, sample_id))
+      .write_with_options(req_wrapper, write_opts_builder.build())
+      .map(RmwRequestId::from)?;
+
+    match self.service_mapping {
+      ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
+      ServiceMapping::Basic | ServiceMapping::Cyclone => Ok(gen_rmw_req_id),
+    }
   }
 
-  fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>>
-  where
-    <S as Service>::Response: 'static,
-  {
-    let next_sample = self.response_receiver.take()?;
+  /// Receive a response from Server
+  /// Returns `Ok(None)` if no new responses have arrived.
+  /// Note: The response may to someone else's request. Check received
+  /// `RmWRequestId` against the one you got when sending request to identify
+  /// the correct response. In case you receive someone else's response,
+  /// please do receive again.
+  pub fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>> {
+    self.response_receiver.drain_read_notifications();
+    let dcc_rw: Option<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>> =
+      self.response_receiver.try_take_one()?;
 
-    Ok(next_sample.map(|(rw, msg_info)| SW::unwrap_response(&self.client_state, rw, msg_info)))
+    match dcc_rw {
+      None => Ok(None),
+      Some(dcc) => {
+        let mi = MessageInfo::from(&dcc);
+        let res_wrapper = dcc.into_value();
+        let (ri, res) = res_wrapper.unwrap(self.service_mapping, mi, self.client_guid)?;
+        Ok(Some((ri, res)))
+      }
+    } // match
+  }
+
+  /// Send a request to Service Server asynchronously.
+  /// The returned `RmwRequestId` is a token to identify the correct response.
+  pub async fn async_send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
+    self.increment_sequence_number();
+    let gen_rmw_req_id = RmwRequestId {
+      writer_guid: self.client_guid,
+      sequence_number: self.sequence_number(),
+    };
+    let req_wrapper = RequestWrapper::<S::Request>::new(
+      self.service_mapping,
+      gen_rmw_req_id,
+      RepresentationIdentifier::CDR_LE,
+      request,
+    )?;
+    let write_opts_builder = WriteOptionsBuilder::new().source_timestamp(Timestamp::now()); // always add source timestamp
+
+    let write_opts_builder = if self.service_mapping == ServiceMapping::Enhanced {
+      write_opts_builder
+    } else {
+      write_opts_builder.related_sample_identity(SampleIdentity::from(gen_rmw_req_id))
+    };
+    let sent_rmw_req_id = self
+      .request_sender
+      .async_write_with_options(req_wrapper, write_opts_builder.build())
+      .await
+      .map(RmwRequestId::from)?;
+
+    match self.service_mapping {
+      ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
+      ServiceMapping::Basic | ServiceMapping::Cyclone => Ok(gen_rmw_req_id),
+    }
+  }
+
+  /// Receive a response from Server
+  /// The returned Future does not complete until the response has been
+  /// received.
+  pub async fn async_receive_response(&self, request_id: RmwRequestId) -> dds::Result<S::Response> {
+    let dcc_stream = self.response_receiver.as_async_stream();
+    pin_mut!(dcc_stream);
+
+    loop {
+      match dcc_stream.next().await {
+        None => {
+          return Err(dds::Error::Internal {
+            reason: "SimpleDataReader value stream unexpectedly ended!".to_string(),
+          })
+        }
+        // This should never occur, because topic do not "end".
+        Some(Err(e)) => return Err(e),
+        Some(Ok(dcc)) => {
+          let mi = MessageInfo::from(&dcc);
+          let (req_id, response) =
+            dcc
+              .into_value()
+              .unwrap(self.service_mapping, mi, self.client_guid)?;
+          if req_id == request_id {
+            return Ok(response);
+          } else {
+            debug!("Received response for someone else.");
+            continue; //
+          }
+        }
+      }
+    } // loop
+  }
+
+  fn increment_sequence_number(&self) {
+    self
+      .sequence_number_gen
+      .fetch_add(1, atomic::Ordering::Acquire);
+  }
+
+  fn sequence_number(&self) -> request_id::SequenceNumber {
+    SequenceNumber::from(self.sequence_number_gen.load(atomic::Ordering::Acquire)).into()
   }
 }
 
-impl<S, SW> Evented for ClientGeneric<S, SW>
+impl<S> Evented for Client<S>
 where
   S: 'static + Service,
-  SW: 'static + ServiceMapping<S>,
 {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self.response_receiver.register(poll, token, interest, opts)

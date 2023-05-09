@@ -14,10 +14,7 @@ use crate::{
   node_entities_info::NodeEntitiesInfo,
   parameters::*,
   pubsub::{Publisher, Subscription},
-  service::{
-    basic::BasicServiceMapping, cyclone::CycloneServiceMapping, enhanced::EnhancedServiceMapping,
-    Client, ClientGeneric, ClientT, Server, ServerGeneric, ServerT, Service, ServiceMapping,
-  },
+  service::{Client, Server, Service, ServiceMapping},
 };
 
 /// Configuration of [Node]
@@ -71,34 +68,6 @@ impl Default for NodeOptions {
 }
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
-
-/// Enumerate supported service mappings
-///
-/// There are different and incompatible ways to map Services onto DDS Topics.
-/// The mapping used by ROS2 depends on the DDS implementation used and its
-/// configuration. For details, see OMG Specification
-/// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ServiceMappings {
-  /// "Basic" service mapping from RPC over DDS specification.
-  /// * RTI Connext with `RMW_CONNEXT_REQUEST_REPLY_MAPPING=basic`, but this is
-  ///   not tested, so may not work.
-  Basic,
-
-  /// "Enhanced" service mapping from RPC over DDS specification.
-  /// * ROS2 Foxy with eProsima DDS,
-  /// * ROS2 Galactic with RTI Connext (rmw_connextdds, not rmw_connext_cpp) -
-  ///   set environment variable `RMW_CONNEXT_REQUEST_REPLY_MAPPING=extended`
-  ///   before running ROS2 executable.
-  Enhanced,
-
-  /// CycloneDDS-specific service mapping.
-  /// Specification for this mapping is unknown, technical details are
-  /// reverse-engineered from ROS2 sources.
-  /// * ROS2 Galactic with CycloneDDS - Seems to work on the same host only, not
-  ///   over actual network.
-  Cyclone,
-}
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
@@ -326,6 +295,30 @@ impl Node {
     Ok(p)
   }
 
+  pub(crate) fn create_simpledatareader<D, DA>(
+    &mut self,
+    topic: &Topic,
+    qos: Option<QosPolicies>,
+  ) -> Result<no_key::SimpleDataReader<D, DA>, dds::Error>
+  where
+    D: DeserializeOwned + 'static,
+    DA: rustdds::no_key::DeserializerAdapter<D> + 'static,
+  {
+    self.ros_context.create_simpledatareader(topic, qos)
+  }
+
+  pub(crate) fn create_datawriter<D, SA>(
+    &mut self,
+    topic: &Topic,
+    qos: Option<QosPolicies>,
+  ) -> Result<no_key::DataWriter<D, SA>, dds::Error>
+  where
+    D: Serialize,
+    SA: rustdds::no_key::SerializerAdapter<D>,
+  {
+    self.ros_context.create_datawriter(topic, qos)
+  }
+
   /// Creates ROS2 Service Client
   ///
   /// # Arguments
@@ -335,7 +328,7 @@ impl Node {
   /// * `qos`-
   pub fn create_client<S>(
     &mut self,
-    service_mapping: ServiceMappings,
+    service_mapping: ServiceMapping,
     service_name: &str,
     request_type_name: &str,
     response_type_name: &str,
@@ -345,50 +338,6 @@ impl Node {
   where
     S: Service + 'static,
     S::Request: Clone,
-  {
-    let inner: Box<dyn ClientT<S>> = match service_mapping {
-      ServiceMappings::Basic => Box::new(self.create_client_generic::<S, BasicServiceMapping<S>>(
-        service_name,
-        request_type_name,
-        response_type_name,
-        request_qos,
-        response_qos,
-      )?),
-      ServiceMappings::Enhanced => {
-        Box::new(self.create_client_generic::<S, EnhancedServiceMapping<S>>(
-          service_name,
-          request_type_name,
-          response_type_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-      ServiceMappings::Cyclone => {
-        Box::new(self.create_client_generic::<S, CycloneServiceMapping<S>>(
-          service_name,
-          request_type_name,
-          response_type_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-    };
-
-    Ok(Client { inner })
-  }
-
-  fn create_client_generic<S, W>(
-    &mut self,
-    service_name: &str,
-    request_type_name: &str,
-    response_type_name: &str,
-    request_qos: QosPolicies,
-    response_qos: QosPolicies,
-  ) -> Result<ClientGeneric<S, W>, dds::Error>
-  where
-    S: Service + 'static,
-    S::Request: Clone,
-    W: 'static + ServiceMapping<S>,
   {
     // Add rq/ and rr/ prefixes as documented in
     // https://design.ros2.org/articles/topic_and_service_names.html
@@ -412,13 +361,16 @@ impl Node {
       TopicKind::NoKey,
     )?;
 
-    ClientGeneric::<S, W>::new(
+    let c = Client::<S>::new(
+      service_mapping,
       self,
       &rq_topic,
       &rs_topic,
       Some(request_qos),
       Some(response_qos),
-    )
+    )?;
+
+    Ok(c)
   }
 
   /// Creates ROS2 Service Server
@@ -431,7 +383,7 @@ impl Node {
   /// * `qos`-
   pub fn create_server<S>(
     &mut self,
-    service_mapping: ServiceMappings,
+    service_mapping: ServiceMapping,
     service_name: &str,
     request_type_name: &str,
     response_type_name: &str,
@@ -441,50 +393,6 @@ impl Node {
   where
     S: Service + 'static,
     S::Request: Clone,
-  {
-    let inner: Box<dyn ServerT<S>> = match service_mapping {
-      ServiceMappings::Basic => Box::new(self.create_server_generic::<S, BasicServiceMapping<S>>(
-        service_name,
-        request_type_name,
-        response_type_name,
-        request_qos,
-        response_qos,
-      )?),
-      ServiceMappings::Enhanced => {
-        Box::new(self.create_server_generic::<S, EnhancedServiceMapping<S>>(
-          service_name,
-          request_type_name,
-          response_type_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-      ServiceMappings::Cyclone => {
-        Box::new(self.create_server_generic::<S, CycloneServiceMapping<S>>(
-          service_name,
-          request_type_name,
-          response_type_name,
-          request_qos,
-          response_qos,
-        )?)
-      }
-    };
-
-    Ok(Server { inner })
-  }
-
-  fn create_server_generic<S, SW>(
-    &mut self,
-    service_name: &str,
-    request_type_name: &str,
-    response_type_name: &str,
-    request_qos: QosPolicies,
-    response_qos: QosPolicies,
-  ) -> Result<ServerGeneric<S, SW>, dds::Error>
-  where
-    S: Service + 'static,
-    S::Request: Clone,
-    SW: 'static + ServiceMapping<S>,
   {
     let rq_name =
       Self::check_name_and_add_prefix("rq/".to_owned(), &(service_name.to_owned() + "Request"))?;
@@ -504,18 +412,21 @@ impl Node {
       TopicKind::NoKey,
     )?;
 
-    ServerGeneric::<S, SW>::new(
+    let s = Server::<S>::new(
+      service_mapping,
       self,
       &rq_topic,
       &rs_topic,
       Some(request_qos),
       Some(response_qos),
-    )
+    )?;
+
+    Ok(s)
   }
 
   pub fn create_action_client<A>(
     &mut self,
-    service_mapping: ServiceMappings,
+    service_mapping: ServiceMapping,
     action_name: &str,
     action_type_name: &MessageTypeName,
     action_qos: ActionClientQosPolicies,

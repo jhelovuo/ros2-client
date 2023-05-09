@@ -1,5 +1,6 @@
-use log::error;
-use mio::{Events, Poll, PollOpt, Ready, Token};
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
+use futures::{future, StreamExt};
 use serde::{Deserialize, Serialize};
 use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping};
 use rustdds::{
@@ -31,7 +32,7 @@ impl Message for AddTwoIntsResponse {}
 fn main() {
   pretty_env_logger::init();
 
-  println!(">>> ros2_service starting...");
+  debug!(">>> ros2_service starting...");
   let mut node = create_node();
   let service_qos = create_qos();
 
@@ -50,46 +51,22 @@ fn main() {
 
   println!(">>> ros2_service server created");
 
-  let poll = Poll::new().unwrap();
+  let server_stream = server.receive_request_stream().then(|result| async {
+    match result {
+      Ok((req_id, req)) => {
+        println!("request: {} + {}", req.a, req.b);
+        let resp = AddTwoIntsResponse { sum: req.a + req.b };
+        let sr = server.async_send_response(req_id, resp).await;
+        if let Err(e) = sr {
+          println!("Send error {:?}", e);
+        }
+      }
+      Err(e) => println!("Receive request error: {:?}", e),
+    }
+  });
 
-  poll
-    .register(&server, Token(1), Ready::readable(), PollOpt::edge())
-    .unwrap();
-
-  loop {
-    println!(">>> event loop iter");
-    let mut events = Events::with_capacity(100);
-    poll.poll(&mut events, None).unwrap();
-
-    for event in events.iter() {
-      match event.token() {
-        Token(1) => match server.receive_request() {
-          Ok(req_option) => match req_option {
-            Some((id, request)) => {
-              println!(
-                ">>> Request received - id: {:?}, request: {:?}",
-                id, request
-              );
-              let sum = request.a + request.b;
-              let response = AddTwoIntsResponse { sum };
-              match server.send_response(id, response.clone()) {
-                Ok(_) => println!(">>> Server sent response: {:?} id: {:?}", response, id,),
-
-                Err(e) => error!(">>> Server response error: {:?}", e),
-              }
-            }
-            None => {
-              println!(">>> No request available.")
-            }
-          },
-          Err(e) => {
-            println!(">>> error with response handling, e: {:?}", e)
-          }
-        },
-        _ => println!(">>> Unknown poll token {:?}", event.token()),
-      } // match
-    } // for
-  } // lopp
+  // run it!
+  smol::block_on(async { server_stream.for_each(|_result| future::ready(())).await });
 } // main
 
 fn create_qos() -> QosPolicies {

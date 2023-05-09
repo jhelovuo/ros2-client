@@ -71,7 +71,7 @@ pub use node::*;
 #[doc(inline)]
 pub use pubsub::*;
 #[doc(inline)]
-pub use service::{AService, Client, Server, Service};
+pub use service::{AService, Client, Server, Service, ServiceMapping};
 #[doc(inline)]
 pub use action::{Action, ActionTypes};
 
