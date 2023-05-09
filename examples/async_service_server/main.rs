@@ -1,8 +1,6 @@
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-
-use futures::{StreamExt, future};
-
+use futures::{future, StreamExt};
 use serde::{Deserialize, Serialize};
 use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping};
 use rustdds::{
@@ -53,26 +51,22 @@ fn main() {
 
   println!(">>> ros2_service server created");
 
-  let server_stream =
-    server.receive_request_stream()
-      .then( |result| async {
-        match result {
-          Ok( (req_id, req) ) => {
-            println!("request: {} + {}", req.a, req.b);
-            let resp = AddTwoIntsResponse{ sum: req.a + req.b };
-            let sr = server.async_send_response(req_id, resp).await;
-            if let Err(e) = sr { println!("Send error {:?}", e);}
-          }
-          Err(e) =>
-            println!("Receive request error: {:?}",e),
+  let server_stream = server.receive_request_stream().then(|result| async {
+    match result {
+      Ok((req_id, req)) => {
+        println!("request: {} + {}", req.a, req.b);
+        let resp = AddTwoIntsResponse { sum: req.a + req.b };
+        let sr = server.async_send_response(req_id, resp).await;
+        if let Err(e) = sr {
+          println!("Send error {:?}", e);
         }
-      });
+      }
+      Err(e) => println!("Receive request error: {:?}", e),
+    }
+  });
 
   // run it!
-  smol::block_on( async { 
-    server_stream.for_each( |_result| future::ready(()) ).await 
-  } );
-
+  smol::block_on(async { server_stream.for_each(|_result| future::ready(())).await });
 } // main
 
 fn create_qos() -> QosPolicies {

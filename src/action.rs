@@ -4,7 +4,6 @@ use rustdds::*;
 use serde::{Deserialize, Serialize};
 pub use action_msgs::{CancelGoalRequest, CancelGoalResponse, GoalId, GoalInfo, GoalStatusEnum};
 use builtin_interfaces::Time;
-
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
@@ -190,7 +189,7 @@ where
   /// Returns and id of the Request and id for the Goal.
   /// Request id can be used to recognize correct response from Action Server.
   /// Goal id is later used to communicate Goal status and result.
-  pub fn send_goal(&self, goal: A::GoalType) -> dds::Result<(RmwRequestId, GoalId)> 
+  pub fn send_goal(&self, goal: A::GoalType) -> dds::Result<(RmwRequestId, GoalId)>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -206,10 +205,7 @@ where
 
   /// Receive a response for the specified goal request, or None if response is
   /// not yet available
-  pub fn receive_goal_response(
-    &self,
-    req_id: RmwRequestId,
-  ) -> dds::Result<Option<SendGoalResponse>>
+  pub fn receive_goal_response(&self, req_id: RmwRequestId) -> dds::Result<Option<SendGoalResponse>>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -217,14 +213,19 @@ where
       match self.my_goal_client.receive_response() {
         Err(e) => break Err(e),
         Ok(None) => break Ok(None), // not yet
-        Ok(Some((incoming_req_id, resp)))
-          if incoming_req_id == req_id => // received the expected answer 
-            break Ok(Some(resp)),
+        Ok(Some((incoming_req_id, resp))) if incoming_req_id == req_id =>
+        // received the expected answer
+        {
+          break Ok(Some(resp))
+        }
         Ok(Some((incoming_req_id, _resp))) => {
           // got someone else's answer. Try again.
-          info!("Goal Response not for us: {:?} != {:?}", incoming_req_id, req_id);
-          continue
-        } 
+          info!(
+            "Goal Response not for us: {:?} != {:?}",
+            incoming_req_id, req_id
+          );
+          continue;
+        }
       }
     }
     // We loop here to drain all the answers received so far.
@@ -284,7 +285,7 @@ where
     }
   }
 
-  pub fn request_result(&self, goal_id: GoalId) -> dds::Result<RmwRequestId> 
+  pub fn request_result(&self, goal_id: GoalId) -> dds::Result<RmwRequestId>
   where
     <A as ActionTypes>::ResultType: 'static,
   {
@@ -325,10 +326,13 @@ where
         Ok(Some((fb_msg, _msg_info))) if fb_msg.goal_id == goal_id => {
           break Ok(Some(fb_msg.feedback))
         }
-        Ok(Some((fb_msg,_msg_info))) => {
+        Ok(Some((fb_msg, _msg_info))) => {
           // feedback on some other goal
-          debug!("Feedback on another goal {:?} != {:?}", fb_msg.goal_id, goal_id)
-        }, 
+          debug!(
+            "Feedback on another goal {:?} != {:?}",
+            fb_msg.goal_id, goal_id
+          )
+        }
       }
     }
   }
@@ -421,22 +425,17 @@ where
   }
 
   /// Receive a new goal, if available.
-  pub fn receive_goal(&self) 
-    -> dds::Result<Option<(RmwRequestId, SendGoalRequest<A::GoalType>)>> 
+  pub fn receive_goal(&self) -> dds::Result<Option<(RmwRequestId, SendGoalRequest<A::GoalType>)>>
   where
-    <A as ActionTypes>::GoalType: 'static
+    <A as ActionTypes>::GoalType: 'static,
   {
     self.my_goal_server.receive_request()
   }
 
   /// Send a response for the specified goal request
-  pub fn send_goal_response(
-    &self,
-    req_id: RmwRequestId,
-    resp: SendGoalResponse,
-  ) -> dds::Result<()>
+  pub fn send_goal_response(&self, req_id: RmwRequestId, resp: SendGoalResponse) -> dds::Result<()>
   where
-    <A as ActionTypes>::GoalType: 'static
+    <A as ActionTypes>::GoalType: 'static,
   {
     self.my_goal_server.send_response(req_id, resp)
   }
@@ -457,10 +456,9 @@ where
     self.my_cancel_server.send_response(req_id, resp)
   }
 
-  pub fn receive_result_request(&self) 
-    -> dds::Result<Option<(RmwRequestId, GetResultRequest)>> 
+  pub fn receive_result_request(&self) -> dds::Result<Option<(RmwRequestId, GetResultRequest)>>
   where
-    <A as ActionTypes>::ResultType: 'static
+    <A as ActionTypes>::ResultType: 'static,
   {
     self.my_result_server.receive_request()
   }
@@ -470,9 +468,9 @@ where
     result_request_id: RmwRequestId,
     resp: GetResultResponse<A::ResultType>,
   ) -> dds::Result<()>
-    where
-    <A as ActionTypes>::ResultType: 'static
- {
+  where
+    <A as ActionTypes>::ResultType: 'static,
+  {
     self.my_result_server.send_response(result_request_id, resp)
   }
 

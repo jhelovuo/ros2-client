@@ -14,9 +14,7 @@ use crate::{
   node_entities_info::NodeEntitiesInfo,
   parameters::*,
   pubsub::{Publisher, Subscription},
-  service::{
-    Client, Server, Service, ServiceMapping,
-  },
+  service::{Client, Server, Service, ServiceMapping},
 };
 
 /// Configuration of [Node]
@@ -70,7 +68,6 @@ impl Default for NodeOptions {
 }
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
-
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
@@ -298,11 +295,11 @@ impl Node {
     Ok(p)
   }
 
-  pub(crate) fn create_simpledatareader<D,DA>(
+  pub(crate) fn create_simpledatareader<D, DA>(
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<no_key::SimpleDataReader<D,DA>, dds::Error>
+  ) -> Result<no_key::SimpleDataReader<D, DA>, dds::Error>
   where
     D: DeserializeOwned + 'static,
     DA: rustdds::no_key::DeserializerAdapter<D> + 'static,
@@ -310,18 +307,17 @@ impl Node {
     self.ros_context.create_simpledatareader(topic, qos)
   }
 
-  pub(crate) fn create_datawriter<D,SA>(
+  pub(crate) fn create_datawriter<D, SA>(
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<no_key::DataWriter<D,SA>, dds::Error>
+  ) -> Result<no_key::DataWriter<D, SA>, dds::Error>
   where
-    D: Serialize, 
+    D: Serialize,
     SA: rustdds::no_key::SerializerAdapter<D>,
   {
     self.ros_context.create_datawriter(topic, qos)
   }
-
 
   /// Creates ROS2 Service Client
   ///
@@ -365,12 +361,13 @@ impl Node {
       TopicKind::NoKey,
     )?;
 
-    let c = Client::<S>::new(service_mapping,
+    let c = Client::<S>::new(
+      service_mapping,
       self,
-      &rq_topic, 
+      &rq_topic,
       &rs_topic,
-      Some(request_qos), 
-      Some(response_qos)
+      Some(request_qos),
+      Some(response_qos),
     )?;
 
     Ok(c)
@@ -424,7 +421,7 @@ impl Node {
       Some(response_qos),
     )?;
 
-    Ok( s )
+    Ok(s)
   }
 
   pub fn create_action_client<A>(
@@ -515,4 +512,4 @@ impl Node {
   // {
   //   todo!()
   // }
- }
+}

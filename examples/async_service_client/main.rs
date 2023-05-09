@@ -1,13 +1,12 @@
-use std::time::{Duration};
+use std::time::Duration;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{FutureExt, StreamExt};
-
+use futures::{FutureExt as StdFutureExt, StreamExt};
+use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping};
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
-
 
 // Test / demo program of ROS2 services, client side.
 //
@@ -69,34 +68,33 @@ fn main() {
   let main_loop = async {
     let mut run = true;
     let mut stop = stop_receiver.recv().fuse();
-    let mut tick_stream = 
-      futures::StreamExt::fuse(smol::Timer::interval(Duration::from_secs(2)));
+    let mut tick_stream = futures::StreamExt::fuse(smol::Timer::interval(Duration::from_secs(2)));
 
     while run {
       futures::select! {
         _ = stop => run = false,
-        resp = client.async_receive_response().fuse() => {
-          match resp {
-            // Note: This is not checking if the response was for our Request or for something else.
-            // We should check if the received req_if receives one we got on send.
-            Ok((_req_id, resp)) => println!("<<< {:?}", resp),
-            Err(e) => {
-              error!("{:?}",e);
-              break;
-            }
-          }
-        }
         _tick = tick_stream.select_next_some() => {
           request_generator += 3;
           let a = request_generator % 5;
           let b = request_generator % 7;
           match client.async_send_request(AddTwoIntsRequest { a, b }).await {
-            Ok(id) => {
-              println!(">>> request sent a={} b={}, {:?}", a, b, id);
+            Ok(req_id) => {
+              println!(">>> request sent a={} b={}, {:?}", a, b, req_id.sequence_number);
+              match
+                client.async_receive_response(req_id)
+                  .or(async {
+                        smol::Timer::after(Duration::from_secs(2)).await;
+                        Err(rustdds::dds::Error::MustBlock )
+                      }).await
+
+              {
+                Ok(response) => {
+                  println!("<<< response: {:?}", response);
+                }
+                Err(e) => println!("<<< response error {:?}", e),
+              }
             }
-            Err(e) => {
-              println!(">>> request sending error {:?}", e);
-            }            
+            Err(e) => println!(">>> request sending error {:?}", e),
           }
         }
       } // select!
@@ -105,7 +103,7 @@ fn main() {
   };
 
   // run it!
-  smol::block_on( main_loop );
+  smol::block_on(main_loop);
 }
 
 fn create_qos() -> QosPolicies {

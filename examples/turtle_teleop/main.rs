@@ -562,8 +562,10 @@ fn ros2_loop(
                     error!("Failed to send RotateAbsoluteGoal: {:?}", e);
                   }
                   Ok((req_id, ref goal_id)) => {
-                    info!("RotateAbsoluteGoal sent. req_id={:?}  goal_id={:?}", 
-                      req_id, goal_id);
+                    info!(
+                      "RotateAbsoluteGoal sent. req_id={:?}  goal_id={:?}",
+                      req_id, goal_id
+                    );
                     rotate_goal_req_id = Some(req_id);
                     rotate_goal_id = Some(goal_id.clone());
                   }
@@ -642,8 +644,8 @@ fn ros2_loop(
                   Ok(None) => {
                     // no more data to read
                     info!("ROTATE_ABSOLUTE_GOAL_RESPONSE no more data");
-                    break
-                  } 
+                    break;
+                  }
                   Err(e) => {
                     error!("Error receiveing RotateAbsolutegoal: {e}")
                   }
@@ -685,15 +687,13 @@ fn ros2_loop(
           }
         }
         ROTATE_ABSOLUTE_FEEDBACK_TOKEN => match rotate_goal_id {
-          Some(ref rotate_goal_id) => {
-            loop {
-              match rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
-                Ok(Some(f)) => info!("RotateAbsolute feedback = {:?}", f),
-                Ok(None) => break,
-                Err(e) => error!("Bad feedback: {:?}",e),
-              }
+          Some(ref rotate_goal_id) => loop {
+            match rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
+              Ok(Some(f)) => info!("RotateAbsolute feedback = {:?}", f),
+              Ok(None) => break,
+              Err(e) => error!("Bad feedback: {:?}", e),
             }
-          }
+          },
           None => info!("Feedback, but no goal!"),
         },
 

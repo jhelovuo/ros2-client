@@ -1,5 +1,4 @@
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
 use rustdds::{rpc::*, *};
 
 // This replicates SequenceNumber from DDS
