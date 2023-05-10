@@ -6,6 +6,18 @@ pub trait Message: Serialize + DeserializeOwned {}
 impl Message for () {}
 impl Message for String {}
 
+impl Message for i8 {}
+impl Message for i16 {}
+impl Message for i32 {}
+impl Message for i64 {}
+
+impl Message for u8 {}
+impl Message for u16 {}
+impl Message for u32 {}
+impl Message for u64 {}
+
+impl<T:Message> Message for Vec<T> {}
+
 pub struct MessageTypeName {
   //TODO: String is UTF-8, but ROS2 uses just ASCII
   ros2_package_name: String, // or shoudl theis ne "namespace"?

@@ -7,7 +7,7 @@ use builtin_interfaces::Time;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use futures::{Future, stream::{Stream, StreamExt, } };
+use futures::{Future, stream::{Stream, StreamExt, FusedStream} };
 
 use crate::{
   action_msgs, builtin_interfaces,
@@ -371,7 +371,8 @@ where
   }
 
   /// Receive asynchronous feedback stream of goal progress.
-  pub async fn feedback_stream(&self, goal_id: GoalId) -> impl Stream<Item = dds::Result<A::FeedbackType>> + '_
+  pub fn feedback_stream(&self, goal_id: GoalId) 
+    -> impl Stream<Item = dds::Result<A::FeedbackType>> + FusedStream + '_
   where
     <A as ActionTypes>::FeedbackType: 'static,
   {
@@ -382,10 +383,15 @@ where
           match result {
             Err(e) => Some(Err(e)),
             Ok((FeedbackMessage{ goal_id , feedback}, _msg_info)) =>
-              if goal_id == expected_goal_id { Some(Ok(feedback)) } else { None }    
+              if goal_id == expected_goal_id { 
+                Some(Ok(feedback)) 
+              } else { 
+                debug!("Feedback for some other {:?}.", goal_id);
+                None 
+              }    
           } 
         }
-      )
+      ).fuse() // fuse the result so that it can be polled without limit
   }
 
   /// Note: This does not take GoalId and will therefore report status of all
@@ -404,9 +410,12 @@ where
 
   /// Async Stream of status updates
   /// Action server send updates containing status of all goals, hence an array.
-  pub fn status_stream(&self) -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + '_ 
+  pub fn status_stream(&self) 
+    -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + FusedStream + '_ 
   {
-    self.my_status_subscription.async_stream().map( |result| result.map( |(gsa,_mi )| gsa ) )
+    self.my_status_subscription.async_stream()
+      .map( |result| result.map( |(gsa,_mi )| gsa ) )
+      .fuse()
   }
 
 } // impl

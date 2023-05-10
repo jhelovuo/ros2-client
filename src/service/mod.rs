@@ -422,10 +422,12 @@ where
       .await
       .map(RmwRequestId::from)?;
 
-    match self.service_mapping {
-      ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
-      ServiceMapping::Basic | ServiceMapping::Cyclone => Ok(gen_rmw_req_id),
-    }
+    let req_id = match self.service_mapping {
+      ServiceMapping::Enhanced => sent_rmw_req_id,
+      ServiceMapping::Basic | ServiceMapping::Cyclone => gen_rmw_req_id,
+    };
+    debug!("Sent Request {:?} to {:?}", req_id, self.request_sender.topic().name() );
+    Ok(req_id)
   }
 
   /// Receive a response from Server
@@ -453,7 +455,8 @@ where
           if req_id == request_id {
             return Ok(response);
           } else {
-            debug!("Received response for someone else.");
+            debug!("Received response for someone else. expected={:?}  received={:?}",
+              request_id, req_id );
             continue; //
           }
         }

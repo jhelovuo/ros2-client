@@ -85,14 +85,17 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
   pub async fn async_take(&self) -> dds::Result<(M, MessageInfo)> {
     let async_stream = self.datareader.as_async_stream();
     pin_mut!(async_stream);
-    let (item, _stream) = async_stream.into_future().await;
-    match item {
+    match async_stream.next().await {
       Some(Err(e)) => Err(e),
       Some(Ok(ds)) => Ok(dcc_to_value_and_messageinfo(ds)),
-      None => unimplemented!(), // This should be safe, because DataReader stream cannot end.
+      None => Err(dds::Error::Internal {
+                // Stream from SimpleDataReader is not supposed to ever end.
+                reason: "async_take(): SimpleDataReader value stream unexpectedly ended!".to_string(),
+              }), 
     }
   }
 
+  // Returns an async Stream of messages with MessageInfo metadata
   pub fn async_stream(&self) -> impl Stream<Item = dds::Result<(M, MessageInfo)>> + '_ {
     self.datareader.as_async_stream()
       .map(|result| result.map( dcc_to_value_and_messageinfo )) 
