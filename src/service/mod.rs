@@ -461,6 +461,11 @@ where
     } // loop
   }
 
+  pub async fn async_call_service(&self, request: S::Request) -> dds::Result<S::Response> {
+    let req_id = self.async_send_request(request).await?;
+    self.async_receive_response(req_id).await
+  }
+
   fn increment_sequence_number(&self) {
     self
       .sequence_number_gen

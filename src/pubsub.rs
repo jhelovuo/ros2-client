@@ -1,11 +1,10 @@
 use std::io;
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
-use futures::{pin_mut, stream::StreamExt};
+use futures::{pin_mut, stream::{Stream, StreamExt} };
 use rustdds::{rpc::SampleIdentity, *};
 use serde::{de::DeserializeOwned, Serialize};
 
-//use crate::action::*;
 
 /// A ROS2 Publisher
 ///
@@ -80,10 +79,7 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
   pub fn take(&self) -> dds::Result<Option<(M, MessageInfo)>> {
     self.datareader.drain_read_notifications();
     let ds: Option<no_key::DeserializedCacheChange<M>> = self.datareader.try_take_one()?;
-    Ok(ds.map(|ds| {
-      let mi = MessageInfo::from(&ds);
-      (ds.into_value(), mi)
-    }))
+    Ok(ds.map( dcc_to_value_and_messageinfo))
   }
 
   pub async fn async_take(&self) -> dds::Result<(M, MessageInfo)> {
@@ -92,17 +88,29 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
     let (item, _stream) = async_stream.into_future().await;
     match item {
       Some(Err(e)) => Err(e),
-      Some(Ok(ds)) => Ok({
-        let mi = MessageInfo::from(&ds);
-        (ds.into_value(), mi)
-      }),
+      Some(Ok(ds)) => Ok(dcc_to_value_and_messageinfo(ds)),
       None => unimplemented!(), // This should be safe, because DataReader stream cannot end.
     }
+  }
+
+  pub fn async_stream(&self) -> impl Stream<Item = dds::Result<(M, MessageInfo)>> + '_ {
+    self.datareader.as_async_stream()
+      .map(|result| result.map( dcc_to_value_and_messageinfo )) 
   }
 
   pub fn guid(&self) -> rustdds::GUID {
     self.datareader.guid()
   }
+}
+
+// helper
+#[inline]
+fn dcc_to_value_and_messageinfo<M>(dcc : no_key::DeserializedCacheChange<M>) -> (M, MessageInfo) 
+where
+  M: DeserializeOwned
+{
+  let mi = MessageInfo::from(&dcc);
+  (dcc.into_value(), mi) 
 }
 
 impl<D> Evented for Subscription<D>

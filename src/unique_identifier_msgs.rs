@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use crate::message::Message;
 
-#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
+// deriving also Copy here is a bit on the expensive side, but makes life easier
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub struct UUID {
   #[serde(with = "uuid::serde::compact")]
   pub uuid: Uuid,

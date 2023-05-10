@@ -7,6 +7,8 @@ use builtin_interfaces::Time;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
+use futures::{Future, stream::{Stream, StreamExt, } };
+
 use crate::{
   action_msgs, builtin_interfaces,
   message::Message,
@@ -232,6 +234,18 @@ where
     // been received already.
   }
 
+  pub async fn async_send_goal(&self,goal: A::GoalType) -> dds::Result<(GoalId, SendGoalResponse)>
+  where
+    <A as ActionTypes>::GoalType: 'static,
+  {
+    let goal_id = unique_identifier_msgs::UUID::new_random();
+    let send_goal_response = 
+      self.my_goal_client
+        .async_call_service(SendGoalRequest {
+          goal_id: goal_id.clone(), goal }).await?;
+    Ok( (goal_id, send_goal_response) )
+  }
+
   // From ROS2 docs:
   // https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.html
   //
@@ -266,8 +280,6 @@ where
     self.cancel_goal_raw(GoalId::ZERO, Time::ZERO)
   }
 
-  // TODO: The result type is ugly C++ typing. Rewrite to a proper enum, possibly
-  // in a higher-level library.
   pub fn receive_cancel_response(
     &self,
     cancel_request_id: RmwRequestId,
@@ -283,6 +295,15 @@ where
       }
     }
   }
+
+  pub fn async_cancel_goal(&self, goal_id: GoalId,timestamp: Time) -> impl Future<Output=dds::Result<CancelGoalResponse>> + '_ {
+    let goal_info = GoalInfo {
+      goal_id,
+      stamp: timestamp,
+    };
+    self.my_cancel_client.async_call_service(CancelGoalRequest { goal_info })
+  }
+
 
   pub fn request_result(&self, goal_id: GoalId) -> dds::Result<RmwRequestId>
   where
@@ -314,6 +335,19 @@ where
     }
   }
 
+  /// Asynchronously request goal result.
+  /// Result should be requested as soon as a goal is accepted.
+  /// Result ia actually received only when Server informs that the goal has either
+  /// Succeeded, or has been Canceled or Aborted.
+  pub async fn async_request_result(&self, goal_id: GoalId) -> dds::Result<(GoalStatusEnum, A::ResultType)>
+  where
+    <A as ActionTypes>::ResultType: 'static,
+  {
+    let GetResultResponse { status, result } = 
+      self.my_result_client.async_call_service(GetResultRequest { goal_id }).await?;
+    Ok( (status, result) )
+  }
+
   pub fn receive_feedback(&self, goal_id: GoalId) -> dds::Result<Option<A::FeedbackType>>
   where
     <A as ActionTypes>::FeedbackType: 'static,
@@ -336,6 +370,24 @@ where
     }
   }
 
+  /// Receive asynchronous feedback stream of goal progress.
+  pub async fn feedback_stream(&self, goal_id: GoalId) -> impl Stream<Item = dds::Result<A::FeedbackType>> + '_
+  where
+    <A as ActionTypes>::FeedbackType: 'static,
+  {
+    let expected_goal_id = goal_id; // rename
+    self.my_feedback_subscription.async_stream()
+      .filter_map( move
+        |result| async move {
+          match result {
+            Err(e) => Some(Err(e)),
+            Ok((FeedbackMessage{ goal_id , feedback}, _msg_info)) =>
+              if goal_id == expected_goal_id { Some(Ok(feedback)) } else { None }    
+          } 
+        }
+      )
+  }
+
   /// Note: This does not take GoalId and will therefore report status of all
   /// Goals.
   pub fn receive_status(&self) -> dds::Result<Option<action_msgs::GoalStatusArray>> {
@@ -344,6 +396,19 @@ where
       .take()
       .map(|r| r.map(|(gsa, _msg_info)| gsa))
   }
+
+  pub async fn async_receive_status(&self) -> dds::Result<action_msgs::GoalStatusArray> {
+    let (m, _msg_info) = self.my_status_subscription.async_take().await?;
+    Ok(m)
+  }
+
+  /// Async Stream of status updates
+  /// Action server send updates containing status of all goals, hence an array.
+  pub fn status_stream(&self) -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + '_ 
+  {
+    self.my_status_subscription.async_stream().map( |result| result.map( |(gsa,_mi )| gsa ) )
+  }
+
 } // impl
 
 // Example topic names and types at DDS level:
