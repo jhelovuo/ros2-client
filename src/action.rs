@@ -419,11 +419,19 @@ where
   }
 
   pub fn status_stream(&self, goal_id: GoalId) 
-    -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + FusedStream + '_ 
+    -> impl Stream<Item = dds::Result<action_msgs::GoalStatus>> + FusedStream + '_ 
   {
-    self.my_status_subscription.async_stream()
-      .map( |result| result.map( |(gsa,_mi )| gsa ) )
-      .fuse()
+    self.all_statuses_stream()
+      .filter_map( move |result| async move { 
+        match result {
+          Err(e) => Some(Err(e)),
+          Ok(gsa) => match gsa.status_list.into_iter().find(|gs| gs.goal_info.goal_id == goal_id) {
+            Some(gs) => Some(Ok(gs)),
+            None => None,
+          }
+        }
+      }
+    )
   }
 
 
@@ -570,25 +578,25 @@ where
 
 pub struct NewGoalHandle<G>
 {
-  inner: InnerGoalHandle<G>
+  #[allow(dead_code)] inner: InnerGoalHandle<G>
 }
 
 pub struct AcceptedGoalHandle<G>
 {
-  inner: InnerGoalHandle<G>
+  #[allow(dead_code)] inner: InnerGoalHandle<G>
 }
 
 pub struct ExecutingGoalHandle<G>
 {
-  inner: InnerGoalHandle<G>
+  #[allow(dead_code)] inner: InnerGoalHandle<G>
 }
 
 pub struct CancelingGoalHandle<G>
 {
-  inner: InnerGoalHandle<G>
+  #[allow(dead_code)] inner: InnerGoalHandle<G>
 }
 
-
+#[allow(dead_code)] 
 struct InnerGoalHandle<G>
 {
   goal_id: GoalId,
@@ -607,8 +615,7 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message, 
 {
-  actionserver: ActionServer<A>,
-
+  #[allow(dead_code)] actionserver: ActionServer<A>,
 }
 
 impl<A> AsyncActionServer<A>
@@ -636,7 +643,7 @@ where
 
   /// Convert a newly received goal into a accepted goal, i.e. accept it
   /// for execution later. Client will be notified of acceptance.
-  pub async fn accept_goal(&mut self, handle: NewGoalHandle<A::GoalType>) 
+  pub async fn accept_goal(&mut self, _handle: NewGoalHandle<A::GoalType>) 
     -> Result<AcceptedGoalHandle<A::GoalType>, GoalError>
   {
     todo!()
@@ -644,7 +651,7 @@ where
 
   /// Reject a received goal. Client will be notified of rejection.
   /// Server should not process the goal further.
-  pub async fn reject_goal(&mut self, handle: NewGoalHandle<A::GoalType>) 
+  pub async fn reject_goal(&mut self, _handle: NewGoalHandle<A::GoalType>) 
     -> Result<(), GoalError>
   {
     todo!()
@@ -652,34 +659,34 @@ where
 
   /// Convert an accepted goal into a execting goal, i.e. start the execution.
   /// Executing goal can publish feedback.
-  pub async fn start_executing_goal(&mut self, handle: AcceptedGoalHandle<A::GoalType>) 
+  pub async fn start_executing_goal(&mut self, _handle: AcceptedGoalHandle<A::GoalType>) 
     -> Result<ExecutingGoalHandle<A::GoalType>, GoalError>
   {
     todo!()
   }
 
   /// Publish feedback on how the execution is proceeding.
-  pub async fn publish_feedback(&self, handle: ExecutingGoalHandle<A::GoalType>,
-    feedback: A::FeedbackType
+  pub async fn publish_feedback(&self, _handle: ExecutingGoalHandle<A::GoalType>,
+    _feedback: A::FeedbackType
     ) -> Result<(), GoalError> {
     todo!()
   }
 
   /// NOtify Client that a goal was successfully reached and 
   /// what was the result of the action.
-  pub async fn succeed_goal(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result: A::ResultType) -> Result<(),GoalError> {
+  pub async fn succeed_goal(&mut self, _handle: ExecutingGoalHandle<A::GoalType>,
+    _result: A::ResultType) -> Result<(),GoalError> {
     todo!()
   }
 
 
   /// Abort goal execution, because action server has determined it
   /// cannot continue execution.
-  pub async fn abort_executing_goal(&mut self, handle: ExecutingGoalHandle<A::GoalType>)
+  pub async fn abort_executing_goal(&mut self, _handle: ExecutingGoalHandle<A::GoalType>)
     -> Result<(),GoalError> {
     todo!()
   }
-  pub async fn abort_accepted_goal(&mut self, handle: AcceptedGoalHandle<A::GoalType>) 
+  pub async fn abort_accepted_goal(&mut self, _handle: AcceptedGoalHandle<A::GoalType>) 
     -> Result<(),GoalError> {
     todo!()
   }
@@ -690,7 +697,6 @@ where
   /// to be cancelled can be currently at either accepted or executing state.
   pub async fn receive_cancel_request(&mut self)
     -> dds::Result<impl IntoIterator<Item=GoalId>> {
-    todo!();
     Ok(vec![])
   }
 
@@ -698,7 +704,7 @@ where
   /// The iterator of goals should list those GoalIds that will start canceling.
   /// For the other GoalIds, the cancel is not accepted ad they do not change
   /// their state.
-  pub async fn respond_to_cancel_requests(&mut self, goals: impl Iterator<Item=GoalId>)
+  pub async fn respond_to_cancel_requests(&mut self, _goals: impl Iterator<Item=GoalId>)
   {
     todo!() 
   }
