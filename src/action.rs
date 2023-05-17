@@ -410,13 +410,22 @@ where
 
   /// Async Stream of status updates
   /// Action server send updates containing status of all goals, hence an array.
-  pub fn status_stream(&self) 
+  pub fn all_statuses_stream(&self) 
     -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + FusedStream + '_ 
   {
     self.my_status_subscription.async_stream()
       .map( |result| result.map( |(gsa,_mi )| gsa ) )
       .fuse()
   }
+
+  pub fn status_stream(&self, goal_id: GoalId) 
+    -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + FusedStream + '_ 
+  {
+    self.my_status_subscription.async_stream()
+      .map( |result| result.map( |(gsa,_mi )| gsa ) )
+      .fuse()
+  }
+
 
 } // impl
 

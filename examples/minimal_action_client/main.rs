@@ -18,6 +18,12 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 //
 // Then run this example.
 
+// This is a ros2-client version of the ROS2 original example programs:
+// https://github.com/ros2/examples/blob/rolling/rclcpp/actions/minimal_action_client/member_functions.cpp
+// or 
+// https://github.com/ros2/examples/blob/rolling/rclpy/actions/minimal_action_client/examples_rclpy_minimal_action_client/client_asyncio.py
+//
+// Unlike the originals, this program loops and sends repatedly new action goals.
 
 // Original action definition
 // https://docs.ros2.org/latest/api/action_tutorials_interfaces/action/Fibonacci.html
@@ -29,7 +35,7 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 // int32[] partial_sequence
 
 
-// Rust version of action definition
+// Rust version of action type definition
 //
 // We define the action using standard/primitive types, but we could
 // just as well use e.g.
@@ -44,15 +50,12 @@ fn main() {
   // Set Ctrl-C handler
   let (stop_sender, stop_receiver) = smol::channel::bounded(2);
   ctrlc::set_handler(move || {
-    // We will send two stop coammnds, one for reader, the other for writer.
+    // We will send two stop commands, one for reader, the other for writer.
     stop_sender.send_blocking(()).unwrap_or(());
-    stop_sender.send_blocking(()).unwrap_or(());
-    // ignore errors, as we are quitting anyway
   })
-  .expect("Error setting Ctrl-C handler");
+    .expect("Error setting Ctrl-C handler");
   println!("Press Ctrl-C to quit.");
 
-  debug!(">>> ros2_service starting...");
   let mut node = create_node();
   let service_qos = create_qos();
 
@@ -72,16 +75,14 @@ fn main() {
       fibonacci_action_qos,
     )
     .unwrap();
-  debug!(">>> ros2 action client created");
 
-  let mut request_generator = 2;
+  let mut request_generator = 2; // initialize request generator
 
   let main_loop = async {
     let mut run = true;
     let mut stop = stop_receiver.recv().fuse();
 
-    
-    let mut tick_stream = // Send new Goal at every tick, if previous is not running.
+    let mut tick_stream = // Send new Goal at every tick, if previous one is not running.
       futures::StreamExt::fuse(smol::Timer::interval(Duration::from_secs(1)));
 
     while run {
@@ -95,7 +96,7 @@ fn main() {
           let order = request_generator; 
           println!(">>> Sending goal: {order}");
           // Send a goal for the action server.
-          // wait for the server to accept or reject the goal or timeout
+          // Wait for the server to accept or reject the goal or timeout
           match fibonacci_action_client.async_send_goal(order)
                 .or(async {
                   smol::Timer::after(Duration::from_secs(5)).await;
