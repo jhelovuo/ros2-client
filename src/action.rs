@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, btree_map::Entry};
 use std::marker::PhantomData;
 
 use rustdds::*;
@@ -578,12 +579,13 @@ where
 
 pub struct NewGoalHandle<G>
 {
-  #[allow(dead_code)] inner: InnerGoalHandle<G>
+  inner: InnerGoalHandle<G>,
+  req_id: RmwRequestId,
 }
 
 pub struct AcceptedGoalHandle<G>
 {
-  #[allow(dead_code)] inner: InnerGoalHandle<G>
+  inner: InnerGoalHandle<G>
 }
 
 pub struct ExecutingGoalHandle<G>
@@ -605,7 +607,14 @@ struct InnerGoalHandle<G>
 
 pub enum GoalError {
   NoSuchGoal,
-  AlreadyTerminated,
+  WrongGoalState,
+  DDSError(dds::Error),
+}
+
+impl From<dds::Error> for GoalError {
+  fn from(e: dds::Error) -> Self {
+    GoalError::DDSError(e)
+  }
 }
 
 pub struct AsyncActionServer<A>
@@ -615,7 +624,8 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message, 
 {
-  #[allow(dead_code)] actionserver: ActionServer<A>,
+  actionserver: ActionServer<A>,
+  goals: BTreeMap<GoalId,(GoalStatusEnum,A::GoalType)>,
 }
 
 impl<A> AsyncActionServer<A>
@@ -629,32 +639,99 @@ where
   {
     AsyncActionServer::<A>{
       actionserver,
+      goals: BTreeMap::new(),
     }
   }
 
   /// Reveice a new goal from an action client.
   /// Server should immediately either accept or reject the goal.
-  pub async fn receive_new_goal(&self) -> dds::Result<NewGoalHandle<A::GoalType>>
+  pub async fn receive_new_goal(&mut self) -> dds::Result<NewGoalHandle<A::GoalType>>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
-    todo!()
+    let (req_id, goal_id) =
+      loop {
+        let (req_id, goal_request) = 
+          self.actionserver.my_goal_server.async_receive_request().await?;
+        match self.goals.entry(goal_request.goal_id) {
+          e@Entry::Vacant(_) => {
+            e.or_insert( (GoalStatusEnum::Unknown, goal_request.goal) );
+            break (req_id, goal_request.goal_id)
+          }
+          Entry::Occupied(_) => {
+            error!("Received duplicate goal_id {:?} , req_id={:?}",
+              goal_request.goal_id, req_id);
+            continue // just discard this request
+          }
+        }
+      };
+    let inner = InnerGoalHandle {
+      goal_id,
+      phantom: PhantomData,
+    };
+    Ok( NewGoalHandle{ inner , req_id })
   }
 
   /// Convert a newly received goal into a accepted goal, i.e. accept it
   /// for execution later. Client will be notified of acceptance.
-  pub async fn accept_goal(&mut self, _handle: NewGoalHandle<A::GoalType>) 
+  pub async fn accept_goal(&mut self, handle: NewGoalHandle<A::GoalType>) 
     -> Result<AcceptedGoalHandle<A::GoalType>, GoalError>
+  where
+    A::GoalType: 'static,
   {
-    todo!()
+    match self.goals.entry(handle.inner.goal_id) {
+      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Occupied(o) => {
+        match o.get() {
+          (GoalStatusEnum::Unknown, _goal) => {
+            o.into_mut().0 = GoalStatusEnum::Accepted;
+            self.publish_statuses().await;
+            self.actionserver.my_goal_server
+              .send_response(handle.req_id, SendGoalResponse {
+                accepted: true,
+                stamp: builtin_interfaces::Time::now()
+              })?;
+            Ok( AcceptedGoalHandle{ inner: handle.inner} )
+          }
+          (wrong_status, _goal) => {
+            error!("Tried to accept goal {:?} but status was {:?}, expected Unknown.", 
+              handle.inner.goal_id, wrong_status);
+            Err(GoalError::WrongGoalState)
+          }
+        }
+      }
+    }
   }
 
   /// Reject a received goal. Client will be notified of rejection.
   /// Server should not process the goal further.
-  pub async fn reject_goal(&mut self, _handle: NewGoalHandle<A::GoalType>) 
+  pub async fn reject_goal(&mut self, handle: NewGoalHandle<A::GoalType>) 
     -> Result<(), GoalError>
+  where
+    A::GoalType: 'static,
   {
-    todo!()
+    match self.goals.entry(handle.inner.goal_id) {
+      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Occupied(o) => {
+        match o.get() {
+          (GoalStatusEnum::Unknown, _goal) => {
+            self.actionserver.my_goal_server
+              .send_response(handle.req_id, SendGoalResponse {
+                accepted: false,
+                stamp: builtin_interfaces::Time::now()
+              })?;
+            //o.into_mut().0 = GoalStatusEnum::Rejected; -- there is no such state
+            //self.publish_statuses().await; -- this is not reported
+            Ok(())
+          }
+          (wrong_status, _goal) => {
+            error!("Tried to reject goal {:?} but status was {:?}, expected Unknown.", 
+              handle.inner.goal_id, wrong_status);
+            Err(GoalError::WrongGoalState)
+          }
+        }
+      }
+    }
   }
 
   /// Convert an accepted goal into a execting goal, i.e. start the execution.
@@ -709,4 +786,9 @@ where
     todo!() 
   }
 
+  // This function is private, because all status publishing happens automatically
+  // via goal startus changes.
+  async fn publish_statuses(&self) {
+    todo!()
+  }
 }

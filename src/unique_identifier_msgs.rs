@@ -6,9 +6,9 @@ use uuid::Uuid;
 use crate::message::Message;
 
 // deriving also Copy here is a bit on the expensive side, but makes life easier
-#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
 pub struct UUID {
-  #[serde(with = "uuid::serde::compact")]
+  #[serde(with = "uuid::serde::compact")] // straightforward binary serialization, not text
   pub uuid: Uuid,
 }
 impl Message for UUID {}

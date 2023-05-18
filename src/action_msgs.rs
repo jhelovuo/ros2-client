@@ -16,7 +16,7 @@ impl Message for GoalInfo {}
 #[derive(Clone, Copy, Serialize_repr, Deserialize_repr, PartialEq, Debug)]
 #[repr(i8)]
 pub enum GoalStatusEnum {
-  Unknown = 0,
+  Unknown = 0, // Let's use this also for "New"
   Accepted = 1,
   Executing = 2,
   Canceling = 3,
