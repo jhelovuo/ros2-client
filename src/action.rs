@@ -89,11 +89,11 @@ pub struct ActionClientQosPolicies {
 }
 
 pub struct ActionServerQosPolicies {
-  pub(crate) goal_service: QosPolicies,
-  pub(crate) result_service: QosPolicies,
-  pub(crate) cancel_service: QosPolicies,
-  pub(crate) feedback_publisher: QosPolicies,
-  pub(crate) status_publisher: QosPolicies,
+  pub goal_service: QosPolicies,
+  pub result_service: QosPolicies,
+  pub cancel_service: QosPolicies,
+  pub feedback_publisher: QosPolicies,
+  pub status_publisher: QosPolicies,
 }
 
 /// Emulating ROS2 IDL code generator: Goal sending/setting service
@@ -576,35 +576,39 @@ where
   }
 } // impl
 
-
+#[derive(Clone,Copy)]
 pub struct NewGoalHandle<G>
 {
   inner: InnerGoalHandle<G>,
   req_id: RmwRequestId,
 }
 
+#[derive(Clone,Copy)]
 pub struct AcceptedGoalHandle<G>
 {
   inner: InnerGoalHandle<G>
 }
 
+#[derive(Clone,Copy)]
 pub struct ExecutingGoalHandle<G>
 {
-  #[allow(dead_code)] inner: InnerGoalHandle<G>
+  inner: InnerGoalHandle<G>
 }
 
+#[derive(Clone,Copy)]
 pub struct CancelingGoalHandle<G>
 {
-  #[allow(dead_code)] inner: InnerGoalHandle<G>
+  inner: InnerGoalHandle<G>
 }
 
-#[allow(dead_code)] 
+#[derive(Clone,Copy)]
 struct InnerGoalHandle<G>
 {
   goal_id: GoalId,
   phantom: PhantomData<G>,
 }
 
+#[derive(Debug)]
 pub enum GoalError {
   NoSuchGoal,
   WrongGoalState,
@@ -643,6 +647,10 @@ where
       goals: BTreeMap::new(),
       result_requests: BTreeMap::new(),
     }
+  }
+
+  pub fn get_new_goal(&self, handle: NewGoalHandle<A::GoalType>) -> Option<&A::GoalType> {
+    self.goals.get(&handle.inner.goal_id).map(|(_, ref g)| g)
   }
 
   /// Reveice a new goal from an action client.
