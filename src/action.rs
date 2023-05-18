@@ -837,31 +837,110 @@ where
 
   /// Abort goal execution, because action server has determined it
   /// cannot continue execution.
-  pub async fn abort_executing_goal(&mut self, _handle: ExecutingGoalHandle<A::GoalType>)
+  pub async fn abort_executing_goal(&mut self, handle: ExecutingGoalHandle<A::GoalType>)
     -> Result<(),GoalError> {
-    todo!()
+    self.abort_goal(handle.inner).await
   }
-  pub async fn abort_accepted_goal(&mut self, _handle: AcceptedGoalHandle<A::GoalType>) 
+  pub async fn abort_accepted_goal(&mut self, handle: AcceptedGoalHandle<A::GoalType>) 
     -> Result<(),GoalError> {
-    todo!()
+    self.abort_goal(handle.inner).await
+  }
+
+  async fn abort_goal(&mut self, handle: InnerGoalHandle<A::GoalType>)
+    -> Result<(),GoalError> {
+    match self.goals.entry(handle.goal_id) {
+      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Occupied(o) => {
+        match o.get() {
+          (GoalStatusEnum::Accepted, _goal) |
+          (GoalStatusEnum::Executing, _goal) => {
+            o.into_mut().0 = GoalStatusEnum::Aborted;
+            self.publish_statuses().await;
+            Ok( () )
+          }
+          (wrong_status, _goal) => {
+            error!("Tried to abort goal {:?} but status was {:?}, expected Accepted or Executing. ", 
+              handle.goal_id, wrong_status);
+            Err(GoalError::WrongGoalState)
+          }
+        }
+      }
+    }
+
   }
 
   /// Receive a set of cancel requests from the action client.
   /// The server should now respond either by accepting (some of) the
   /// cancel requests or rejecting all of them. The GoalIds that are requested
   /// to be cancelled can be currently at either accepted or executing state.
-  pub async fn receive_cancel_request(&mut self)
-    -> dds::Result<impl IntoIterator<Item=GoalId>> {
-    Ok(vec![])
+  pub async fn receive_cancel_request(&self)
+    -> dds::Result<(RmwRequestId, impl IntoIterator<Item=GoalId> + '_)> {
+    let (req_id, CancelGoalRequest { goal_info }) = 
+      self.actionserver.my_cancel_server.async_receive_request().await?;
+    let goal_filter : Box<dyn FnMut( &(&GoalId,&(GoalStatusEnum,A::GoalType)) ) -> bool> =
+      match goal_info {
+        GoalInfo {goal_id: GoalId::ZERO , stamp: builtin_interfaces::Time::ZERO } =>
+          Box::new(| (_,_) | { true }) ,
+
+        GoalInfo {goal_id: GoalId::ZERO , stamp: _ } =>
+          Box::new(| (_,_) | true), // TODO: Should check timestamp, but not yet implemented
+
+        GoalInfo { goal_id, stamp: builtin_interfaces::Time::ZERO } =>
+          Box::new(move |(g_id,_)| goal_id == **g_id) ,
+
+        GoalInfo { goal_id , stamp: _ } =>
+          Box::new(move |(g_id,_)| goal_id == **g_id) , // TODO: Should check timestamp, but not yet implemented
+      };
+    
+    // TODO:
+    // Should check if the specified GoalId was unknown to us
+    // or already termianted.
+    // In those case outright send a negative response and not return to the application.
+
+    Ok( 
+      ( req_id,  
+        self.goals.iter()
+          // only consider goals with status Executing or Accepted for Cancel
+          .filter(  |(_,(status,_))| 
+                      { *status == GoalStatusEnum::Executing 
+                        || *status == GoalStatusEnum::Accepted
+                      } )
+          // and then filter those that were specified by the cancel request
+          .filter(goal_filter).map(|p| *p.0)
+      )
+    )
   }
 
   /// Respond to action client's cancel requests.
   /// The iterator of goals should list those GoalIds that will start canceling.
-  /// For the other GoalIds, the cancel is not accepted ad they do not change
+  /// For the other GoalIds, the cancel is not accepted and they do not change
   /// their state.
-  pub async fn respond_to_cancel_requests(&mut self, _goals: impl Iterator<Item=GoalId>)
+  pub async fn respond_to_cancel_requests(&mut self, 
+    req_id: RmwRequestId, 
+    goals: impl Iterator<Item=GoalId>) -> dds::Result<()>
   {
-    todo!() 
+    let canceling_goals : Vec<GoalInfo> = goals
+      .filter_map(|goal_id| 
+        self.goals.get(&goal_id)
+          .map(|(_,_)| GoalInfo{ 
+            goal_id,
+            // TODO: Insert actual timestamp when implemented
+            stamp: builtin_interfaces::Time::ZERO }
+          )
+        )
+      .collect();
+
+    let response = action_msgs::CancelGoalResponse {
+      return_code: if canceling_goals.is_empty() {
+          action_msgs::CancelGoalResponseEnum::Rejected
+        } else { 
+          action_msgs::CancelGoalResponseEnum::None // i.e. no error
+        },
+      goals_canceling: canceling_goals, 
+
+    };
+    self.actionserver.my_cancel_server
+      .async_send_response(req_id, response).await
   }
 
   // This function is private, because all status publishing happens automatically

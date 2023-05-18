@@ -76,7 +76,7 @@ pub enum CancelGoalResponseEnum {
 /// From [CancelGoal](https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.html)
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CancelGoalResponse {
-  return_code: CancelGoalResponseEnum,
-  goals_canceling: Vec<GoalInfo>,
+  pub return_code: CancelGoalResponseEnum,
+  pub goals_canceling: Vec<GoalInfo>,
 }
 impl Message for CancelGoalResponse {}
