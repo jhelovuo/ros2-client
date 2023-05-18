@@ -626,6 +626,7 @@ where
 {
   actionserver: ActionServer<A>,
   goals: BTreeMap<GoalId,(GoalStatusEnum,A::GoalType)>,
+  result_requests: BTreeMap<GoalId, RmwRequestId>,
 }
 
 impl<A> AsyncActionServer<A>
@@ -640,6 +641,7 @@ where
     AsyncActionServer::<A>{
       actionserver,
       goals: BTreeMap::new(),
+      result_requests: BTreeMap::new(),
     }
   }
 
@@ -736,24 +738,100 @@ where
 
   /// Convert an accepted goal into a execting goal, i.e. start the execution.
   /// Executing goal can publish feedback.
-  pub async fn start_executing_goal(&mut self, _handle: AcceptedGoalHandle<A::GoalType>) 
+  pub async fn start_executing_goal(&mut self, handle: AcceptedGoalHandle<A::GoalType>) 
     -> Result<ExecutingGoalHandle<A::GoalType>, GoalError>
   {
-    todo!()
+    match self.goals.entry(handle.inner.goal_id) {
+      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Occupied(o) => {
+        match o.get() {
+          (GoalStatusEnum::Accepted, _goal) => {
+            o.into_mut().0 = GoalStatusEnum::Executing;
+            self.publish_statuses().await;
+            Ok( ExecutingGoalHandle{ inner: handle.inner} )
+          }
+          (wrong_status, _goal) => {
+            error!("Tried to execute goal {:?} but status was {:?}, expected Accepted.", 
+              handle.inner.goal_id, wrong_status);
+            Err(GoalError::WrongGoalState)
+          }
+        }
+      }
+    }
   }
 
   /// Publish feedback on how the execution is proceeding.
-  pub async fn publish_feedback(&self, _handle: ExecutingGoalHandle<A::GoalType>,
-    _feedback: A::FeedbackType
+  pub async fn publish_feedback(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    feedback: A::FeedbackType
     ) -> Result<(), GoalError> {
-    todo!()
+    match self.goals.entry(handle.inner.goal_id) {
+      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Occupied(o) => {
+        match o.get() {
+          (GoalStatusEnum::Executing, _goal) => {
+            self.actionserver.send_feedback( handle.inner.goal_id, feedback )?;
+            Ok( () )
+          }
+          (wrong_status, _goal) => {
+            error!("Tried publish feedback on goal {:?} but status was {:?}, expected Executing.", 
+              handle.inner.goal_id, wrong_status);
+            Err(GoalError::WrongGoalState)
+          }
+        }
+      }
+    }
   }
 
-  /// NOtify Client that a goal was successfully reached and 
+  /// Notify Client that a goal was successfully reached and 
   /// what was the result of the action.
-  pub async fn succeed_goal(&mut self, _handle: ExecutingGoalHandle<A::GoalType>,
-    _result: A::ResultType) -> Result<(),GoalError> {
-    todo!()
+  pub async fn succeed_goal(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result: A::ResultType) -> Result<(),GoalError>
+  where
+    A::ResultType: 'static,
+  {
+    // First, we must get a result request.
+    // It may already have been read or not.
+    // We will read these into a buffer, because there may be requests for
+    // other goals' results also.
+    let req_id = 
+      match self.result_requests.get( &handle.inner.goal_id ) {
+        Some(req_id) => *req_id,
+        None => {
+          loop {
+            // result request was not yet here. Keep receiving until we get it.
+            let (req_id, GetResultRequest{ goal_id } ) = 
+              self.actionserver.my_result_server.async_receive_request().await?;
+            if goal_id == handle.inner.goal_id {
+              break req_id
+            } else {
+              self.result_requests.insert(goal_id, req_id);
+              // and loop to wait for the next
+            }
+          }  
+        }
+      };
+
+    match self.goals.entry(handle.inner.goal_id) {
+      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Occupied(o) => {
+        match o.get() {
+          (GoalStatusEnum::Executing, _goal) => {
+            o.into_mut().0 = GoalStatusEnum::Succeeded;
+            self.publish_statuses().await;
+            self.actionserver.send_result(
+              req_id, 
+              GetResultResponse{ status: GoalStatusEnum::Succeeded , result 
+            })?;
+            Ok( () )
+          }
+          (wrong_status, _goal) => {
+            error!("Tried to succeed goal {:?} but status was {:?}, expected Executing.", 
+              handle.inner.goal_id, wrong_status);
+            Err(GoalError::WrongGoalState)
+          }
+        }
+      }
+    }
   }
 
 
@@ -789,6 +867,16 @@ where
   // This function is private, because all status publishing happens automatically
   // via goal startus changes.
   async fn publish_statuses(&self) {
-    todo!()
+    self.actionserver.send_goal_statuses( action_msgs::GoalStatusArray {
+      status_list: self.goals.iter().map( 
+        |(goal_id, (status,_goal))|
+        action_msgs::GoalStatus {
+          status: *status,
+          goal_info: 
+            GoalInfo {goal_id: *goal_id, stamp: builtin_interfaces::Time::ZERO } ,
+            // TODO: Store and report actual goal acceptance time.
+        }
+      ).collect()
+    }).unwrap_or_else( |e| error!("AsyncActionServer::publish_statuses: {:?}",e) );
   }
 }

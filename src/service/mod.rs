@@ -3,7 +3,7 @@ use std::{io, marker::PhantomData, sync::atomic};
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{pin_mut, Stream, StreamExt};
+use futures::{pin_mut, Stream, StreamExt, stream::FusedStream};
 use rustdds::{rpc::*, *};
 
 use crate::{message::Message, node::Node, pubsub::MessageInfo};
@@ -223,7 +223,7 @@ where
   /// request and response belong together.
   pub fn receive_request_stream(
     &self,
-  ) -> impl Stream<Item = dds::Result<(RmwRequestId, S::Request)>> + '_ {
+  ) -> impl Stream<Item = dds::Result<(RmwRequestId, S::Request)>> + FusedStream + '_ {
     Box::pin(self.request_receiver.as_async_stream()).then(
       move |dcc_r| async move {
         match dcc_r {
@@ -235,7 +235,7 @@ where
           }
         } // match
       }, // async
-    )
+    ).fuse()
   }
 
   /// Asynchronous response sending
