@@ -74,13 +74,13 @@ fn main() {
     )
     .unwrap());
 
+  let loop_rate = Duration::from_secs(1);
+
   let main_loop = async {
     let mut run = true;
     let mut stop = stop_receiver.recv().fuse();
 
-    // let mut tick_stream = // Send new Goal at every tick, if previous one is not running.
-    //   futures::StreamExt::fuse(smol::Timer::interval(Duration::from_secs(1)));
-
+    info!("Entering main loop");
     while run {
       futures::select! {
         _ = stop => run = false,
@@ -90,27 +90,38 @@ fn main() {
             Err(e) => println!("Goal receive failed: {:?}",e),
             Ok(new_goal_handle) => {
               let fib_order = usize::try_from( *fibonacci_action_server.get_new_goal(new_goal_handle).unwrap()).unwrap();
+              info!("New goal. order={fib_order}");
               if  fib_order < 1 || fib_order > 25 {
                 fibonacci_action_server.reject_goal(new_goal_handle).await.unwrap();
               } else {
                 // goal seems fine, let's go
                 let accepted_goal = 
                   fibonacci_action_server.accept_goal(new_goal_handle).await.unwrap();
+                info!("Goal accepted. order={fib_order}");
                 let executing_goal =
                   fibonacci_action_server.start_executing_goal(accepted_goal).await.unwrap();
                 let mut fib = Vec::with_capacity( fib_order );
                 fib.push(0); // F_0
                 fib.push(1); // F_1
                 for i in 2..=fib_order {
+                  //TODO: check if goal has been canceled
+
+                  // Update sequence
                   fib.push( fib[i-2] + fib[i-1]);
-                  smol::Timer::interval(Duration::from_secs(1)).await; // some computation delay
+                  // Publish feedback
                   fibonacci_action_server.publish_feedback(executing_goal, fib.clone()).await.unwrap();
-                }
+                  info!("Publish feedback");
+
+                  smol::Timer::interval(loop_rate).await; // some computation delay
+                } // for
+
+                // goal complete
+                fibonacci_action_server.succeed_goal(executing_goal, fib).await.unwrap();
+                info!("Goal succeeded. order={fib_order}");
               }
             }
           }
         }
-
 
       } // select!
     } // while

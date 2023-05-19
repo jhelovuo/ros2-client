@@ -106,61 +106,64 @@ fn main() {
           {
             Ok((goal_id, goal_response)) => {
               // Server responded to goal request.
-              // Here we should check if goal_response indicates accepted or not, but
-              // for simplificity we jut print it.
               println!("<<< Goal Response={:?} goal_id={:?}", goal_response, goal_id);
-              // Now that we have a goal, we can ask for a result, feedback, and status.
-              let feedback_stream = 
-                fibonacci_action_client.feedback_stream(goal_id);
-              pin_mut!(feedback_stream);
-              let status_stream = fibonacci_action_client.status_stream();
-              pin_mut!(status_stream);
-              let mut goal_finish_timeout = 
-                futures::FutureExt::fuse(smol::Timer::interval(Duration::from_secs(30)));
+              if goal_response.accepted {
+                // Now that we have a goal, we can ask for a result, feedback, and status.
+                let feedback_stream = 
+                  fibonacci_action_client.feedback_stream(goal_id);
+                pin_mut!(feedback_stream);
+                let status_stream = fibonacci_action_client.all_statuses_stream();
+                pin_mut!(status_stream);
+                let mut goal_finish_timeout = 
+                  futures::FutureExt::fuse(smol::Timer::interval(Duration::from_secs(30)));
 
-              let mut goal_done = false;
+                let mut goal_done = false;
 
-              while ! goal_done {
-              futures::select! {
-                  _ = stop => { run = false; goal_done=true; },
+                while ! goal_done {
+                futures::select! {
+                    _ = stop => { run = false; goal_done=true; },
 
-                  _ = goal_finish_timeout => {
-                    goal_done=true;
-                    println!("Goal execution timeout. {:?}", goal_id);
-                  }
+                    _ = goal_finish_timeout => {
+                      goal_done=true;
+                      println!("Goal execution timeout. {:?}", goal_id);
+                    }
 
-                  // get action result
-                  action_result = fibonacci_action_client.async_request_result(goal_id)
-                                  .fuse() => {
-                    goal_done = true;
-                    match action_result {
-                      Ok((goal_status, result)) => {
-                        println!("<<< Action Result: {:?} Status: {:?}", result, goal_status);
+                    // get action result
+                    action_result = fibonacci_action_client.async_request_result(goal_id)
+                                    .fuse() => {
+                      goal_done = true;
+                      match action_result {
+                        Ok((goal_status, result)) => {
+                          println!("<<< Action Result: {:?} Status: {:?}", result, goal_status);
+                        }
+                        Err(e) => println!("<<< Action Result error {:?}", e),
                       }
-                      Err(e) => println!("<<< Action Result error {:?}", e),
+                      println!("\n");
                     }
-                    println!("\n");
-                  }
 
-                  // get action feedback
-                  feedback = feedback_stream.select_next_some() => {
-                    println!("<<< Feedback: {:?}", feedback);
-                  }
-
-                  // get action status changes
-                  status = status_stream.select_next_some() => {
-                    print!("<<< Status: ");
-                    match status {
-                      Ok(status) => 
-                        match status.status_list.iter().find(|gs| gs.goal_info.goal_id == goal_id) {
-                          Some(action_msgs::GoalStatus{goal_info:_, status}) => println!("{:?}",status),
-                          None => println!("Our status misssing!"),
-                        },
-                      Err(e) => println!("{:?}",e),
+                    // get action feedback
+                    feedback = feedback_stream.select_next_some() => {
+                      println!("<<< Feedback: {:?}", feedback);
                     }
-                  }
-                } // select!
-              } // while goal not done
+
+                    // get action status changes
+                    status = status_stream.select_next_some() => {
+                      print!("<<< Status: ");
+                      match status {
+                        Ok(status) => 
+                          match status.status_list.iter().find(|gs| gs.goal_info.goal_id == goal_id) {
+                            Some(action_msgs::GoalStatus{goal_info:_, status}) => println!("{:?}",status),
+                            None => println!("Our status misssing!"),
+                          },
+                        Err(e) => println!("{:?}",e),
+                      }
+                    }
+                  } // select!
+                } // while goal not done
+              } else {
+                println!("!!! Goal was not accepted. Sulking for a moment.");
+                smol::Timer::after(Duration::from_secs(5)).await;
+              }
             } // Ok(..)
             Err(e) => println!("<<< Goal send error {:?}", e),
           } // match
