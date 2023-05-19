@@ -3,7 +3,7 @@ use std::{io, marker::PhantomData, sync::atomic};
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{pin_mut, Stream, StreamExt};
+use futures::{pin_mut, Stream, StreamExt, stream::FusedStream};
 use rustdds::{rpc::*, *};
 
 use crate::{message::Message, node::Node, pubsub::MessageInfo};
@@ -223,7 +223,7 @@ where
   /// request and response belong together.
   pub fn receive_request_stream(
     &self,
-  ) -> impl Stream<Item = dds::Result<(RmwRequestId, S::Request)>> + '_ {
+  ) -> impl Stream<Item = dds::Result<(RmwRequestId, S::Request)>> + FusedStream + '_ {
     Box::pin(self.request_receiver.as_async_stream()).then(
       move |dcc_r| async move {
         match dcc_r {
@@ -235,7 +235,7 @@ where
           }
         } // match
       }, // async
-    )
+    ).fuse()
   }
 
   /// Asynchronous response sending
@@ -422,10 +422,12 @@ where
       .await
       .map(RmwRequestId::from)?;
 
-    match self.service_mapping {
-      ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
-      ServiceMapping::Basic | ServiceMapping::Cyclone => Ok(gen_rmw_req_id),
-    }
+    let req_id = match self.service_mapping {
+      ServiceMapping::Enhanced => sent_rmw_req_id,
+      ServiceMapping::Basic | ServiceMapping::Cyclone => gen_rmw_req_id,
+    };
+    debug!("Sent Request {:?} to {:?}", req_id, self.request_sender.topic().name() );
+    Ok(req_id)
   }
 
   /// Receive a response from Server
@@ -453,12 +455,18 @@ where
           if req_id == request_id {
             return Ok(response);
           } else {
-            debug!("Received response for someone else.");
+            debug!("Received response for someone else. expected={:?}  received={:?}",
+              request_id, req_id );
             continue; //
           }
         }
       }
     } // loop
+  }
+
+  pub async fn async_call_service(&self, request: S::Request) -> dds::Result<S::Response> {
+    let req_id = self.async_send_request(request).await?;
+    self.async_receive_response(req_id).await
   }
 
   fn increment_sequence_number(&self) {
