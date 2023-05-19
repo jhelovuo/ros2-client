@@ -14,11 +14,8 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 // Test / demo program of ROS2 Action, server side.
 //
-// To set up a server from ROS2:
 //
-// ....
-//
-// Then run this example.
+// Run this example and start a client example program from ROS2.
 
 
 
@@ -44,6 +41,9 @@ type FibonacciAction = action::Action<i32, Vec<i32>, Vec<i32>>;
 
 fn main() {
   pretty_env_logger::init();
+  // Use e.g.
+  // % export RUST_LOG=warn,ros2_client=debug,minimal_action_server=debug
+  // to see what is going on.
 
   // Set Ctrl-C handler
   let (stop_sender, stop_receiver) = smol::channel::bounded(2);
@@ -55,14 +55,32 @@ fn main() {
   println!("Press Ctrl-C to quit.");
 
   let mut node = create_node();
-  let service_qos = create_qos();
+
+  let service_qos: QosPolicies = {
+    QosPolicyBuilder::new()
+      .reliability(policy::Reliability::Reliable {
+        max_blocking_time: rustdds::Duration::from_millis(100),
+      })
+      .history(policy::History::KeepLast { depth: 1 })
+      .build()
+  };
+
+  let publisher_qos : QosPolicies = {
+    QosPolicyBuilder::new()
+      .reliability(policy::Reliability::Reliable {
+        max_blocking_time: rustdds::Duration::from_millis(100),
+      })
+      .history(policy::History::KeepLast { depth: 1 })
+      .durability(policy::Durability::TransientLocal)
+      .build()
+  };
 
   let fibonacci_action_qos = action::ActionServerQosPolicies {
     goal_service: service_qos.clone(),
     result_service: service_qos.clone(),
     cancel_service: service_qos.clone(),
-    feedback_publisher: service_qos.clone(),
-    status_publisher: service_qos.clone(),
+    feedback_publisher: publisher_qos.clone(),
+    status_publisher: publisher_qos.clone(),
   };
 
   let mut fibonacci_action_server = action::AsyncActionServer::new(node
@@ -100,11 +118,11 @@ fn main() {
                 info!("Goal accepted. order={fib_order}");
                 let executing_goal =
                   fibonacci_action_server.start_executing_goal(accepted_goal).await.unwrap();
+                let mut goal_canceled = false;
                 let mut fib = Vec::with_capacity( fib_order );
                 fib.push(0); // F_0
                 fib.push(1); // F_1
                 for i in 2..=fib_order {
-                  //TODO: check if goal has been canceled
 
                   // Update sequence
                   fib.push( fib[i-2] + fib[i-1]);
@@ -112,12 +130,37 @@ fn main() {
                   fibonacci_action_server.publish_feedback(executing_goal, fib.clone()).await.unwrap();
                   info!("Publish feedback");
 
-                  smol::Timer::interval(loop_rate).await; // some computation delay
+                  // add some delay, also check for causes to stop
+                  futures::select! {
+                    _ = stop => {run = false; break }
+                    _ = smol::Timer::interval(loop_rate).fuse() => (),
+                    cancel_handle = fibonacci_action_server.receive_cancel_request().fuse() => {
+                      let cancel_handle = cancel_handle.unwrap();
+                      let my_goal = executing_goal.goal_id();
+                      if cancel_handle.contains_goal(&my_goal) {
+                        info!("Got cancel request!");
+                        fibonacci_action_server
+                          .respond_to_cancel_requests(&cancel_handle, std::iter::once(my_goal))
+                          .await
+                          .unwrap();
+                        goal_canceled = true;
+                        break
+                      } else {
+                        info!("Received a cancel request for some other goals.");
+                      }
+                    }
+                  }
                 } // for
 
-                // goal complete
-                fibonacci_action_server.succeed_goal(executing_goal, fib).await.unwrap();
-                info!("Goal succeeded. order={fib_order}");
+                if goal_canceled {
+                  // We need to return a result in case of cancel too.
+                  fibonacci_action_server.send_canceled_result(executing_goal, fib).await.unwrap();
+                  info!("Goal termianted because of cancel.");
+                } else {
+                  // goal complete
+                  fibonacci_action_server.send_succeeded_result(executing_goal, fib).await.unwrap();
+                  info!("Goal succeeded. order={fib_order}");
+                }
               }
             }
           }
@@ -132,23 +175,11 @@ fn main() {
   smol::block_on(main_loop);
 }
 
-fn create_qos() -> QosPolicies {
-  let service_qos: QosPolicies = {
-    QosPolicyBuilder::new()
-      .reliability(policy::Reliability::Reliable {
-        max_blocking_time: rustdds::Duration::from_millis(100),
-      })
-      .history(policy::History::KeepLast { depth: 1 })
-      .build()
-  };
-  service_qos
-}
-
 fn create_node() -> Node {
   let context = Context::new().unwrap();
   let node = context
     .new_node(
-      "rustdds_client",
+      "minimal_action_server",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )

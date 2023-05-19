@@ -583,10 +583,22 @@ pub struct NewGoalHandle<G>
   req_id: RmwRequestId,
 }
 
+impl<G> NewGoalHandle<G> {
+  pub fn goal_id(&self) -> GoalId {
+    self.inner.goal_id
+  }
+}
+
 #[derive(Clone,Copy)]
 pub struct AcceptedGoalHandle<G>
 {
   inner: InnerGoalHandle<G>
+}
+
+impl<G> AcceptedGoalHandle<G> {
+  pub fn goal_id(&self) -> GoalId {
+    self.inner.goal_id
+  }
 }
 
 #[derive(Clone,Copy)]
@@ -595,10 +607,10 @@ pub struct ExecutingGoalHandle<G>
   inner: InnerGoalHandle<G>
 }
 
-#[derive(Clone,Copy)]
-pub struct CancelingGoalHandle<G>
-{
-  inner: InnerGoalHandle<G>
+impl<G> ExecutingGoalHandle<G> {
+  pub fn goal_id(&self) -> GoalId {
+    self.inner.goal_id
+  }
 }
 
 #[derive(Clone,Copy)]
@@ -607,6 +619,22 @@ struct InnerGoalHandle<G>
   goal_id: GoalId,
   phantom: PhantomData<G>,
 }
+
+
+pub struct CancelHandle {
+  req_id: RmwRequestId,
+  goals: Vec<GoalId>,  
+}
+
+impl CancelHandle {
+  pub fn goals(&self) -> impl Iterator< Item=GoalId > + '_ {
+    self.goals.iter().cloned()
+  }
+  pub fn contains_goal(&self, goal_id: &GoalId) -> bool {
+    self.goals.contains(goal_id)
+  }
+}
+
 
 #[derive(Debug)]
 pub enum GoalError {
@@ -790,9 +818,43 @@ where
     }
   }
 
+
   /// Notify Client that a goal was successfully reached and 
   /// what was the result of the action.
-  pub async fn succeed_goal(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+  pub async fn send_succeeded_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result: A::ResultType) -> Result<(),GoalError>
+  where
+    A::ResultType: 'static,
+  {
+    self.send_result_response(handle, GoalStatusEnum::Succeeded, result).await
+  }
+
+  /// Notify Client that a goal was successfully reached and 
+  /// what was the result of the action.
+  // TODO: It is a bit silly that we have to supply a "result" even though
+  // goal got canceled. But we have to send something in the ResultResponse.
+  // And where does it say that result is not significant if cancelled or aborted?
+  pub async fn send_canceled_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result: A::ResultType) -> Result<(),GoalError>
+  where
+    A::ResultType: 'static,
+  {
+    self.send_result_response(handle, GoalStatusEnum::Canceled, result).await
+  }
+
+  /// Notify Client that a goal was successfully reached and 
+  /// what was the result of the action.
+  pub async fn send_aborted_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result: A::ResultType) -> Result<(),GoalError>
+  where
+    A::ResultType: 'static,
+  {
+    self.send_result_response(handle, GoalStatusEnum::Aborted, result).await
+  }
+
+  // result_status should be either Succeded, Cacneled, or Aborted
+  async fn send_result_response(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result_status: GoalStatusEnum, 
     result: A::ResultType) -> Result<(),GoalError>
   where
     A::ResultType: 'static,
@@ -823,17 +885,19 @@ where
       Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Executing, _goal) => {
-            o.into_mut().0 = GoalStatusEnum::Succeeded;
+          (GoalStatusEnum::Accepted, _  ) | // Accepted goal can be canceled or aborted
+          (GoalStatusEnum::Executing, _ ) |
+          (GoalStatusEnum::Canceling, _ ) => {
+            o.into_mut().0 = result_status;
             self.publish_statuses().await;
             self.actionserver.send_result(
               req_id, 
-              GetResultResponse{ status: GoalStatusEnum::Succeeded , result 
-            })?;
+              GetResultResponse{ status: result_status , result }
+            )?;
             Ok( () )
           }
-          (wrong_status, _goal) => {
-            error!("Tried to succeed goal {:?} but status was {:?}, expected Executing.", 
+          (wrong_status, _ ) => {
+            error!("Tried to finish goal {:?} but status was {:?}.", 
               handle.inner.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
           }
@@ -882,7 +946,7 @@ where
   /// cancel requests or rejecting all of them. The GoalIds that are requested
   /// to be cancelled can be currently at either accepted or executing state.
   pub async fn receive_cancel_request(&self)
-    -> dds::Result<(RmwRequestId, impl IntoIterator<Item=GoalId> + '_)> {
+    -> dds::Result<CancelHandle> {
     let (req_id, CancelGoalRequest { goal_info }) = 
       self.actionserver.my_cancel_server.async_receive_request().await?;
     let goal_filter : Box<dyn FnMut( &(&GoalId,&(GoalStatusEnum,A::GoalType)) ) -> bool> =
@@ -904,9 +968,9 @@ where
     // Should check if the specified GoalId was unknown to us
     // or already termianted.
     // In those case outright send a negative response and not return to the application.
-
-    Ok( 
-      ( req_id,  
+    let cancel_handle = CancelHandle {
+      req_id,
+      goals:
         self.goals.iter()
           // only consider goals with status Executing or Accepted for Cancel
           .filter(  |(_,(status,_))| 
@@ -915,8 +979,10 @@ where
                       } )
           // and then filter those that were specified by the cancel request
           .filter(goal_filter).map(|p| *p.0)
-      )
-    )
+          .collect()
+    };
+
+    Ok(cancel_handle)
   }
 
   /// Respond to action client's cancel requests.
@@ -924,10 +990,10 @@ where
   /// For the other GoalIds, the cancel is not accepted and they do not change
   /// their state.
   pub async fn respond_to_cancel_requests(&mut self, 
-    req_id: RmwRequestId, 
-    goals: impl Iterator<Item=GoalId>) -> dds::Result<()>
+    cancel_handle: &CancelHandle, 
+    goals_to_cancel: impl Iterator<Item=GoalId>) -> dds::Result<()>
   {
-    let canceling_goals : Vec<GoalInfo> = goals
+    let canceling_goals : Vec<GoalInfo> = goals_to_cancel
       .filter_map(|goal_id| 
         self.goals.get(&goal_id)
           .map(|(_,_)| GoalInfo{ 
@@ -938,6 +1004,11 @@ where
         )
       .collect();
 
+    for goal_info in &canceling_goals {
+      self.goals.entry(goal_info.goal_id).and_modify(|gg| gg.0 = GoalStatusEnum::Canceling );
+    }
+    self.publish_statuses().await;
+
     let response = action_msgs::CancelGoalResponse {
       return_code: if canceling_goals.is_empty() {
           action_msgs::CancelGoalResponseEnum::Rejected
@@ -947,8 +1018,9 @@ where
       goals_canceling: canceling_goals, 
 
     };
+
     self.actionserver.my_cancel_server
-      .async_send_response(req_id, response).await
+      .async_send_response(cancel_handle.req_id , response).await
   }
 
   // This function is private, because all status publishing happens automatically
