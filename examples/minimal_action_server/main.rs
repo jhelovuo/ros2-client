@@ -118,6 +118,7 @@ fn main() {
                 info!("Goal accepted. order={fib_order}");
                 let executing_goal =
                   fibonacci_action_server.start_executing_goal(accepted_goal).await.unwrap();
+
                 let mut goal_canceled = false;
                 let mut fib = Vec::with_capacity( fib_order );
                 fib.push(0); // F_0
@@ -154,11 +155,15 @@ fn main() {
 
                 if goal_canceled {
                   // We need to return a result in case of cancel too.
-                  fibonacci_action_server.send_canceled_result(executing_goal, fib).await.unwrap();
+                  fibonacci_action_server
+                    .send_result_response(executing_goal, action::GoalEndStatus::Canceled, fib)
+                    .await.unwrap();
                   info!("Goal termianted because of cancel.");
                 } else {
                   // goal complete
-                  fibonacci_action_server.send_succeeded_result(executing_goal, fib).await.unwrap();
+                  fibonacci_action_server
+                    .send_result_response(executing_goal, action::GoalEndStatus::Succeeded, fib)
+                    .await.unwrap();
                   info!("Goal succeeded. order={fib_order}");
                 }
               }

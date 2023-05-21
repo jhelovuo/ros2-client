@@ -637,6 +637,13 @@ impl CancelHandle {
 
 
 #[derive(Debug)]
+pub enum GoalEndStatus {
+  Succeeded,
+  Aborted,
+  Canceled,
+}
+
+#[derive(Debug)]
 pub enum GoalError {
   NoSuchGoal,
   WrongGoalState,
@@ -712,6 +719,8 @@ where
 
   /// Convert a newly received goal into a accepted goal, i.e. accept it
   /// for execution later. Client will be notified of acceptance.
+  /// Note: Once the goal is accepted, the server must eventually call
+  /// `.send_result_response()` even if the goal is canceled or aborted.
   pub async fn accept_goal(&mut self, handle: NewGoalHandle<A::GoalType>) 
     -> Result<AcceptedGoalHandle<A::GoalType>, GoalError>
   where
@@ -818,47 +827,28 @@ where
     }
   }
 
-
-  /// Notify Client that a goal was successfully reached and 
+  
+  /// Notify Client that a goal end state was reached and 
   /// what was the result of the action.
-  pub async fn send_succeeded_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result: A::ResultType) -> Result<(),GoalError>
-  where
-    A::ResultType: 'static,
-  {
-    self.send_result_response(handle, GoalStatusEnum::Succeeded, result).await
-  }
-
-  /// Notify Client that a goal was successfully reached and 
-  /// what was the result of the action.
+  /// This async will not resolve until the action client has requested for the result,
+  /// but the client should request the result as soon as server accepts the goal.
   // TODO: It is a bit silly that we have to supply a "result" even though
   // goal got canceled. But we have to send something in the ResultResponse.
   // And where does it say that result is not significant if cancelled or aborted?
-  pub async fn send_canceled_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+  pub async fn send_result_response(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result_status: GoalEndStatus, 
     result: A::ResultType) -> Result<(),GoalError>
   where
     A::ResultType: 'static,
   {
-    self.send_result_response(handle, GoalStatusEnum::Canceled, result).await
-  }
+    // We translate from interface type to internal type to ensure that 
+    // the end status is an end status and not e.g. "Accepted".
+    let result_status = match result_status {
+      GoalEndStatus::Succeeded => GoalStatusEnum::Succeeded,
+      GoalEndStatus::Aborted => GoalStatusEnum::Aborted,
+      GoalEndStatus::Canceled => GoalStatusEnum::Canceled,
+    };
 
-  /// Notify Client that a goal was successfully reached and 
-  /// what was the result of the action.
-  pub async fn send_aborted_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result: A::ResultType) -> Result<(),GoalError>
-  where
-    A::ResultType: 'static,
-  {
-    self.send_result_response(handle, GoalStatusEnum::Aborted, result).await
-  }
-
-  // result_status should be either Succeded, Cacneled, or Aborted
-  async fn send_result_response(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result_status: GoalStatusEnum, 
-    result: A::ResultType) -> Result<(),GoalError>
-  where
-    A::ResultType: 'static,
-  {
     // First, we must get a result request.
     // It may already have been read or not.
     // We will read these into a buffer, because there may be requests for
