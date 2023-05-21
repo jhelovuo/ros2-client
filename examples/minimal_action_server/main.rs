@@ -7,9 +7,11 @@ use log::{debug, error, info, warn};
 
 
 use futures::{FutureExt as StdFutureExt, };
+use futures::stream::StreamExt;
+use smol::future::FutureExt;
 
 use ros2_client::{Context, Node, NodeOptions, ServiceMapping, action, 
-  MessageTypeName };
+  MessageTypeName, action::GoalEndStatus };
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 // Test / demo program of ROS2 Action, server side.
@@ -98,14 +100,13 @@ fn main() {
     let mut run = true;
     let mut stop = stop_receiver.recv().fuse();
 
-    info!("Entering main loop");
     while run {
+      info!("Waiting for a new goal.");
       futures::select! {
         _ = stop => run = false,
 
         new_goal_handle = fibonacci_action_server.receive_new_goal().fuse() => {
           match new_goal_handle {
-            Err(e) => println!("Goal receive failed: {:?}",e),
             Ok(new_goal_handle) => {
               let fib_order = usize::try_from( *fibonacci_action_server.get_new_goal(new_goal_handle).unwrap()).unwrap();
               info!("New goal. order={fib_order}");
@@ -119,57 +120,63 @@ fn main() {
                 let executing_goal =
                   fibonacci_action_server.start_executing_goal(accepted_goal).await.unwrap();
 
-                let mut goal_canceled = false;
                 let mut fib = Vec::with_capacity( fib_order );
                 fib.push(0); // F_0
                 fib.push(1); // F_1
-                for i in 2..=fib_order {
+                let mut i = 1; // we have work up to F_i
 
-                  // Update sequence
-                  fib.push( fib[i-2] + fib[i-1]);
-                  // Publish feedback
-                  fibonacci_action_server.publish_feedback(executing_goal, fib.clone()).await.unwrap();
-                  info!("Publish feedback");
-
-                  // add some delay, also check for causes to stop
-                  futures::select! {
-                    _ = stop => {run = false; break }
-                    _ = smol::Timer::interval(loop_rate).fuse() => (),
-                    cancel_handle = fibonacci_action_server.receive_cancel_request().fuse() => {
-                      let cancel_handle = cancel_handle.unwrap();
-                      let my_goal = executing_goal.goal_id();
-                      if cancel_handle.contains_goal(&my_goal) {
-                        info!("Got cancel request!");
-                        fibonacci_action_server
-                          .respond_to_cancel_requests(&cancel_handle, std::iter::once(my_goal))
-                          .await
-                          .unwrap();
-                        goal_canceled = true;
-                        break
-                      } else {
-                        info!("Received a cancel request for some other goals.");
+                // set up a timer to tick the computation forward
+                let mut work_timer = StreamExt::fuse(smol::Timer::interval(loop_rate));
+                let result_status = loop {
+                    futures::select! {
+                      _ = stop => {
+                        run = false;
+                        break GoalEndStatus::Aborted
                       }
-                    }
-                  }
-                } // for
-
-                if goal_canceled {
-                  // We need to return a result in case of cancel too.
-                  fibonacci_action_server
-                    .send_result_response(executing_goal, action::GoalEndStatus::Canceled, fib)
-                    .await.unwrap();
-                  info!("Goal termianted because of cancel.");
-                } else {
-                  // goal complete
-                  fibonacci_action_server
-                    .send_result_response(executing_goal, action::GoalEndStatus::Succeeded, fib)
-                    .await.unwrap();
-                  info!("Goal succeeded. order={fib_order}");
-                }
-              }
-            }
-          }
-        }
+                      _ = work_timer.select_next_some() => {
+                        i+=1;
+                        fib.push( fib[i-2] + fib[i-1] );                        
+                        fibonacci_action_server
+                          .publish_feedback(executing_goal, fib.clone())
+                          .await.unwrap();
+                        info!("Publish feedback");
+                        if i == fib_order {
+                          info!("Reached goal i={fib_order}");
+                          break GoalEndStatus::Succeeded
+                        }
+                      },
+                      cancel_handle = fibonacci_action_server.receive_cancel_request().fuse() => {
+                        let cancel_handle = cancel_handle.unwrap();
+                        let my_goal = executing_goal.goal_id();
+                        if cancel_handle.contains_goal(&my_goal) {
+                          info!("Got cancel request!");
+                          fibonacci_action_server
+                            .respond_to_cancel_requests(&cancel_handle, std::iter::once(my_goal))
+                            .await
+                            .unwrap();
+                          break GoalEndStatus::Canceled
+                        } else {
+                          info!("Received a cancel request for some other goals.");
+                          // keep on looping
+                        }
+                      }
+                    } // select!
+                  }; // loop
+                // We must return a result in all cases
+                // Also add a timeout in case client does not request a result.
+                fibonacci_action_server
+                  .send_result_response(executing_goal, result_status, fib)
+                  .or( async {
+                    smol::Timer::interval(Duration::from_secs(5)).await;
+                    Err(action::GoalError::NoSuchGoal)
+                    })
+                  .await.unwrap();
+                info!("Goal ended. Reason={:?}", result_status);
+              } // if-else
+            } 
+            Err(e) => println!("Goal receive failed: {:?}",e),
+          } // match
+        } // new_goal_handle
 
       } // select!
     } // while

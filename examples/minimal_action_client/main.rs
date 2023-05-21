@@ -153,7 +153,7 @@ fn main() {
                         Ok(status) => 
                           match status.status_list.iter().find(|gs| gs.goal_info.goal_id == goal_id) {
                             Some(action_msgs::GoalStatus{goal_info:_, status}) => println!("{:?}",status),
-                            None => println!("Our status misssing!"),
+                            None => println!("Our status is missing!"),
                           },
                         Err(e) => println!("{:?}",e),
                       }

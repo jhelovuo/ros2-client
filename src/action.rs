@@ -636,7 +636,7 @@ impl CancelHandle {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GoalEndStatus {
   Succeeded,
   Aborted,
