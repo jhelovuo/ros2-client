@@ -109,9 +109,10 @@ fn main() {
           match new_goal_handle {
             Ok(new_goal_handle) => {
               let fib_order = usize::try_from( *fibonacci_action_server.get_new_goal(new_goal_handle).unwrap()).unwrap();
-              info!("New goal. order={fib_order}");
+              info!("New goal. order={fib_order} goal_id={:?}", new_goal_handle.goal_id());
               if  fib_order < 1 || fib_order > 25 {
                 fibonacci_action_server.reject_goal(new_goal_handle).await.unwrap();
+                info!("Goal rejected. order={fib_order}");
               } else {
                 // goal seems fine, let's go
                 let accepted_goal = 
@@ -124,9 +125,9 @@ fn main() {
                 fib.push(0); // F_0
                 fib.push(1); // F_1
                 let mut i = 1; // we have work up to F_i
-
                 // set up a timer to tick the computation forward
                 let mut work_timer = StreamExt::fuse(smol::Timer::interval(loop_rate));
+
                 let result_status = loop {
                     futures::select! {
                       _ = stop => {
@@ -139,7 +140,7 @@ fn main() {
                         fibonacci_action_server
                           .publish_feedback(executing_goal, fib.clone())
                           .await.unwrap();
-                        info!("Publish feedback");
+                        info!("Publish feedback goal_id={:?}", executing_goal.goal_id());
                         if i == fib_order {
                           info!("Reached goal i={fib_order}");
                           break GoalEndStatus::Succeeded

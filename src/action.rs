@@ -8,7 +8,7 @@ use builtin_interfaces::Time;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use futures::{Future, stream::{Stream, StreamExt, FusedStream} };
+use futures::{Future, stream::{Stream, StreamExt, FusedStream} , pin_mut};
 
 use crate::{
   action_msgs, builtin_interfaces,
@@ -857,14 +857,17 @@ where
       match self.result_requests.get( &handle.inner.goal_id ) {
         Some(req_id) => *req_id,
         None => {
+          let res_reqs = self.actionserver.my_result_server.receive_request_stream();
+          pin_mut!(res_reqs);
           loop {
             // result request was not yet here. Keep receiving until we get it.
             let (req_id, GetResultRequest{ goal_id } ) = 
-              self.actionserver.my_result_server.async_receive_request().await?;
+              res_reqs.select_next_some().await?;
             if goal_id == handle.inner.goal_id {
               break req_id
             } else {
               self.result_requests.insert(goal_id, req_id);
+              debug!("Got result request for goal_id={:?} req_id={:?}", goal_id, req_id);
               // and loop to wait for the next
             }
           }  
@@ -884,6 +887,7 @@ where
               req_id, 
               GetResultResponse{ status: result_status , result }
             )?;
+            debug!("Send result for goal_id={:?}  req_id={:?}", handle.inner.goal_id, req_id);
             Ok( () )
           }
           (wrong_status, _ ) => {
@@ -989,7 +993,7 @@ where
           .map(|(_,_)| GoalInfo{ 
             goal_id,
             // TODO: Insert actual timestamp when implemented
-            stamp: builtin_interfaces::Time::ZERO }
+            stamp: builtin_interfaces::Time::DUMMY }
           )
         )
       .collect();
@@ -1016,16 +1020,21 @@ where
   // This function is private, because all status publishing happens automatically
   // via goal startus changes.
   async fn publish_statuses(&self) {
-    self.actionserver.send_goal_statuses( action_msgs::GoalStatusArray {
+    let goal_status_array = action_msgs::GoalStatusArray {
       status_list: self.goals.iter().map( 
         |(goal_id, (status,_goal))|
         action_msgs::GoalStatus {
           status: *status,
           goal_info: 
-            GoalInfo {goal_id: *goal_id, stamp: builtin_interfaces::Time::ZERO } ,
+            GoalInfo {goal_id: *goal_id, stamp: builtin_interfaces::Time::DUMMY } ,
             // TODO: Store and report actual goal acceptance time.
         }
       ).collect()
-    }).unwrap_or_else( |e| error!("AsyncActionServer::publish_statuses: {:?}",e) );
+    };
+    debug!("Reporting statuses for {:?}", 
+      goal_status_array.status_list.iter().map(|gs| gs.goal_info.goal_id ));
+    self.actionserver
+      .send_goal_statuses(goal_status_array)
+      .unwrap_or_else( |e| error!("AsyncActionServer::publish_statuses: {:?}",e) );
   }
 }

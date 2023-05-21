@@ -116,7 +116,10 @@ fn main() {
                 pin_mut!(status_stream);
                 let mut goal_finish_timeout = 
                   futures::FutureExt::fuse(smol::Timer::interval(Duration::from_secs(30)));
-
+                let result_fut = fibonacci_action_client.async_request_result(goal_id)
+                                    .fuse();
+                pin_mut!(result_fut);
+                
                 let mut goal_done = false;
 
                 while ! goal_done {
@@ -129,8 +132,7 @@ fn main() {
                     }
 
                     // get action result
-                    action_result = fibonacci_action_client.async_request_result(goal_id)
-                                    .fuse() => {
+                    action_result = result_fut => {
                       goal_done = true;
                       match action_result {
                         Ok((goal_status, result)) => {
@@ -153,7 +155,7 @@ fn main() {
                         Ok(status) => 
                           match status.status_list.iter().find(|gs| gs.goal_info.goal_id == goal_id) {
                             Some(action_msgs::GoalStatus{goal_info:_, status}) => println!("{:?}",status),
-                            None => println!("Our status is missing!"),
+                            None => println!("Our status is missing: {:?}", status.status_list),
                           },
                         Err(e) => println!("{:?}",e),
                       }
