@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::message::Message;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Time {
   pub sec: i32,
   pub nanosec: u32,

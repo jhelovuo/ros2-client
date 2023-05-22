@@ -9,7 +9,7 @@ pub type GoalId = crate::unique_identifier_msgs::UUID;
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GoalInfo {
   pub goal_id: GoalId,
-  pub stamp: crate::builtin_interfaces::Time,
+  pub stamp: crate::builtin_interfaces::Time, // Time when the goal was accepted
 }
 impl Message for GoalInfo {}
 
@@ -41,6 +41,12 @@ pub struct GoalStatusArray {
 impl Message for GoalStatusArray {}
 
 /// From [CancelGoal](https://docs.ros2.org/foxy/api/action_msgs/srv/CancelGoal.html)
+// Cancel one or more goals with the following policy:
+//
+// - If the goal ID is zero and timestamp is zero, cancel all goals.
+// - If the goal ID is zero and timestamp is not zero, cancel all goals accepted at or before the timestamp.
+// - If the goal ID is not zero and timestamp is zero, cancel the goal with the given ID regardless of the time it was accepted.
+// - If the goal ID is not zero and timestamp is not zero, cancel the goal with the given ID and all goals accepted at or before the timestamp.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CancelGoalRequest {
   pub(crate) goal_info: GoalInfo,
