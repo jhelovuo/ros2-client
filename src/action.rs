@@ -199,7 +199,7 @@ where
     self
       .my_goal_client
       .send_request(SendGoalRequest {
-        goal_id: goal_id.clone(),
+        goal_id,
         goal,
       })
       .map(|req_id| (req_id, goal_id))
@@ -242,8 +242,7 @@ where
     let goal_id = unique_identifier_msgs::UUID::new_random();
     let send_goal_response = 
       self.my_goal_client
-        .async_call_service(SendGoalRequest {
-          goal_id: goal_id.clone(), goal }).await?;
+        .async_call_service(SendGoalRequest { goal_id, goal }).await?;
     Ok( (goal_id, send_goal_response) )
   }
 
@@ -426,10 +425,10 @@ where
       .filter_map( move |result| async move { 
         match result {
           Err(e) => Some(Err(e)),
-          Ok(gsa) => match gsa.status_list.into_iter().find(|gs| gs.goal_info.goal_id == goal_id) {
-            Some(gs) => Some(Ok(gs)),
-            None => None,
-          }
+          Ok(gsa) => 
+            gsa.status_list.into_iter()
+              .find(|gs| gs.goal_info.goal_id == goal_id)
+              .map(Ok)
         }
       }
     )
@@ -727,7 +726,7 @@ where
     A::GoalType: 'static,
   {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
           (GoalStatusEnum::Unknown, _goal) => {
@@ -758,7 +757,7 @@ where
     A::GoalType: 'static,
   {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
           (GoalStatusEnum::Unknown, _goal) => {
@@ -787,7 +786,7 @@ where
     -> Result<ExecutingGoalHandle<A::GoalType>, GoalError>
   {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
           (GoalStatusEnum::Accepted, _goal) => {
@@ -810,7 +809,7 @@ where
     feedback: A::FeedbackType
     ) -> Result<(), GoalError> {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
           (GoalStatusEnum::Executing, _goal) => {
@@ -875,7 +874,7 @@ where
       };
 
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
           (GoalStatusEnum::Accepted, _  ) | // Accepted goal can be canceled or aborted
@@ -915,7 +914,7 @@ where
   async fn abort_goal(&mut self, handle: InnerGoalHandle<A::GoalType>)
     -> Result<(),GoalError> {
     match self.goals.entry(handle.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
           (GoalStatusEnum::Accepted, _goal) |
