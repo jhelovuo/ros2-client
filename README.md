@@ -10,6 +10,11 @@ It does not link to [rcl](https://github.com/ros2/rcl),
 The intetion is that this is a medium-level library between lower-level DDS and a higher-level library.
 The (yet-to-be-written) higher-level library should provide an event loop, Actions, and possibly an async API. These are to be implemented as a separate crate on top of this one.
 
+## New in version 0.5:
+
+* Actions are supported
+* async programming interface. This may make a built-in event loop redundant, as Rust async executors sort of do that already.
+
 ## Example: turtle_teleop
 
 The included example program should be able to communicate with out-of-the-box ROS2 turtlesim example.
@@ -27,6 +32,7 @@ Teleop example program currently has the following keyboard commands:
 * `a`/`b` : spawn turtle1 / turtle2
 * `A`/`B` : kill turtle1 / turtle2
 * `1`/`2` : switch control between turtle1 / turtle2
+* `d`/`f`/`g`: Trigger or cancel absolute rotation action.
 
 ## Example: ros2_service_server
 
