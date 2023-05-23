@@ -961,6 +961,8 @@ where
     -> dds::Result<CancelHandle> {
     let (req_id, CancelGoalRequest { goal_info }) = 
       self.actionserver.my_cancel_server.async_receive_request().await?;
+      
+    #[allow(clippy::type_complexity)] // How would you refactor this type?
     let goal_filter : Box<dyn FnMut( &(&GoalId,&AsyncGoal<A>) ) -> bool> =
       match goal_info {
         GoalInfo {goal_id: GoalId::ZERO , stamp: builtin_interfaces::Time::ZERO } =>
