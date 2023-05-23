@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::message::Message;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Time {
   pub sec: i32,
   pub nanosec: u32,
@@ -12,6 +12,7 @@ impl Message for Time {}
 impl Time {
   pub const ZERO: Time = Time { sec: 0, nanosec: 0 };
 
+  pub const DUMMY:Time = Time { sec: 1234567890, nanosec: 1234567890 };
 
   pub fn now() -> Self {
     Self::from_nanos(chrono::Utc::now().timestamp_nanos() as u64)

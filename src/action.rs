@@ -8,7 +8,7 @@ use builtin_interfaces::Time;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use futures::{Future, stream::{Stream, StreamExt, FusedStream} };
+use futures::{Future, stream::{Stream, StreamExt, FusedStream} , pin_mut};
 
 use crate::{
   action_msgs, builtin_interfaces,
@@ -199,7 +199,7 @@ where
     self
       .my_goal_client
       .send_request(SendGoalRequest {
-        goal_id: goal_id.clone(),
+        goal_id,
         goal,
       })
       .map(|req_id| (req_id, goal_id))
@@ -242,8 +242,7 @@ where
     let goal_id = unique_identifier_msgs::UUID::new_random();
     let send_goal_response = 
       self.my_goal_client
-        .async_call_service(SendGoalRequest {
-          goal_id: goal_id.clone(), goal }).await?;
+        .async_call_service(SendGoalRequest { goal_id, goal }).await?;
     Ok( (goal_id, send_goal_response) )
   }
 
@@ -426,10 +425,10 @@ where
       .filter_map( move |result| async move { 
         match result {
           Err(e) => Some(Err(e)),
-          Ok(gsa) => match gsa.status_list.into_iter().find(|gs| gs.goal_info.goal_id == goal_id) {
-            Some(gs) => Some(Ok(gs)),
-            None => None,
-          }
+          Ok(gsa) => 
+            gsa.status_list.into_iter()
+              .find(|gs| gs.goal_info.goal_id == goal_id)
+              .map(Ok)
         }
       }
     )
@@ -636,6 +635,13 @@ impl CancelHandle {
 }
 
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoalEndStatus {
+  Succeeded,
+  Aborted,
+  Canceled,
+}
+
 #[derive(Debug)]
 pub enum GoalError {
   NoSuchGoal,
@@ -649,6 +655,16 @@ impl From<dds::Error> for GoalError {
   }
 }
 
+#[derive(Debug,Clone)]
+struct AsyncGoal<A> 
+where
+  A: ActionTypes,
+{
+  status: GoalStatusEnum, 
+  accepted_time: Option<builtin_interfaces::Time>, 
+  goal: A::GoalType,
+}
+
 pub struct AsyncActionServer<A>
 where
   A: ActionTypes,
@@ -657,7 +673,7 @@ where
   A::FeedbackType: Message, 
 {
   actionserver: ActionServer<A>,
-  goals: BTreeMap<GoalId,(GoalStatusEnum,A::GoalType)>,
+  goals: BTreeMap<GoalId,AsyncGoal<A>>,
   result_requests: BTreeMap<GoalId, RmwRequestId>,
 }
 
@@ -678,7 +694,7 @@ where
   }
 
   pub fn get_new_goal(&self, handle: NewGoalHandle<A::GoalType>) -> Option<&A::GoalType> {
-    self.goals.get(&handle.inner.goal_id).map(|(_, ref g)| g)
+    self.goals.get(&handle.inner.goal_id).map(|ag| &ag.goal)
   }
 
   /// Reveice a new goal from an action client.
@@ -693,7 +709,11 @@ where
           self.actionserver.my_goal_server.async_receive_request().await?;
         match self.goals.entry(goal_request.goal_id) {
           e@Entry::Vacant(_) => {
-            e.or_insert( (GoalStatusEnum::Unknown, goal_request.goal) );
+            e.or_insert( AsyncGoal {
+              status: GoalStatusEnum::Unknown, 
+              goal: goal_request.goal,
+              accepted_time: None,
+            } );
             break (req_id, goal_request.goal_id)
           }
           Entry::Occupied(_) => {
@@ -712,26 +732,31 @@ where
 
   /// Convert a newly received goal into a accepted goal, i.e. accept it
   /// for execution later. Client will be notified of acceptance.
+  /// Note: Once the goal is accepted, the server must eventually call
+  /// `.send_result_response()` even if the goal is canceled or aborted.
   pub async fn accept_goal(&mut self, handle: NewGoalHandle<A::GoalType>) 
     -> Result<AcceptedGoalHandle<A::GoalType>, GoalError>
   where
     A::GoalType: 'static,
   {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Unknown, _goal) => {
-            o.into_mut().0 = GoalStatusEnum::Accepted;
+          AsyncGoal{ status: GoalStatusEnum::Unknown, .. } => {
+            let now = builtin_interfaces::Time::now();
+            let mut_o = o.into_mut();
+            mut_o.status = GoalStatusEnum::Accepted;
+            mut_o.accepted_time = Some(now);
             self.publish_statuses().await;
             self.actionserver.my_goal_server
               .send_response(handle.req_id, SendGoalResponse {
                 accepted: true,
-                stamp: builtin_interfaces::Time::now()
+                stamp: now
               })?;
-            Ok( AcceptedGoalHandle{ inner: handle.inner} )
+            Ok( AcceptedGoalHandle{ inner: handle.inner } )
           }
-          (wrong_status, _goal) => {
+          AsyncGoal{ status: wrong_status, ..} => {
             error!("Tried to accept goal {:?} but status was {:?}, expected Unknown.", 
               handle.inner.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
@@ -749,10 +774,10 @@ where
     A::GoalType: 'static,
   {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Unknown, _goal) => {
+          AsyncGoal{ status: GoalStatusEnum::Unknown, .. } => {
             self.actionserver.my_goal_server
               .send_response(handle.req_id, SendGoalResponse {
                 accepted: false,
@@ -762,7 +787,7 @@ where
             //self.publish_statuses().await; -- this is not reported
             Ok(())
           }
-          (wrong_status, _goal) => {
+          AsyncGoal{ status: wrong_status, ..} => {
             error!("Tried to reject goal {:?} but status was {:?}, expected Unknown.", 
               handle.inner.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
@@ -778,15 +803,15 @@ where
     -> Result<ExecutingGoalHandle<A::GoalType>, GoalError>
   {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Accepted, _goal) => {
-            o.into_mut().0 = GoalStatusEnum::Executing;
+          AsyncGoal{ status: GoalStatusEnum::Accepted, ..} => {
+            o.into_mut().status = GoalStatusEnum::Executing;
             self.publish_statuses().await;
             Ok( ExecutingGoalHandle{ inner: handle.inner} )
           }
-          (wrong_status, _goal) => {
+          AsyncGoal{ status: wrong_status, ..} => {
             error!("Tried to execute goal {:?} but status was {:?}, expected Accepted.", 
               handle.inner.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
@@ -801,14 +826,14 @@ where
     feedback: A::FeedbackType
     ) -> Result<(), GoalError> {
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Executing, _goal) => {
+          AsyncGoal{ status: GoalStatusEnum::Executing, ..} => {
             self.actionserver.send_feedback( handle.inner.goal_id, feedback )?;
             Ok( () )
           }
-          (wrong_status, _goal) => {
+          AsyncGoal{ status: wrong_status, ..} => {
             error!("Tried publish feedback on goal {:?} but status was {:?}, expected Executing.", 
               handle.inner.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
@@ -818,47 +843,28 @@ where
     }
   }
 
-
-  /// Notify Client that a goal was successfully reached and 
+  
+  /// Notify Client that a goal end state was reached and 
   /// what was the result of the action.
-  pub async fn send_succeeded_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result: A::ResultType) -> Result<(),GoalError>
-  where
-    A::ResultType: 'static,
-  {
-    self.send_result_response(handle, GoalStatusEnum::Succeeded, result).await
-  }
-
-  /// Notify Client that a goal was successfully reached and 
-  /// what was the result of the action.
+  /// This async will not resolve until the action client has requested for the result,
+  /// but the client should request the result as soon as server accepts the goal.
   // TODO: It is a bit silly that we have to supply a "result" even though
   // goal got canceled. But we have to send something in the ResultResponse.
   // And where does it say that result is not significant if cancelled or aborted?
-  pub async fn send_canceled_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+  pub async fn send_result_response(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
+    result_status: GoalEndStatus, 
     result: A::ResultType) -> Result<(),GoalError>
   where
     A::ResultType: 'static,
   {
-    self.send_result_response(handle, GoalStatusEnum::Canceled, result).await
-  }
+    // We translate from interface type to internal type to ensure that 
+    // the end status is an end status and not e.g. "Accepted".
+    let result_status = match result_status {
+      GoalEndStatus::Succeeded => GoalStatusEnum::Succeeded,
+      GoalEndStatus::Aborted => GoalStatusEnum::Aborted,
+      GoalEndStatus::Canceled => GoalStatusEnum::Canceled,
+    };
 
-  /// Notify Client that a goal was successfully reached and 
-  /// what was the result of the action.
-  pub async fn send_aborted_result(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result: A::ResultType) -> Result<(),GoalError>
-  where
-    A::ResultType: 'static,
-  {
-    self.send_result_response(handle, GoalStatusEnum::Aborted, result).await
-  }
-
-  // result_status should be either Succeded, Cacneled, or Aborted
-  async fn send_result_response(&mut self, handle: ExecutingGoalHandle<A::GoalType>,
-    result_status: GoalStatusEnum, 
-    result: A::ResultType) -> Result<(),GoalError>
-  where
-    A::ResultType: 'static,
-  {
     // First, we must get a result request.
     // It may already have been read or not.
     // We will read these into a buffer, because there may be requests for
@@ -867,14 +873,17 @@ where
       match self.result_requests.get( &handle.inner.goal_id ) {
         Some(req_id) => *req_id,
         None => {
+          let res_reqs = self.actionserver.my_result_server.receive_request_stream();
+          pin_mut!(res_reqs);
           loop {
             // result request was not yet here. Keep receiving until we get it.
             let (req_id, GetResultRequest{ goal_id } ) = 
-              self.actionserver.my_result_server.async_receive_request().await?;
+              res_reqs.select_next_some().await?;
             if goal_id == handle.inner.goal_id {
               break req_id
             } else {
               self.result_requests.insert(goal_id, req_id);
+              debug!("Got result request for goal_id={:?} req_id={:?}", goal_id, req_id);
               // and loop to wait for the next
             }
           }  
@@ -882,21 +891,24 @@ where
       };
 
     match self.goals.entry(handle.inner.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Accepted, _  ) | // Accepted goal can be canceled or aborted
-          (GoalStatusEnum::Executing, _ ) |
-          (GoalStatusEnum::Canceling, _ ) => {
-            o.into_mut().0 = result_status;
+          // Accepted, executing, or canceling goal can be canceled or aborted
+          // TODO: Accepted goal cannot succeed, it must be executing before success.
+          AsyncGoal{ status: GoalStatusEnum::Accepted, ..} |
+          AsyncGoal{ status: GoalStatusEnum::Executing, ..} |
+          AsyncGoal{ status: GoalStatusEnum::Canceling, ..} => {
+            o.into_mut().status = result_status;
             self.publish_statuses().await;
             self.actionserver.send_result(
               req_id, 
               GetResultResponse{ status: result_status , result }
             )?;
+            debug!("Send result for goal_id={:?}  req_id={:?}", handle.inner.goal_id, req_id);
             Ok( () )
           }
-          (wrong_status, _ ) => {
+          AsyncGoal{ status: wrong_status, ..} => {
             error!("Tried to finish goal {:?} but status was {:?}.", 
               handle.inner.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
@@ -921,16 +933,16 @@ where
   async fn abort_goal(&mut self, handle: InnerGoalHandle<A::GoalType>)
     -> Result<(),GoalError> {
     match self.goals.entry(handle.goal_id) {
-      Entry::Vacant(_) => return Err(GoalError::NoSuchGoal),
+      Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => {
         match o.get() {
-          (GoalStatusEnum::Accepted, _goal) |
-          (GoalStatusEnum::Executing, _goal) => {
-            o.into_mut().0 = GoalStatusEnum::Aborted;
+          AsyncGoal{ status: GoalStatusEnum::Accepted, ..} |
+          AsyncGoal{ status: GoalStatusEnum::Executing, ..}=> {
+            o.into_mut().status = GoalStatusEnum::Aborted;
             self.publish_statuses().await;
             Ok( () )
           }
-          (wrong_status, _goal) => {
+          AsyncGoal{ status: wrong_status, ..} => {
             error!("Tried to abort goal {:?} but status was {:?}, expected Accepted or Executing. ", 
               handle.goal_id, wrong_status);
             Err(GoalError::WrongGoalState)
@@ -949,33 +961,37 @@ where
     -> dds::Result<CancelHandle> {
     let (req_id, CancelGoalRequest { goal_info }) = 
       self.actionserver.my_cancel_server.async_receive_request().await?;
-    let goal_filter : Box<dyn FnMut( &(&GoalId,&(GoalStatusEnum,A::GoalType)) ) -> bool> =
+      
+    #[allow(clippy::type_complexity)] // How would you refactor this type?
+    let goal_filter : Box<dyn FnMut( &(&GoalId,&AsyncGoal<A>) ) -> bool> =
       match goal_info {
         GoalInfo {goal_id: GoalId::ZERO , stamp: builtin_interfaces::Time::ZERO } =>
-          Box::new(| (_,_) | { true }) ,
+          Box::new(| (_,_) | { true }) , // cancel all goals
 
-        GoalInfo {goal_id: GoalId::ZERO , stamp: _ } =>
-          Box::new(| (_,_) | true), // TODO: Should check timestamp, but not yet implemented
+        GoalInfo {goal_id: GoalId::ZERO , stamp } =>
+          Box::new(move | (_,ag) | ag.accepted_time.map(|at| at < stamp).unwrap_or(false)) , 
 
         GoalInfo { goal_id, stamp: builtin_interfaces::Time::ZERO } =>
           Box::new(move |(g_id,_)| goal_id == **g_id) ,
 
-        GoalInfo { goal_id , stamp: _ } =>
-          Box::new(move |(g_id,_)| goal_id == **g_id) , // TODO: Should check timestamp, but not yet implemented
+        GoalInfo { goal_id , stamp } =>
+          Box::new(move |(g_id,ag)| 
+            goal_id == **g_id 
+            || ag.accepted_time.map(move |at| at < stamp).unwrap_or(false)) , 
       };
     
     // TODO:
     // Should check if the specified GoalId was unknown to us
-    // or already termianted.
+    // or already terminated.
     // In those case outright send a negative response and not return to the application.
     let cancel_handle = CancelHandle {
       req_id,
       goals:
         self.goals.iter()
           // only consider goals with status Executing or Accepted for Cancel
-          .filter(  |(_,(status,_))| 
-                      { *status == GoalStatusEnum::Executing 
-                        || *status == GoalStatusEnum::Accepted
+          .filter(  |(_,async_goal)| 
+                      { async_goal.status == GoalStatusEnum::Executing 
+                        || async_goal.status == GoalStatusEnum::Accepted
                       } )
           // and then filter those that were specified by the cancel request
           .filter(goal_filter).map(|p| *p.0)
@@ -996,16 +1012,14 @@ where
     let canceling_goals : Vec<GoalInfo> = goals_to_cancel
       .filter_map(|goal_id| 
         self.goals.get(&goal_id)
-          .map(|(_,_)| GoalInfo{ 
-            goal_id,
-            // TODO: Insert actual timestamp when implemented
-            stamp: builtin_interfaces::Time::ZERO }
+          .and_then(|AsyncGoal{ accepted_time, .. }| 
+            accepted_time.map( |stamp| GoalInfo{ goal_id, stamp})
           )
         )
       .collect();
 
     for goal_info in &canceling_goals {
-      self.goals.entry(goal_info.goal_id).and_modify(|gg| gg.0 = GoalStatusEnum::Canceling );
+      self.goals.entry(goal_info.goal_id).and_modify(|gg| gg.status = GoalStatusEnum::Canceling );
     }
     self.publish_statuses().await;
 
@@ -1026,16 +1040,22 @@ where
   // This function is private, because all status publishing happens automatically
   // via goal startus changes.
   async fn publish_statuses(&self) {
-    self.actionserver.send_goal_statuses( action_msgs::GoalStatusArray {
+    let goal_status_array = action_msgs::GoalStatusArray {
       status_list: self.goals.iter().map( 
-        |(goal_id, (status,_goal))|
+        |(goal_id, AsyncGoal{ status, accepted_time, ..})|
         action_msgs::GoalStatus {
           status: *status,
-          goal_info: 
-            GoalInfo {goal_id: *goal_id, stamp: builtin_interfaces::Time::ZERO } ,
-            // TODO: Store and report actual goal acceptance time.
+          goal_info: GoalInfo {
+            goal_id: *goal_id, 
+            stamp: accepted_time.unwrap_or(builtin_interfaces::Time::ZERO) 
+          } ,
         }
       ).collect()
-    }).unwrap_or_else( |e| error!("AsyncActionServer::publish_statuses: {:?}",e) );
+    };
+    debug!("Reporting statuses for {:?}", 
+      goal_status_array.status_list.iter().map(|gs| gs.goal_info.goal_id ));
+    self.actionserver
+      .send_goal_statuses(goal_status_array)
+      .unwrap_or_else( |e| error!("AsyncActionServer::publish_statuses: {:?}",e) );
   }
 }

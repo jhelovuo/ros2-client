@@ -398,11 +398,17 @@ where
   /// Send a request to Service Server asynchronously.
   /// The returned `RmwRequestId` is a token to identify the correct response.
   pub async fn async_send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
-    self.increment_sequence_number();
-    let gen_rmw_req_id = RmwRequestId {
-      writer_guid: self.client_guid,
-      sequence_number: self.sequence_number(),
-    };
+    let gen_rmw_req_id =
+      // we do the req_id generation in an async block so that we do not generate
+      // multiple sequence numbers if there are multiple polls to this function
+      async {
+        self.increment_sequence_number();
+         RmwRequestId {
+          writer_guid: self.client_guid,
+          sequence_number: self.sequence_number(),
+        }
+      }.await;
+
     let req_wrapper = RequestWrapper::<S::Request>::new(
       self.service_mapping,
       gen_rmw_req_id,
