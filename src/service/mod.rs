@@ -235,7 +235,7 @@ where
           }
         } // match
       }, // async
-    ).fuse()
+    )
   }
 
   /// Asynchronous response sending

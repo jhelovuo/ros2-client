@@ -391,7 +391,7 @@ where
               }    
           } 
         }
-      ).fuse() // fuse the result so that it can be polled without limit
+      ) 
   }
 
   /// Note: This does not take GoalId and will therefore report status of all
@@ -415,7 +415,6 @@ where
   {
     self.my_status_subscription.async_stream()
       .map( |result| result.map( |(gsa,_mi )| gsa ) )
-      .fuse()
   }
 
   pub fn status_stream(&self, goal_id: GoalId) 

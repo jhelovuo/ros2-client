@@ -1,7 +1,7 @@
 use std::io;
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
-use futures::{pin_mut, stream::{Stream, StreamExt} };
+use futures::{pin_mut, stream::{Stream, StreamExt, FusedStream} };
 use rustdds::{rpc::SampleIdentity, *};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -96,7 +96,7 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
   }
 
   // Returns an async Stream of messages with MessageInfo metadata
-  pub fn async_stream(&self) -> impl Stream<Item = dds::Result<(M, MessageInfo)>> + '_ {
+  pub fn async_stream(&self) -> impl Stream<Item = dds::Result<(M, MessageInfo)>> + FusedStream + '_ {
     self.datareader.as_async_stream()
       .map(|result| result.map( dcc_to_value_and_messageinfo )) 
   }
