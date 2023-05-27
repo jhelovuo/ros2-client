@@ -138,7 +138,7 @@ impl Context {
     self.inner.lock().unwrap().domain_participant.domain_id()
   }
 
-  pub fn discovered_topics(&self) -> Vec<dds::DiscoveredTopicData> {
+  pub fn discovered_topics(&self) -> Vec<rustdds::discovery::DiscoveredTopicData> {
     self.domain_participant().discovered_topics()
   }
 
