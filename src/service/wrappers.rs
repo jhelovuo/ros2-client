@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use bytes::{BufMut, Bytes, BytesMut};
@@ -19,7 +19,6 @@ pub(super) trait Wrapper {
   fn bytes(&self) -> Bytes;
 }
 
-#[derive(Serialize, Deserialize)]
 pub(super) struct RequestWrapper<R> {
   serialized_message: Bytes,
   encoding: RepresentationIdentifier,
@@ -110,11 +109,9 @@ impl<R: Message> RequestWrapper<R> {
   }
 }
 
-#[derive(Serialize, Deserialize)]
 pub(super) struct ResponseWrapper<R> {
   serialized_message: Bytes,
   encoding: RepresentationIdentifier,
-  rri_for_send: RmwRequestId,
   phantom: PhantomData<R>,
 }
 
@@ -123,7 +120,6 @@ impl<R: Message> Wrapper for ResponseWrapper<R> {
     ResponseWrapper {
       serialized_message: Bytes::copy_from_slice(input_bytes), // cloning here
       encoding,
-      rri_for_send: RmwRequestId::default(), // dummy data for client side. Not used.
       phantom: PhantomData,
     }
   }
@@ -214,7 +210,6 @@ impl<R: Message> ResponseWrapper<R> {
     Ok(ResponseWrapper {
       serialized_message,
       encoding,
-      rri_for_send: r_id,
       phantom: PhantomData,
     })
   }
@@ -333,8 +328,6 @@ impl<RW> ServiceDeserializerAdapter<RW> {
 }
 
 impl<RW: Wrapper> no_key::DeserializerAdapter<RW> for ServiceDeserializerAdapter<RW>
-where
-  RW: DeserializeOwned,
 {
   fn supported_encodings() -> &'static [RepresentationIdentifier] {
     &Self::REPR_IDS
@@ -349,8 +342,6 @@ where
 }
 
 impl<RW: Wrapper> no_key::SerializerAdapter<RW> for ServiceSerializerAdapter<RW>
-where
-  RW: Serialize,
 {
   fn output_encoding() -> RepresentationIdentifier {
     RepresentationIdentifier::CDR_LE

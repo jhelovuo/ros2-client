@@ -104,7 +104,6 @@ impl Context {
     qos: Option<QosPolicies>,
   ) -> dds::Result<no_key::DataWriter<M, SA>>
   where
-    M: Serialize,
     SA: SerializerAdapter<M>,
   {
     self
@@ -118,7 +117,7 @@ impl Context {
     qos: Option<QosPolicies>,
   ) -> dds::Result<no_key::SimpleDataReader<M, DA>>
   where
-    M: 'static + DeserializeOwned,
+    M: 'static, 
     DA: 'static + DeserializerAdapter<M>,
   {
     self

@@ -301,7 +301,7 @@ impl Node {
     qos: Option<QosPolicies>,
   ) -> Result<no_key::SimpleDataReader<D, DA>, dds::Error>
   where
-    D: DeserializeOwned + 'static,
+    D: 'static,
     DA: rustdds::no_key::DeserializerAdapter<D> + 'static,
   {
     self.ros_context.create_simpledatareader(topic, qos)
@@ -313,7 +313,6 @@ impl Node {
     qos: Option<QosPolicies>,
   ) -> Result<no_key::DataWriter<D, SA>, dds::Error>
   where
-    D: Serialize,
     SA: rustdds::no_key::SerializerAdapter<D>,
   {
     self.ros_context.create_datawriter(topic, qos)
