@@ -1,26 +1,18 @@
-use std::convert::TryFrom;
-
-use std::time::Duration;
+use std::{convert::TryFrom, time::Duration};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-
-
-use futures::{FutureExt as StdFutureExt, };
-use futures::stream::StreamExt;
+use futures::{stream::StreamExt, FutureExt as StdFutureExt};
 use smol::future::FutureExt;
-
-use ros2_client::{Context, Node, NodeOptions, ServiceMapping, action, 
-  MessageTypeName, action::GoalEndStatus };
+use ros2_client::{
+  action, action::GoalEndStatus, Context, MessageTypeName, Node, NodeOptions, ServiceMapping,
+};
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 // Test / demo program of ROS2 Action, server side.
 //
 //
 // Run this example and start a client example program from ROS2.
-
-
-
 
 // Original action definition
 // https://docs.ros2.org/latest/api/action_tutorials_interfaces/action/Fibonacci.html
@@ -31,7 +23,6 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 // ---
 // int32[] partial_sequence
 
-
 // Rust version of action type definition
 //
 // We define the action using standard/primitive types, but we could
@@ -39,7 +30,6 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 // struct FibonacciActionGoal{ goal: i32 }
 // or any other tuple/struct that contains only an i32.
 type FibonacciAction = action::Action<i32, Vec<i32>, Vec<i32>>;
-
 
 fn main() {
   pretty_env_logger::init();
@@ -53,7 +43,7 @@ fn main() {
     // We will send two stop commands, one for reader, the other for writer.
     stop_sender.send_blocking(()).unwrap_or(());
   })
-    .expect("Error setting Ctrl-C handler");
+  .expect("Error setting Ctrl-C handler");
   println!("Press Ctrl-C to quit.");
 
   let mut node = create_node();
@@ -67,7 +57,7 @@ fn main() {
       .build()
   };
 
-  let publisher_qos : QosPolicies = {
+  let publisher_qos: QosPolicies = {
     QosPolicyBuilder::new()
       .reliability(policy::Reliability::Reliable {
         max_blocking_time: rustdds::Duration::from_millis(100),
@@ -85,14 +75,16 @@ fn main() {
     status_publisher: publisher_qos.clone(),
   };
 
-  let mut fibonacci_action_server = action::AsyncActionServer::new(node
-    .create_action_server::<FibonacciAction>(
-      ServiceMapping::Enhanced,
-      "fibonacci",
-      &MessageTypeName::new("example_interfaces", "Fibonacci"), 
-      fibonacci_action_qos,
-    )
-    .unwrap());
+  let mut fibonacci_action_server = action::AsyncActionServer::new(
+    node
+      .create_action_server::<FibonacciAction>(
+        ServiceMapping::Enhanced,
+        "fibonacci",
+        &MessageTypeName::new("example_interfaces", "Fibonacci"),
+        fibonacci_action_qos,
+      )
+      .unwrap(),
+  );
 
   let loop_rate = Duration::from_secs(1);
 
@@ -115,7 +107,7 @@ fn main() {
                 info!("Goal rejected. order={fib_order}");
               } else {
                 // goal seems fine, let's go
-                let accepted_goal = 
+                let accepted_goal =
                   fibonacci_action_server.accept_goal(new_goal_handle).await.unwrap();
                 info!("Goal accepted. order={fib_order}");
                 let executing_goal =
@@ -136,7 +128,7 @@ fn main() {
                       }
                       _ = work_timer.select_next_some() => {
                         i+=1;
-                        fib.push( fib[i-2] + fib[i-1] );                        
+                        fib.push( fib[i-2] + fib[i-1] );
                         fibonacci_action_server
                           .publish_feedback(executing_goal, fib.clone())
                           .await.unwrap();
@@ -174,7 +166,7 @@ fn main() {
                   .await.unwrap_or_else(|e| println!("Error: Cannot send result response {:?}", e));
                 info!("Goal ended. Reason={:?}", result_status);
               } // if-else
-            } 
+            }
             Err(e) => println!("Goal receive failed: {:?}",e),
           } // match
         } // new_goal_handle

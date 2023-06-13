@@ -117,7 +117,7 @@ impl Context {
     qos: Option<QosPolicies>,
   ) -> dds::Result<no_key::SimpleDataReader<M, DA>>
   where
-    M: 'static, 
+    M: 'static,
     DA: 'static + DeserializerAdapter<M>,
   {
     self

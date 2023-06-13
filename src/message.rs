@@ -16,7 +16,7 @@ impl Message for u16 {}
 impl Message for u32 {}
 impl Message for u64 {}
 
-impl<T:Message> Message for Vec<T> {}
+impl<T: Message> Message for Vec<T> {}
 
 pub struct MessageTypeName {
   //TODO: String is UTF-8, but ROS2 uses just ASCII

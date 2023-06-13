@@ -12,7 +12,10 @@ impl Message for Time {}
 impl Time {
   pub const ZERO: Time = Time { sec: 0, nanosec: 0 };
 
-  pub const DUMMY:Time = Time { sec: 1234567890, nanosec: 1234567890 };
+  pub const DUMMY: Time = Time {
+    sec: 1234567890,
+    nanosec: 1234567890,
+  };
 
   pub fn now() -> Self {
     Self::from_nanos(chrono::Utc::now().timestamp_nanos() as u64)
@@ -24,8 +27,6 @@ impl Time {
       nanosec: (nanos_since_epoch % 1_000_000_000) as u32,
     }
   }
-
-
 }
 
 // TODO: Implement constructors and conversions to/from usual Rust time formats

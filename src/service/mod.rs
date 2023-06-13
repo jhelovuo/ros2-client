@@ -3,7 +3,7 @@ use std::{io, marker::PhantomData, sync::atomic};
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{pin_mut, Stream, StreamExt, stream::FusedStream};
+use futures::{pin_mut, stream::FusedStream, Stream, StreamExt};
 use rustdds::{rpc::*, *};
 
 use crate::{message::Message, node::Node, pubsub::MessageInfo};
@@ -432,7 +432,11 @@ where
       ServiceMapping::Enhanced => sent_rmw_req_id,
       ServiceMapping::Basic | ServiceMapping::Cyclone => gen_rmw_req_id,
     };
-    debug!("Sent Request {:?} to {:?}", req_id, self.request_sender.topic().name() );
+    debug!(
+      "Sent Request {:?} to {:?}",
+      req_id,
+      self.request_sender.topic().name()
+    );
     Ok(req_id)
   }
 
@@ -461,8 +465,10 @@ where
           if req_id == request_id {
             return Ok(response);
           } else {
-            debug!("Received response for someone else. expected={:?}  received={:?}",
-              request_id, req_id );
+            debug!(
+              "Received response for someone else. expected={:?}  received={:?}",
+              request_id, req_id
+            );
             continue; //
           }
         }

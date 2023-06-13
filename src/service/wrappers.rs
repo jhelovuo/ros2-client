@@ -327,8 +327,7 @@ impl<RW> ServiceDeserializerAdapter<RW> {
   ];
 }
 
-impl<RW: Wrapper> no_key::DeserializerAdapter<RW> for ServiceDeserializerAdapter<RW>
-{
+impl<RW: Wrapper> no_key::DeserializerAdapter<RW> for ServiceDeserializerAdapter<RW> {
   fn supported_encodings() -> &'static [RepresentationIdentifier] {
     &Self::REPR_IDS
   }
@@ -341,8 +340,7 @@ impl<RW: Wrapper> no_key::DeserializerAdapter<RW> for ServiceDeserializerAdapter
   }
 }
 
-impl<RW: Wrapper> no_key::SerializerAdapter<RW> for ServiceSerializerAdapter<RW>
-{
+impl<RW: Wrapper> no_key::SerializerAdapter<RW> for ServiceSerializerAdapter<RW> {
   fn output_encoding() -> RepresentationIdentifier {
     RepresentationIdentifier::CDR_LE
   }

@@ -2,28 +2,29 @@ use std::time::Duration;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-
-
-use futures::{FutureExt as StdFutureExt, StreamExt, pin_mut, };
+use futures::{pin_mut, FutureExt as StdFutureExt, StreamExt};
 use smol::future::FutureExt;
-use ros2_client::{Context,  Node, NodeOptions, ServiceMapping, action, MessageTypeName, action_msgs };
+use ros2_client::{
+  action, action_msgs, Context, MessageTypeName, Node, NodeOptions, ServiceMapping,
+};
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 // Test / demo program of ROS2 Action, client side.
 //
 // To set up a server from ROS2:
-// % ros2 run examples_rclcpp_minimal_action_server action_server_member_functions
-// or
+// % ros2 run examples_rclcpp_minimal_action_server
+// action_server_member_functions or
 // % ros2 run examples_rclpy_minimal_action_server server_queue_goals
 //
 // Then run this example.
 
 // This is a ros2-client version of the ROS2 original example programs:
 // https://github.com/ros2/examples/blob/rolling/rclcpp/actions/minimal_action_client/member_functions.cpp
-// or 
+// or
 // https://github.com/ros2/examples/blob/rolling/rclpy/actions/minimal_action_client/examples_rclpy_minimal_action_client/client_asyncio.py
 //
-// Unlike the originals, this program loops and sends repatedly new action goals.
+// Unlike the originals, this program loops and sends repatedly new action
+// goals.
 
 // Original action definition
 // https://docs.ros2.org/latest/api/action_tutorials_interfaces/action/Fibonacci.html
@@ -34,7 +35,6 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 // ---
 // int32[] partial_sequence
 
-
 // Rust version of action type definition
 //
 // We define the action using standard/primitive types, but we could
@@ -42,7 +42,6 @@ use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 // struct FibonacciActionGoal{ goal: i32 }
 // or any other tuple/struct that contains only an i32.
 type FibonacciAction = action::Action<i32, Vec<i32>, Vec<i32>>;
-
 
 fn main() {
   pretty_env_logger::init();
@@ -53,7 +52,7 @@ fn main() {
     // We will send two stop commands, one for reader, the other for writer.
     stop_sender.send_blocking(()).unwrap_or(());
   })
-    .expect("Error setting Ctrl-C handler");
+  .expect("Error setting Ctrl-C handler");
   println!("Press Ctrl-C to quit.");
 
   let mut node = create_node();
@@ -71,7 +70,7 @@ fn main() {
     .create_action_client::<FibonacciAction>(
       ServiceMapping::Enhanced,
       "fibonacci",
-      &MessageTypeName::new("example_interfaces", "Fibonacci"), 
+      &MessageTypeName::new("example_interfaces", "Fibonacci"),
       fibonacci_action_qos,
     )
     .unwrap();
@@ -93,7 +92,7 @@ fn main() {
           // Generate a goal for Fibonacci action server
           request_generator += 2;
           request_generator %= 10;
-          let order = request_generator; 
+          let order = request_generator;
           println!(">>> Sending goal: {order}");
           // Send a goal for the action server.
           // Wait for the server to accept or reject the goal or timeout
@@ -102,24 +101,24 @@ fn main() {
                   smol::Timer::after(Duration::from_secs(5)).await;
                   println!(">>> No goal response. Is action server running?");
                   Err(rustdds::dds::Error::MustBlock )
-                }).await 
+                }).await
           {
             Ok((goal_id, goal_response)) => {
               // Server responded to goal request.
               println!("<<< Goal Response={:?} goal_id={:?}", goal_response, goal_id);
               if goal_response.accepted {
                 // Now that we have a goal, we can ask for a result, feedback, and status.
-                let feedback_stream = 
+                let feedback_stream =
                   fibonacci_action_client.feedback_stream(goal_id);
                 pin_mut!(feedback_stream);
                 let status_stream = fibonacci_action_client.all_statuses_stream();
                 pin_mut!(status_stream);
-                let mut goal_finish_timeout = 
+                let mut goal_finish_timeout =
                   futures::FutureExt::fuse(smol::Timer::interval(Duration::from_secs(30)));
                 let result_fut = fibonacci_action_client.async_request_result(goal_id)
                                     .fuse();
                 pin_mut!(result_fut);
-                
+
                 let mut goal_done = false;
 
                 while ! goal_done {
@@ -152,7 +151,7 @@ fn main() {
                     status = status_stream.select_next_some() => {
                       print!("<<< Status: ");
                       match status {
-                        Ok(status) => 
+                        Ok(status) =>
                           match status.status_list.iter().find(|gs| gs.goal_info.goal_id == goal_id) {
                             Some(action_msgs::GoalStatus{goal_info:_, status}) => println!("{:?}",status),
                             None => println!("Our status is missing: {:?}", status.status_list),

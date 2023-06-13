@@ -1,10 +1,12 @@
 use std::io;
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
-use futures::{pin_mut, stream::{Stream, StreamExt, FusedStream} };
+use futures::{
+  pin_mut,
+  stream::{FusedStream, Stream, StreamExt},
+};
 use rustdds::{rpc::SampleIdentity, *};
 use serde::{de::DeserializeOwned, Serialize};
-
 
 /// A ROS2 Publisher
 ///
@@ -79,7 +81,7 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
   pub fn take(&self) -> dds::Result<Option<(M, MessageInfo)>> {
     self.datareader.drain_read_notifications();
     let ds: Option<no_key::DeserializedCacheChange<M>> = self.datareader.try_take_one()?;
-    Ok(ds.map( dcc_to_value_and_messageinfo))
+    Ok(ds.map(dcc_to_value_and_messageinfo))
   }
 
   pub async fn async_take(&self) -> dds::Result<(M, MessageInfo)> {
@@ -89,16 +91,20 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
       Some(Err(e)) => Err(e),
       Some(Ok(ds)) => Ok(dcc_to_value_and_messageinfo(ds)),
       None => Err(dds::Error::Internal {
-                // Stream from SimpleDataReader is not supposed to ever end.
-                reason: "async_take(): SimpleDataReader value stream unexpectedly ended!".to_string(),
-              }), 
+        // Stream from SimpleDataReader is not supposed to ever end.
+        reason: "async_take(): SimpleDataReader value stream unexpectedly ended!".to_string(),
+      }),
     }
   }
 
   // Returns an async Stream of messages with MessageInfo metadata
-  pub fn async_stream(&self) -> impl Stream<Item = dds::Result<(M, MessageInfo)>> + FusedStream + '_ {
-    self.datareader.as_async_stream()
-      .map(|result| result.map( dcc_to_value_and_messageinfo )) 
+  pub fn async_stream(
+    &self,
+  ) -> impl Stream<Item = dds::Result<(M, MessageInfo)>> + FusedStream + '_ {
+    self
+      .datareader
+      .as_async_stream()
+      .map(|result| result.map(dcc_to_value_and_messageinfo))
   }
 
   pub fn guid(&self) -> rustdds::GUID {
@@ -108,12 +114,12 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
 
 // helper
 #[inline]
-fn dcc_to_value_and_messageinfo<M>(dcc : no_key::DeserializedCacheChange<M>) -> (M, MessageInfo) 
+fn dcc_to_value_and_messageinfo<M>(dcc: no_key::DeserializedCacheChange<M>) -> (M, MessageInfo)
 where
-  M: DeserializeOwned
+  M: DeserializeOwned,
 {
   let mi = MessageInfo::from(&dcc);
-  (dcc.into_value(), mi) 
+  (dcc.into_value(), mi)
 }
 
 impl<D> Evented for Subscription<D>
