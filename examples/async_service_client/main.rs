@@ -2,11 +2,16 @@ use std::time::Duration;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{FutureExt as StdFutureExt, StreamExt};
+use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt};
 use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
-use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping};
-use rustdds::{policy, QosPolicies, QosPolicyBuilder};
+use ros2_client::{
+  service::CallServiceError, AService, Context, Message, Node, NodeOptions, ServiceMapping,
+};
+use rustdds::{
+  dds::{ReadError, WriteError},
+  policy, QosPolicies, QosPolicyBuilder,
+};
 
 // Test / demo program of ROS2 services, client side.
 //
@@ -81,10 +86,10 @@ fn main() {
             Ok(req_id) => {
               println!(">>> request sent a={} b={}, {:?}", a, b, req_id.sequence_number);
               match
-                client.async_receive_response(req_id)
+                client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
                   .or(async {
                         smol::Timer::after(Duration::from_secs(2)).await;
-                        Err(rustdds::dds::Error::MustBlock )
+                        Err(WriteError::WouldBlock { data: () }.into() )
                       }).await
 
               {

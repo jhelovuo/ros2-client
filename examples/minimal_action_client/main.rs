@@ -7,7 +7,7 @@ use smol::future::FutureExt;
 use ros2_client::{
   action, action_msgs, Context, MessageTypeName, Node, NodeOptions, ServiceMapping,
 };
-use rustdds::{policy, QosPolicies, QosPolicyBuilder};
+use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
 // Test / demo program of ROS2 Action, client side.
 //
@@ -100,7 +100,7 @@ fn main() {
                 .or(async {
                   smol::Timer::after(Duration::from_secs(5)).await;
                   println!(">>> No goal response. Is action server running?");
-                  Err(rustdds::dds::Error::MustBlock )
+                  Err(WriteError::WouldBlock { data: () }.into())
                 }).await
           {
             Ok((goal_id, goal_response)) => {

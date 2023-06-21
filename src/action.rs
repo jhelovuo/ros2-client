@@ -3,7 +3,10 @@ use std::{
   marker::PhantomData,
 };
 
-use rustdds::*;
+use rustdds::{
+  dds::{ReadError, ReadResult, WriteError, WriteResult},
+  *,
+};
 use serde::{Deserialize, Serialize};
 pub use action_msgs::{CancelGoalRequest, CancelGoalResponse, GoalId, GoalInfo, GoalStatusEnum};
 use builtin_interfaces::Time;
@@ -18,7 +21,7 @@ use futures::{
 use crate::{
   action_msgs, builtin_interfaces,
   message::Message,
-  service::{request_id::RmwRequestId, AService, Client, Server},
+  service::{request_id::RmwRequestId, AService, CallServiceError, Client, Server},
   unique_identifier_msgs, Publisher, Subscription,
 };
 
@@ -196,7 +199,7 @@ where
   /// Returns and id of the Request and id for the Goal.
   /// Request id can be used to recognize correct response from Action Server.
   /// Goal id is later used to communicate Goal status and result.
-  pub fn send_goal(&self, goal: A::GoalType) -> dds::Result<(RmwRequestId, GoalId)>
+  pub fn send_goal(&self, goal: A::GoalType) -> WriteResult<(RmwRequestId, GoalId), ()>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -209,7 +212,7 @@ where
 
   /// Receive a response for the specified goal request, or None if response is
   /// not yet available
-  pub fn receive_goal_response(&self, req_id: RmwRequestId) -> dds::Result<Option<SendGoalResponse>>
+  pub fn receive_goal_response(&self, req_id: RmwRequestId) -> ReadResult<Option<SendGoalResponse>>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -237,7 +240,10 @@ where
     // been received already.
   }
 
-  pub async fn async_send_goal(&self, goal: A::GoalType) -> dds::Result<(GoalId, SendGoalResponse)>
+  pub async fn async_send_goal(
+    &self,
+    goal: A::GoalType,
+  ) -> Result<(GoalId, SendGoalResponse), CallServiceError<()>>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -261,7 +267,7 @@ where
   // - If the goal ID is not zero and timestamp is not zero, cancel the goal with
   //   the given ID and all goals accepted at or before the timestamp.
 
-  fn cancel_goal_raw(&self, goal_id: GoalId, timestamp: Time) -> dds::Result<RmwRequestId> {
+  fn cancel_goal_raw(&self, goal_id: GoalId, timestamp: Time) -> WriteResult<RmwRequestId, ()> {
     let goal_info = GoalInfo {
       goal_id,
       stamp: timestamp,
@@ -271,22 +277,22 @@ where
       .send_request(CancelGoalRequest { goal_info })
   }
 
-  pub fn cancel_goal(&self, goal_id: GoalId) -> dds::Result<RmwRequestId> {
+  pub fn cancel_goal(&self, goal_id: GoalId) -> WriteResult<RmwRequestId, ()> {
     self.cancel_goal_raw(goal_id, Time::ZERO)
   }
 
-  pub fn cancel_all_goals_before(&self, timestamp: Time) -> dds::Result<RmwRequestId> {
+  pub fn cancel_all_goals_before(&self, timestamp: Time) -> WriteResult<RmwRequestId, ()> {
     self.cancel_goal_raw(GoalId::ZERO, timestamp)
   }
 
-  pub fn cancel_all_goals(&self) -> dds::Result<RmwRequestId> {
+  pub fn cancel_all_goals(&self) -> WriteResult<RmwRequestId, ()> {
     self.cancel_goal_raw(GoalId::ZERO, Time::ZERO)
   }
 
   pub fn receive_cancel_response(
     &self,
     cancel_request_id: RmwRequestId,
-  ) -> dds::Result<Option<CancelGoalResponse>> {
+  ) -> ReadResult<Option<CancelGoalResponse>> {
     loop {
       match self.my_cancel_client.receive_response() {
         Err(e) => break Err(e),
@@ -303,7 +309,7 @@ where
     &self,
     goal_id: GoalId,
     timestamp: Time,
-  ) -> impl Future<Output = dds::Result<CancelGoalResponse>> + '_ {
+  ) -> impl Future<Output = Result<CancelGoalResponse, CallServiceError<()>>> + '_ {
     let goal_info = GoalInfo {
       goal_id,
       stamp: timestamp,
@@ -313,7 +319,7 @@ where
       .async_call_service(CancelGoalRequest { goal_info })
   }
 
-  pub fn request_result(&self, goal_id: GoalId) -> dds::Result<RmwRequestId>
+  pub fn request_result(&self, goal_id: GoalId) -> WriteResult<RmwRequestId, ()>
   where
     <A as ActionTypes>::ResultType: 'static,
   {
@@ -325,7 +331,7 @@ where
   pub fn receive_result(
     &self,
     result_request_id: RmwRequestId,
-  ) -> dds::Result<Option<(GoalStatusEnum, A::ResultType)>>
+  ) -> ReadResult<Option<(GoalStatusEnum, A::ResultType)>>
   where
     <A as ActionTypes>::ResultType: 'static,
   {
@@ -350,7 +356,7 @@ where
   pub async fn async_request_result(
     &self,
     goal_id: GoalId,
-  ) -> dds::Result<(GoalStatusEnum, A::ResultType)>
+  ) -> Result<(GoalStatusEnum, A::ResultType), CallServiceError<()>>
   where
     <A as ActionTypes>::ResultType: 'static,
   {
@@ -361,7 +367,7 @@ where
     Ok((status, result))
   }
 
-  pub fn receive_feedback(&self, goal_id: GoalId) -> dds::Result<Option<A::FeedbackType>>
+  pub fn receive_feedback(&self, goal_id: GoalId) -> ReadResult<Option<A::FeedbackType>>
   where
     <A as ActionTypes>::FeedbackType: 'static,
   {
@@ -387,7 +393,7 @@ where
   pub fn feedback_stream(
     &self,
     goal_id: GoalId,
-  ) -> impl Stream<Item = dds::Result<A::FeedbackType>> + FusedStream + '_
+  ) -> impl Stream<Item = ReadResult<A::FeedbackType>> + FusedStream + '_
   where
     <A as ActionTypes>::FeedbackType: 'static,
   {
@@ -412,14 +418,14 @@ where
 
   /// Note: This does not take GoalId and will therefore report status of all
   /// Goals.
-  pub fn receive_status(&self) -> dds::Result<Option<action_msgs::GoalStatusArray>> {
+  pub fn receive_status(&self) -> ReadResult<Option<action_msgs::GoalStatusArray>> {
     self
       .my_status_subscription
       .take()
       .map(|r| r.map(|(gsa, _msg_info)| gsa))
   }
 
-  pub async fn async_receive_status(&self) -> dds::Result<action_msgs::GoalStatusArray> {
+  pub async fn async_receive_status(&self) -> ReadResult<action_msgs::GoalStatusArray> {
     let (m, _msg_info) = self.my_status_subscription.async_take().await?;
     Ok(m)
   }
@@ -428,7 +434,7 @@ where
   /// Action server send updates containing status of all goals, hence an array.
   pub fn all_statuses_stream(
     &self,
-  ) -> impl Stream<Item = dds::Result<action_msgs::GoalStatusArray>> + FusedStream + '_ {
+  ) -> impl Stream<Item = ReadResult<action_msgs::GoalStatusArray>> + FusedStream + '_ {
     self
       .my_status_subscription
       .async_stream()
@@ -438,7 +444,7 @@ where
   pub fn status_stream(
     &self,
     goal_id: GoalId,
-  ) -> impl Stream<Item = dds::Result<action_msgs::GoalStatus>> + FusedStream + '_ {
+  ) -> impl Stream<Item = ReadResult<action_msgs::GoalStatus>> + FusedStream + '_ {
     self
       .all_statuses_stream()
       .filter_map(move |result| async move {
@@ -531,7 +537,7 @@ where
   }
 
   /// Receive a new goal, if available.
-  pub fn receive_goal(&self) -> dds::Result<Option<(RmwRequestId, SendGoalRequest<A::GoalType>)>>
+  pub fn receive_goal(&self) -> ReadResult<Option<(RmwRequestId, SendGoalRequest<A::GoalType>)>>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -539,7 +545,11 @@ where
   }
 
   /// Send a response for the specified goal request
-  pub fn send_goal_response(&self, req_id: RmwRequestId, resp: SendGoalResponse) -> dds::Result<()>
+  pub fn send_goal_response(
+    &self,
+    req_id: RmwRequestId,
+    resp: SendGoalResponse,
+  ) -> WriteResult<(), ()>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -549,7 +559,7 @@ where
   /// Receive a cancel request, if available.
   pub fn receive_cancel_request(
     &self,
-  ) -> dds::Result<Option<(RmwRequestId, action_msgs::CancelGoalRequest)>> {
+  ) -> ReadResult<Option<(RmwRequestId, action_msgs::CancelGoalRequest)>> {
     self.my_cancel_server.receive_request()
   }
 
@@ -558,11 +568,11 @@ where
     &self,
     req_id: RmwRequestId,
     resp: action_msgs::CancelGoalResponse,
-  ) -> dds::Result<()> {
+  ) -> WriteResult<(), ()> {
     self.my_cancel_server.send_response(req_id, resp)
   }
 
-  pub fn receive_result_request(&self) -> dds::Result<Option<(RmwRequestId, GetResultRequest)>>
+  pub fn receive_result_request(&self) -> ReadResult<Option<(RmwRequestId, GetResultRequest)>>
   where
     <A as ActionTypes>::ResultType: 'static,
   {
@@ -573,21 +583,28 @@ where
     &self,
     result_request_id: RmwRequestId,
     resp: GetResultResponse<A::ResultType>,
-  ) -> dds::Result<()>
+  ) -> WriteResult<(), ()>
   where
     <A as ActionTypes>::ResultType: 'static,
   {
     self.my_result_server.send_response(result_request_id, resp)
   }
 
-  pub fn send_feedback(&self, goal_id: GoalId, feedback: A::FeedbackType) -> dds::Result<()> {
+  pub fn send_feedback(
+    &self,
+    goal_id: GoalId,
+    feedback: A::FeedbackType,
+  ) -> WriteResult<(), FeedbackMessage<A::FeedbackType>> {
     self
       .my_feedback_publisher
       .publish(FeedbackMessage { goal_id, feedback })
   }
 
   // Send the status of all known goals.
-  pub fn send_goal_statuses(&self, goal_statuses: action_msgs::GoalStatusArray) -> dds::Result<()> {
+  pub fn send_goal_statuses(
+    &self,
+    goal_statuses: action_msgs::GoalStatusArray,
+  ) -> WriteResult<(), action_msgs::GoalStatusArray> {
     self.my_status_publisher.publish(goal_statuses)
   }
 } // impl
@@ -654,15 +671,21 @@ pub enum GoalEndStatus {
 }
 
 #[derive(Debug)]
-pub enum GoalError {
+pub enum GoalError<T> {
   NoSuchGoal,
   WrongGoalState,
-  DDSError(dds::Error),
+  DDSReadError(ReadError),
+  DDSWriteError(WriteError<T>),
 }
 
-impl From<dds::Error> for GoalError {
-  fn from(e: dds::Error) -> Self {
-    GoalError::DDSError(e)
+impl<T> From<ReadError> for GoalError<T> {
+  fn from(e: ReadError) -> Self {
+    GoalError::DDSReadError(e)
+  }
+}
+impl<T> From<WriteError<T>> for GoalError<T> {
+  fn from(e: WriteError<T>) -> Self {
+    GoalError::DDSWriteError(e)
   }
 }
 
@@ -709,7 +732,7 @@ where
 
   /// Reveice a new goal from an action client.
   /// Server should immediately either accept or reject the goal.
-  pub async fn receive_new_goal(&mut self) -> dds::Result<NewGoalHandle<A::GoalType>>
+  pub async fn receive_new_goal(&mut self) -> ReadResult<NewGoalHandle<A::GoalType>>
   where
     <A as ActionTypes>::GoalType: 'static,
   {
@@ -751,7 +774,7 @@ where
   pub async fn accept_goal(
     &mut self,
     handle: NewGoalHandle<A::GoalType>,
-  ) -> Result<AcceptedGoalHandle<A::GoalType>, GoalError>
+  ) -> Result<AcceptedGoalHandle<A::GoalType>, GoalError<()>>
   where
     A::GoalType: 'static,
   {
@@ -794,7 +817,10 @@ where
 
   /// Reject a received goal. Client will be notified of rejection.
   /// Server should not process the goal further.
-  pub async fn reject_goal(&mut self, handle: NewGoalHandle<A::GoalType>) -> Result<(), GoalError>
+  pub async fn reject_goal(
+    &mut self,
+    handle: NewGoalHandle<A::GoalType>,
+  ) -> Result<(), GoalError<()>>
   where
     A::GoalType: 'static,
   {
@@ -837,7 +863,7 @@ where
   pub async fn start_executing_goal(
     &mut self,
     handle: AcceptedGoalHandle<A::GoalType>,
-  ) -> Result<ExecutingGoalHandle<A::GoalType>, GoalError> {
+  ) -> Result<ExecutingGoalHandle<A::GoalType>, GoalError<()>> {
     match self.goals.entry(handle.inner.goal_id) {
       Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => match o.get() {
@@ -870,7 +896,7 @@ where
     &mut self,
     handle: ExecutingGoalHandle<A::GoalType>,
     feedback: A::FeedbackType,
-  ) -> Result<(), GoalError> {
+  ) -> Result<(), GoalError<FeedbackMessage<A::FeedbackType>>> {
     match self.goals.entry(handle.inner.goal_id) {
       Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => match o.get() {
@@ -910,7 +936,7 @@ where
     handle: ExecutingGoalHandle<A::GoalType>,
     result_status: GoalEndStatus,
     result: A::ResultType,
-  ) -> Result<(), GoalError>
+  ) -> Result<(), GoalError<()>>
   where
     A::ResultType: 'static,
   {
@@ -1001,17 +1027,20 @@ where
   pub async fn abort_executing_goal(
     &mut self,
     handle: ExecutingGoalHandle<A::GoalType>,
-  ) -> Result<(), GoalError> {
+  ) -> Result<(), GoalError<()>> {
     self.abort_goal(handle.inner).await
   }
   pub async fn abort_accepted_goal(
     &mut self,
     handle: AcceptedGoalHandle<A::GoalType>,
-  ) -> Result<(), GoalError> {
+  ) -> Result<(), GoalError<()>> {
     self.abort_goal(handle.inner).await
   }
 
-  async fn abort_goal(&mut self, handle: InnerGoalHandle<A::GoalType>) -> Result<(), GoalError> {
+  async fn abort_goal(
+    &mut self,
+    handle: InnerGoalHandle<A::GoalType>,
+  ) -> Result<(), GoalError<()>> {
     match self.goals.entry(handle.goal_id) {
       Entry::Vacant(_) => Err(GoalError::NoSuchGoal),
       Entry::Occupied(o) => match o.get() {
@@ -1045,7 +1074,7 @@ where
   /// The server should now respond either by accepting (some of) the
   /// cancel requests or rejecting all of them. The GoalIds that are requested
   /// to be cancelled can be currently at either accepted or executing state.
-  pub async fn receive_cancel_request(&self) -> dds::Result<CancelHandle> {
+  pub async fn receive_cancel_request(&self) -> ReadResult<CancelHandle> {
     let (req_id, CancelGoalRequest { goal_info }) = self
       .actionserver
       .my_cancel_server
@@ -1106,7 +1135,7 @@ where
     &mut self,
     cancel_handle: &CancelHandle,
     goals_to_cancel: impl Iterator<Item = GoalId>,
-  ) -> dds::Result<()> {
+  ) -> WriteResult<(), ()> {
     let canceling_goals: Vec<GoalInfo> = goals_to_cancel
       .filter_map(|goal_id| {
         self

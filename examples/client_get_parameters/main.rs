@@ -67,7 +67,7 @@ fn main() {
       println!(">>> New event");
       match event.token() {
         Token(7) => {
-          while let Ok(Some((id, response))) = client.receive_response() {
+          if let Ok(Some((id, response))) = client.receive_response() {
             println!(
               ">>> Response received -  response: {:?}, id: {:?}",
               response, id,

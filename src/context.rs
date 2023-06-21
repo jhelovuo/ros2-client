@@ -8,6 +8,7 @@ use log::{debug, error, info, trace, warn};
 use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
+  dds::CreateResult,
   no_key::{DeserializerAdapter, SerializerAdapter},
   policy::*,
   *,
@@ -47,25 +48,18 @@ pub struct Context {
 }
 
 impl Context {
-  pub fn new() -> Result<Context, dds::Error> {
+  pub fn new() -> CreateResult<Context> {
     Self::from_domain_participant(DomainParticipant::new(0)?)
   }
 
-  pub fn from_domain_participant(
-    domain_participant: DomainParticipant,
-  ) -> Result<Context, dds::Error> {
+  pub fn from_domain_participant(domain_participant: DomainParticipant) -> CreateResult<Context> {
     let i = ContextInner::from_domain_participant(domain_participant)?;
     Ok(Context {
       inner: Arc::new(Mutex::new(i)),
     })
   }
   /// Create a new ROS2 node
-  pub fn new_node(
-    &self,
-    name: &str,
-    namespace: &str,
-    options: NodeOptions,
-  ) -> Result<Node, dds::Error> {
+  pub fn new_node(&self, name: &str, namespace: &str, options: NodeOptions) -> CreateResult<Node> {
     Node::new(name, namespace, options, self.clone())
   }
 
@@ -73,7 +67,7 @@ impl Context {
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> dds::Result<Publisher<M>>
+  ) -> dds::CreateResult<Publisher<M>>
   where
     M: Serialize,
   {
@@ -88,7 +82,7 @@ impl Context {
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> dds::Result<Subscription<M>>
+  ) -> dds::CreateResult<Subscription<M>>
   where
     M: 'static + DeserializeOwned,
   {
@@ -102,7 +96,7 @@ impl Context {
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> dds::Result<no_key::DataWriter<M, SA>>
+  ) -> dds::CreateResult<no_key::DataWriter<M, SA>>
   where
     SA: SerializerAdapter<M>,
   {
@@ -115,7 +109,7 @@ impl Context {
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> dds::Result<no_key::SimpleDataReader<M, DA>>
+  ) -> dds::CreateResult<no_key::SimpleDataReader<M, DA>>
   where
     M: 'static,
     DA: 'static + DeserializerAdapter<M>,
@@ -208,7 +202,7 @@ impl ContextInner {
   // "new"
   pub fn from_domain_participant(
     domain_participant: DomainParticipant,
-  ) -> Result<ContextInner, dds::Error> {
+  ) -> CreateResult<ContextInner> {
     let ros_discovery_topic = domain_participant.create_topic(
       builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
       builtin_topics::ros_discovery::TYPE_NAME.to_string(),

@@ -4,12 +4,16 @@ use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use futures::{pin_mut, stream::FusedStream, Stream, StreamExt};
-use rustdds::{rpc::*, *};
+use rustdds::{
+  dds::{CreateResult, ReadError, ReadResult, WriteError, WriteResult},
+  rpc::*,
+  *,
+};
 
 use crate::{message::Message, node::Node, pubsub::MessageInfo};
 
 pub mod request_id;
-mod wrappers;
+pub(super) mod wrappers;
 
 pub use request_id::*;
 use wrappers::*;
@@ -133,7 +137,7 @@ where
     response_topic: &Topic,
     qos_request: Option<QosPolicies>,
     qos_response: Option<QosPolicies>,
-  ) -> dds::Result<Self> {
+  ) -> CreateResult<Self> {
     let request_receiver =
       node.create_simpledatareader
       ::<RequestWrapper<S::Request>, ServiceDeserializerAdapter<RequestWrapper<S::Request>>>(
@@ -158,7 +162,7 @@ where
 
   /// Receive a request from Client.
   /// Returns `Ok(None)` if no new requests have arrived.
-  pub fn receive_request(&self) -> dds::Result<Option<(RmwRequestId, S::Request)>> {
+  pub fn receive_request(&self) -> ReadResult<Option<(RmwRequestId, S::Request)>> {
     self.request_receiver.drain_read_notifications();
     let dcc_rw: Option<no_key::DeserializedCacheChange<RequestWrapper<S::Request>>> =
       self.request_receiver.try_take_one()?;
@@ -176,7 +180,11 @@ where
 
   /// Send response to request by Client.
   /// rmw_req_id identifies request being responded.
-  pub fn send_response(&self, rmw_req_id: RmwRequestId, response: S::Response) -> dds::Result<()> {
+  pub fn send_response(
+    &self,
+    rmw_req_id: RmwRequestId,
+    response: S::Response,
+  ) -> WriteResult<(), ()> {
     let resp_wrapper = ResponseWrapper::<S::Response>::new(
       self.service_mapping,
       rmw_req_id,
@@ -194,20 +202,17 @@ where
     self
       .response_sender
       .write_with_options(resp_wrapper, write_opts)
-      .map(|_| ()) // lose SampleIdentity result
+      .map(|_| ())
+      .map_err(|e| e.forget_data()) // lose SampleIdentity result
   }
 
   /// The request_id must be sent back with the response to identify which
   /// request and response belong together.
-  pub async fn async_receive_request(&self) -> dds::Result<(RmwRequestId, S::Request)> {
+  pub async fn async_receive_request(&self) -> ReadResult<(RmwRequestId, S::Request)> {
     let dcc_stream = self.request_receiver.as_async_stream();
     pin_mut!(dcc_stream);
 
     match dcc_stream.next().await {
-      None => Err(dds::Error::Internal {
-        reason: "SimpleDataReader value stream unexpectedly ended!".to_string(),
-      }),
-      // This should never occur, because topic do not "end".
       Some(Err(e)) => Err(e),
       Some(Ok(dcc)) => {
         let mi = MessageInfo::from(&dcc);
@@ -215,6 +220,8 @@ where
         let (ri, req) = req_wrapper.unwrap(self.service_mapping, &mi)?;
         Ok((ri, req))
       }
+      // This should never occur, because topic do not "end".
+      None => read_error_internal!("SimpleDataReader value stream unexpectedly ended!"),
     } // match
   }
 
@@ -223,7 +230,7 @@ where
   /// request and response belong together.
   pub fn receive_request_stream(
     &self,
-  ) -> impl Stream<Item = dds::Result<(RmwRequestId, S::Request)>> + FusedStream + '_ {
+  ) -> impl Stream<Item = ReadResult<(RmwRequestId, S::Request)>> + FusedStream + '_ {
     Box::pin(self.request_receiver.as_async_stream()).then(
       move |dcc_r| async move {
         match dcc_r {
@@ -243,7 +250,7 @@ where
     &self,
     rmw_req_id: RmwRequestId,
     response: S::Response,
-  ) -> dds::Result<()> {
+  ) -> dds::WriteResult<(), ()> {
     let resp_wrapper = ResponseWrapper::<S::Response>::new(
       self.service_mapping,
       rmw_req_id,
@@ -262,7 +269,8 @@ where
       .response_sender
       .async_write_with_options(resp_wrapper, write_opts)
       .await
-      .map(|_| ()) // lose SampleIdentity result
+      .map(|_| ())
+      .map_err(|e| e.forget_data()) // lose SampleIdentity result
   }
 }
 
@@ -316,7 +324,7 @@ where
     response_topic: &Topic,
     qos_request: Option<QosPolicies>,
     qos_response: Option<QosPolicies>,
-  ) -> dds::Result<Self> {
+  ) -> CreateResult<Self> {
     let request_sender =
       node.create_datawriter
       ::<RequestWrapper<S::Request>, ServiceSerializerAdapter<RequestWrapper<S::Request>>>(
@@ -343,7 +351,7 @@ where
 
   /// Send a request to Service Server.
   /// The returned `RmwRequestId` is a token to identify the correct response.
-  pub fn send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
+  pub fn send_request(&self, request: S::Request) -> WriteResult<RmwRequestId, ()> {
     self.increment_sequence_number();
     let gen_rmw_req_id = RmwRequestId {
       writer_guid: self.client_guid,
@@ -365,7 +373,8 @@ where
     let sent_rmw_req_id = self
       .request_sender
       .write_with_options(req_wrapper, write_opts_builder.build())
-      .map(RmwRequestId::from)?;
+      .map(RmwRequestId::from)
+      .map_err(|e| e.forget_data())?;
 
     match self.service_mapping {
       ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
@@ -379,7 +388,7 @@ where
   /// `RmWRequestId` against the one you got when sending request to identify
   /// the correct response. In case you receive someone else's response,
   /// please do receive again.
-  pub fn receive_response(&self) -> dds::Result<Option<(RmwRequestId, S::Response)>> {
+  pub fn receive_response(&self) -> ReadResult<Option<(RmwRequestId, S::Response)>> {
     self.response_receiver.drain_read_notifications();
     let dcc_rw: Option<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>> =
       self.response_receiver.try_take_one()?;
@@ -397,7 +406,7 @@ where
 
   /// Send a request to Service Server asynchronously.
   /// The returned `RmwRequestId` is a token to identify the correct response.
-  pub async fn async_send_request(&self, request: S::Request) -> dds::Result<RmwRequestId> {
+  pub async fn async_send_request(&self, request: S::Request) -> WriteResult<RmwRequestId, ()> {
     let gen_rmw_req_id =
       // we do the req_id generation in an async block so that we do not generate
       // multiple sequence numbers if there are multiple polls to this function
@@ -426,7 +435,8 @@ where
       .request_sender
       .async_write_with_options(req_wrapper, write_opts_builder.build())
       .await
-      .map(RmwRequestId::from)?;
+      .map(RmwRequestId::from)
+      .map_err(|e| e.forget_data())?;
 
     let req_id = match self.service_mapping {
       ServiceMapping::Enhanced => sent_rmw_req_id,
@@ -443,18 +453,12 @@ where
   /// Receive a response from Server
   /// The returned Future does not complete until the response has been
   /// received.
-  pub async fn async_receive_response(&self, request_id: RmwRequestId) -> dds::Result<S::Response> {
+  pub async fn async_receive_response(&self, request_id: RmwRequestId) -> ReadResult<S::Response> {
     let dcc_stream = self.response_receiver.as_async_stream();
     pin_mut!(dcc_stream);
 
     loop {
       match dcc_stream.next().await {
-        None => {
-          return Err(dds::Error::Internal {
-            reason: "SimpleDataReader value stream unexpectedly ended!".to_string(),
-          })
-        }
-        // This should never occur, because topic do not "end".
         Some(Err(e)) => return Err(e),
         Some(Ok(dcc)) => {
           let mi = MessageInfo::from(&dcc);
@@ -472,13 +476,21 @@ where
             continue; //
           }
         }
+        // This should never occur, because topic do not "end".
+        None => return read_error_internal!("SimpleDataReader value stream unexpectedly ended!"),
       }
     } // loop
   }
 
-  pub async fn async_call_service(&self, request: S::Request) -> dds::Result<S::Response> {
+  pub async fn async_call_service(
+    &self,
+    request: S::Request,
+  ) -> Result<S::Response, CallServiceError<()>> {
     let req_id = self.async_send_request(request).await?;
-    self.async_receive_response(req_id).await
+    self
+      .async_receive_response(req_id)
+      .await
+      .map_err(CallServiceError::from)
   }
 
   fn increment_sequence_number(&self) {
@@ -489,6 +501,22 @@ where
 
   fn sequence_number(&self) -> request_id::SequenceNumber {
     SequenceNumber::from(self.sequence_number_gen.load(atomic::Ordering::Acquire)).into()
+  }
+}
+
+#[derive(Debug)]
+pub enum CallServiceError<T> {
+  WriteError(WriteError<T>),
+  ReadError(ReadError),
+}
+impl<T> From<WriteError<T>> for CallServiceError<T> {
+  fn from(value: WriteError<T>) -> Self {
+    CallServiceError::WriteError(value)
+  }
+}
+impl<T> From<ReadError> for CallServiceError<T> {
+  fn from(value: ReadError) -> Self {
+    CallServiceError::ReadError(value)
   }
 }
 

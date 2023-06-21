@@ -3,7 +3,10 @@ use std::collections::HashSet;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
-use rustdds::*;
+use rustdds::{
+  dds::{CreateError, CreateResult},
+  *,
+};
 
 use crate::{
   action::*,
@@ -101,7 +104,7 @@ impl Node {
     namespace: &str,
     options: NodeOptions,
     ros_context: Context,
-  ) -> Result<Node, dds::Error> {
+  ) -> CreateResult<Node> {
     let paramtopic = ros_context.get_parameter_events_topic();
     let rosout_topic = ros_context.get_rosout_topic();
 
@@ -233,7 +236,7 @@ impl Node {
     name: &str,
     type_name: String,
     qos: &QosPolicies,
-  ) -> Result<Topic, dds::Error> {
+  ) -> CreateResult<Topic> {
     let oname = Self::check_name_and_add_prefix("rt/".to_owned(), name)?;
     info!("Creating topic, DDS name: {}", oname);
     let topic = self.ros_context.domain_participant().create_topic(
@@ -258,15 +261,15 @@ impl Node {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<Subscription<D>, dds::Error> {
+  ) -> CreateResult<Subscription<D>> {
     let sub = self.ros_context.create_subscription(topic, qos)?;
     self.add_reader(sub.guid());
     Ok(sub)
   }
 
-  fn check_name_and_add_prefix(mut prefix: String, name: &str) -> Result<String, dds::Error> {
+  fn check_name_and_add_prefix(mut prefix: String, name: &str) -> CreateResult<String> {
     if name.is_empty() {
-      return dds::Error::bad_parameter("Topic name must not be empty.");
+      return create_error_bad_parameter!("Topic name must not be empty.");
     }
     // TODO: Implement the rest of the ROS2 name rules.
     // See https://design.ros2.org/articles/topic_and_service_names.html
@@ -289,7 +292,7 @@ impl Node {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<Publisher<D>, dds::Error> {
+  ) -> CreateResult<Publisher<D>> {
     let p = self.ros_context.create_publisher(topic, qos)?;
     self.add_writer(p.guid());
     Ok(p)
@@ -299,7 +302,7 @@ impl Node {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<no_key::SimpleDataReader<D, DA>, dds::Error>
+  ) -> CreateResult<no_key::SimpleDataReader<D, DA>>
   where
     D: 'static,
     DA: rustdds::no_key::DeserializerAdapter<D> + 'static,
@@ -311,7 +314,7 @@ impl Node {
     &mut self,
     topic: &Topic,
     qos: Option<QosPolicies>,
-  ) -> Result<no_key::DataWriter<D, SA>, dds::Error>
+  ) -> CreateResult<no_key::DataWriter<D, SA>>
   where
     SA: rustdds::no_key::SerializerAdapter<D>,
   {
@@ -333,7 +336,7 @@ impl Node {
     response_type_name: &str,
     request_qos: QosPolicies,
     response_qos: QosPolicies,
-  ) -> Result<Client<S>, dds::Error>
+  ) -> CreateResult<Client<S>>
   where
     S: Service + 'static,
     S::Request: Clone,
@@ -388,7 +391,7 @@ impl Node {
     response_type_name: &str,
     request_qos: QosPolicies,
     response_qos: QosPolicies,
-  ) -> Result<Server<S>, dds::Error>
+  ) -> CreateResult<Server<S>>
   where
     S: Service + 'static,
     S::Request: Clone,
@@ -429,7 +432,7 @@ impl Node {
     action_name: &str,
     action_type_name: &MessageTypeName,
     action_qos: ActionClientQosPolicies,
-  ) -> Result<ActionClient<A>, dds::Error>
+  ) -> CreateResult<ActionClient<A>>
   where
     A: ActionTypes + 'static,
   {
@@ -509,7 +512,7 @@ impl Node {
     action_name: &str,
     action_type_name: &MessageTypeName,
     action_qos: ActionServerQosPolicies,
-  ) -> Result<ActionServer<A>, dds::Error>
+  ) -> CreateResult<ActionServer<A>>
   where
     A: ActionTypes + 'static,
   {
