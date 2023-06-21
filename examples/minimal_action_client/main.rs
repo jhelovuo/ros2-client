@@ -63,7 +63,7 @@ fn main() {
     result_service: service_qos.clone(),
     cancel_service: service_qos.clone(),
     feedback_subscription: service_qos.clone(),
-    status_subscription: service_qos.clone(),
+    status_subscription: service_qos,
   };
 
   let fibonacci_action_client = node
@@ -192,12 +192,11 @@ fn create_qos() -> QosPolicies {
 
 fn create_node() -> Node {
   let context = Context::new().unwrap();
-  let node = context
+  context
     .new_node(
       "rustdds_client",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )
-    .unwrap();
-  node
+    .unwrap()
 }

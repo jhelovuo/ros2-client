@@ -70,9 +70,9 @@ fn main() {
   let fibonacci_action_qos = action::ActionServerQosPolicies {
     goal_service: service_qos.clone(),
     result_service: service_qos.clone(),
-    cancel_service: service_qos.clone(),
+    cancel_service: service_qos,
     feedback_publisher: publisher_qos.clone(),
-    status_publisher: publisher_qos.clone(),
+    status_publisher: publisher_qos,
   };
 
   let mut fibonacci_action_server = action::AsyncActionServer::new(
@@ -102,7 +102,7 @@ fn main() {
             Ok(new_goal_handle) => {
               let fib_order = usize::try_from( *fibonacci_action_server.get_new_goal(new_goal_handle).unwrap()).unwrap();
               info!("New goal. order={fib_order} goal_id={:?}", new_goal_handle.goal_id());
-              if  fib_order < 1 || fib_order > 25 {
+              if  !(1..=25).contains(&fib_order) {
                 fibonacci_action_server.reject_goal(new_goal_handle).await.unwrap();
                 info!("Goal rejected. order={fib_order}");
               } else {
@@ -182,12 +182,11 @@ fn main() {
 
 fn create_node() -> Node {
   let context = Context::new().unwrap();
-  let node = context
+  context
     .new_node(
       "minimal_action_server",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )
-    .unwrap();
-  node
+    .unwrap()
 }

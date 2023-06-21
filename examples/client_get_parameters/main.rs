@@ -30,7 +30,7 @@ fn main() {
       service_dummy.request_type_name(),
       service_dummy.response_type_name(),
       service_qos.clone(),
-      service_qos.clone(),
+      service_qos,
     )
     .unwrap();
 
@@ -95,12 +95,11 @@ fn create_qos() -> QosPolicies {
 
 fn create_node() -> Node {
   let context = Context::new().unwrap();
-  let node = context
+  context
     .new_node(
       "rustdds_client",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )
-    .unwrap();
-  node
+    .unwrap()
 }

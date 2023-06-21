@@ -356,7 +356,7 @@ fn ros2_loop(
     result_service: service_qos.clone(),
     cancel_service: service_qos.clone(),
     feedback_subscription: service_qos.clone(),
-    status_subscription: service_qos.clone(),
+    status_subscription: service_qos,
   };
 
   let mut rotate_action_client = ros_node
@@ -567,14 +567,14 @@ fn ros2_loop(
                       req_id, goal_id
                     );
                     rotate_goal_req_id = Some(req_id);
-                    rotate_goal_id = Some(goal_id.clone());
+                    rotate_goal_id = Some(*goal_id);
                   }
                 }
               }
 
               RosCommand::RotateAbsolute_Cancel => match rotate_goal_id {
                 None => info!("No goal to cancel!"),
-                Some(ref goal_id) => match rotate_action_client.cancel_goal(goal_id.clone()) {
+                Some(ref goal_id) => match rotate_action_client.cancel_goal(*goal_id) {
                   Err(e) => {
                     error!("Failed to cancel RotateAbsoluteGoal: {:?}", e);
                   }
@@ -633,7 +633,7 @@ fn ros2_loop(
                       .send(format!("RotateAbsolute goal acknowledged: {:?}", goal_resp))
                       .unwrap();
                     info!("RotateAbsolute goal acknowledged: {:?}", goal_resp);
-                    match rotate_action_client.request_result(goal_id.clone()) {
+                    match rotate_action_client.request_result(*goal_id) {
                       Err(e) => info!("Cannot request result: {:?}", e),
                       Ok(result_req_id) => {
                         rotate_result_req_id = Some(result_req_id);
@@ -688,7 +688,7 @@ fn ros2_loop(
         }
         ROTATE_ABSOLUTE_FEEDBACK_TOKEN => match rotate_goal_id {
           Some(ref rotate_goal_id) => loop {
-            match rotate_action_client.receive_feedback(rotate_goal_id.clone()) {
+            match rotate_action_client.receive_feedback(*rotate_goal_id) {
               Ok(Some(f)) => info!("RotateAbsolute feedback = {:?}", f),
               Ok(None) => break,
               Err(e) => error!("Bad feedback: {:?}", e),

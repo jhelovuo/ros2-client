@@ -95,12 +95,11 @@ fn create_qos() -> QosPolicies {
 
 fn create_node() -> Node {
   let context = Context::new().unwrap();
-  let node = context
+  context
     .new_node(
       "rustdds_listener",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )
-    .unwrap();
-  node
+    .unwrap()
 }

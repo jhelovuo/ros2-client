@@ -104,9 +104,8 @@ impl UiController {
     let stop_reader_thread_clone = stop_reader.clone();
     std::thread::spawn(move || {
       for i in std::io::stdin().events() {
-        match stdin_tx.send(i.unwrap()) {
-          Err(_) => return,
-          _ => (),
+        if stdin_tx.send(i.unwrap()).is_err() {
+          return;
         }
         if stop_reader_thread_clone.load(Ordering::Relaxed) {
           return;

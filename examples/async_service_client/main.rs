@@ -8,10 +8,7 @@ use serde::{Deserialize, Serialize};
 use ros2_client::{
   service::CallServiceError, AService, Context, Message, Node, NodeOptions, ServiceMapping,
 };
-use rustdds::{
-  dds::{ReadError, WriteError},
-  policy, QosPolicies, QosPolicyBuilder,
-};
+use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
 // Test / demo program of ROS2 services, client side.
 //
@@ -62,7 +59,7 @@ fn main() {
       "example_interfaces::srv::dds_::AddTwoInts_Request_", // req type name
       "example_interfaces::srv::dds_::AddTwoInts_Response_", // resp type name
       service_qos.clone(),
-      service_qos.clone(),
+      service_qos,
     )
     .unwrap();
 
@@ -125,12 +122,11 @@ fn create_qos() -> QosPolicies {
 
 fn create_node() -> Node {
   let context = Context::new().unwrap();
-  let node = context
+  context
     .new_node(
       "rustdds_client",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )
-    .unwrap();
-  node
+    .unwrap()
 }
