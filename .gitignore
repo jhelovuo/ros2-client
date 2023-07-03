@@ -1,4 +1,5 @@
 /target
 Cargo.lock
 log4rs.txt
-.gitignore
+ros-init.sh
+.vscode
