@@ -29,7 +29,7 @@ use crate::{
 pub trait ActionTypes {
   type GoalType: Message + Clone; // Used by client to set a goal for the server
   type ResultType: Message + Clone; // Used by server to report result when action ends
-  type FeedbackType: Message; // Used by server to report progrss during action excution
+  type FeedbackType: Message; // Used by server to report progress during action execution
 
   fn goal_type_name(&self) -> &str;
   fn result_type_name(&self) -> &str;
@@ -87,7 +87,7 @@ where
   }
 }
 
-//TODO: Make fields private, add constructr and accessors.
+//TODO: Make fields private, add constructor and accessors.
 pub struct ActionClientQosPolicies {
   pub goal_service: QosPolicies,
   pub result_service: QosPolicies,
@@ -730,7 +730,7 @@ where
     self.goals.get(&handle.inner.goal_id).map(|ag| &ag.goal)
   }
 
-  /// Reveice a new goal from an action client.
+  /// Receive a new goal from an action client.
   /// Server should immediately either accept or reject the goal.
   pub async fn receive_new_goal(&mut self) -> ReadResult<NewGoalHandle<A::GoalType>>
   where
@@ -858,7 +858,7 @@ where
     }
   }
 
-  /// Convert an accepted goal into a execting goal, i.e. start the execution.
+  /// Convert an accepted goal into a expecting goal, i.e. start the execution.
   /// Executing goal can publish feedback.
   pub async fn start_executing_goal(
     &mut self,
@@ -1172,7 +1172,7 @@ where
   }
 
   // This function is private, because all status publishing happens automatically
-  // via goal startus changes.
+  // via goal status changes.
   async fn publish_statuses(&self) {
     let goal_status_array = action_msgs::GoalStatusArray {
       status_list: self

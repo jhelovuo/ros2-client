@@ -28,7 +28,7 @@
 //!   .create_publisher::<NodeEntitiesInfo>(&some_topic, None)
 //!   .unwrap();
 //!
-//! // Publisher and subscription implement [`mio::Evented`], so thay can be polled.
+//! // Publisher and subscription implement [`mio::Evented`], so they can be polled.
 //! ```
 
 #[macro_use]

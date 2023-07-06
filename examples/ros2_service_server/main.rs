@@ -89,7 +89,7 @@ fn main() {
         _ => println!(">>> Unknown poll token {:?}", event.token()),
       } // match
     } // for
-  } // lopp
+  } // loop
 } // main
 
 fn create_qos() -> QosPolicies {

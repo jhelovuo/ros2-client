@@ -30,7 +30,7 @@ impl Time {
 }
 
 // TODO: Implement constructors and conversions to/from usual Rust time formats
-// Note that this type does not specifiy a zero point in time.
+// Note that this type does not specify a zero point in time.
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Duration {

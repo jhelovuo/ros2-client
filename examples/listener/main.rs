@@ -49,7 +49,7 @@ fn main() {
     for event in events.iter() {
       match event.token() {
         Token(1) => match chatter_subscription.take() {
-          Ok(Some((message, _messafe_info))) => {
+          Ok(Some((message, _message_info))) => {
             let l = message.len();
             println!("message len={} : {:?}", l, &message[..min(l, 50)]);
           }

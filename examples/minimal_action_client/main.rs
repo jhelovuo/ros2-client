@@ -23,7 +23,7 @@ use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 // or
 // https://github.com/ros2/examples/blob/rolling/rclpy/actions/minimal_action_client/examples_rclpy_minimal_action_client/client_asyncio.py
 //
-// Unlike the originals, this program loops and sends repatedly new action
+// Unlike the originals, this program loops and sends repeatedly new action
 // goals.
 
 // Original action definition

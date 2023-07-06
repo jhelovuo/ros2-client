@@ -135,7 +135,7 @@ impl<R: Message> Wrapper for ResponseWrapper<R> {
 
 impl<R: Message> ResponseWrapper<R> {
   // Client decodes ResponseWrapper to Response
-  // message_info is from Server's reponse message
+  // message_info is from Server's response message
   pub(super) fn unwrap(
     &self,
     service_mapping: ServiceMapping,
@@ -163,7 +163,7 @@ impl<R: Message> ResponseWrapper<R> {
         let related_sample_identity = match message_info.related_sample_identity() {
           Some(rsi) => rsi,
           None => {
-            return read_error_deserialization!("ServiceMapping=Enhanced, but response message did not have related_sample_identity paramter!")
+            return read_error_deserialization!("ServiceMapping=Enhanced, but response message did not have related_sample_identity parameter!")
           }
         };
         Ok((RmwRequestId::from(related_sample_identity), response))
@@ -261,7 +261,7 @@ impl Message for BasicReplyHeader {}
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/rmw_node.cpp
 // https://github.com/ros2/rmw_cyclonedds/blob/master/rmw_cyclonedds_cpp/src/serdata.hpp
 // This is a header that Cyclone puts in DDS messages. Same header is used for
-// Requst and Response.
+// Request and Response.
 #[derive(Serialize, Deserialize)]
 pub struct CycloneHeader {
   guid_second_half: [u8; 8], // CycloneDDS RMW only sends last 8 bytes of client GUID

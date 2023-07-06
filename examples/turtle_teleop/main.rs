@@ -120,7 +120,7 @@ fn main() {
 
   jhandle.join().unwrap(); // wait until threads exit.
 
-  // need to wait a bit for cleanup, beacuse drop is not waited for join
+  // need to wait a bit for cleanup, because drop is not waited for join
   std::thread::sleep(Duration::from_millis(10));
 }
 
@@ -169,8 +169,8 @@ fn ros2_loop(
     .unwrap();
 
   // But here is how to read it also, if anyone is interested.
-  // This should show what is the turle command in case someone else is
-  // also issuing commands, i.e. there are two turtla controllers running.
+  // This should show what is the turtle command in case someone else is
+  // also issuing commands, i.e. there are two turtle controllers running.
   let turtle_cmd_vel_reader = ros_node
     .create_subscription::<Twist>(&turtle_cmd_vel_topic, None)
     .unwrap();
@@ -186,7 +186,7 @@ fn ros2_loop(
     .create_subscription::<Pose>(&turtle_pose_topic, None)
     .unwrap();
 
-  // Perepare for controlling 2nd turtle
+  // Prepare for controlling 2nd turtle
   let turtle2_cmd_vel_topic = ros_node
     .create_topic(
       "/turtle2/cmd_vel",
@@ -637,7 +637,7 @@ fn ros2_loop(
                       Err(e) => info!("Cannot request result: {:?}", e),
                       Ok(result_req_id) => {
                         rotate_result_req_id = Some(result_req_id);
-                        info!("Requested RotateAbsoulte action result.")
+                        info!("Requested RotateAbsolute action result.")
                       }
                     }
                   }
@@ -647,7 +647,7 @@ fn ros2_loop(
                     break;
                   }
                   Err(e) => {
-                    error!("Error receiveing RotateAbsolutegoal: {e}")
+                    error!("Error receiving RotateAbsoluteGoal: {e}")
                   }
                 } // match
               } // loop

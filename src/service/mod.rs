@@ -22,7 +22,7 @@ use wrappers::*;
 // --------------------------------------------
 
 /// Service trait pairs the Request and Response types together.
-/// Additonally, it ensures that Response and Request are Messages
+/// Additionally, it ensures that Response and Request are Messages
 /// (Serializable), and we have a means to name the types.
 pub trait Service {
   type Request: Message;
@@ -88,7 +88,7 @@ where
 /// configuration. For details, see OMG Specification
 /// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
 /// RPC over DDS" . which defines Service Mappings "Basic" and "Enhanced"
-/// ServiceMapping::Cyclone reporesents a third mapping used by RMW for
+/// ServiceMapping::Cyclone represents a third mapping used by RMW for
 /// CycloneDDS.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ServiceMapping {

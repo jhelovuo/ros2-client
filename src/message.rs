@@ -20,7 +20,7 @@ impl<T: Message> Message for Vec<T> {}
 
 pub struct MessageTypeName {
   //TODO: String is UTF-8, but ROS2 uses just ASCII
-  ros2_package_name: String, // or shoudl theis ne "namespace"?
+  ros2_package_name: String, // or should this be "namespace"?
   ros2_type_name: String,
 }
 

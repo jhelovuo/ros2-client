@@ -38,7 +38,7 @@ fn main() {
   // Set Ctrl-C handler
   let (stop_sender, stop_receiver) = smol::channel::bounded(2);
   ctrlc::set_handler(move || {
-    // We will send two stop coammnds, one for reader, the other for writer.
+    // We will send two stop commands, one for reader, the other for writer.
     stop_sender.send_blocking(()).unwrap_or(());
     stop_sender.send_blocking(()).unwrap_or(());
     // ignore errors, as we are quitting anyway

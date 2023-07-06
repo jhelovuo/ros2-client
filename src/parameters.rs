@@ -35,7 +35,7 @@ impl From<raw::Parameter> for Parameter {
       raw::ParameterType::STRING_ARRAY => ParameterValue::StringArray(rp.value.string_array),
 
       _ =>
-      // This may be an uspecified case.
+      // This may be an unspecified case.
       // TODO: Do something better, at least log a warning.
       {
         ParameterValue::NotSet
