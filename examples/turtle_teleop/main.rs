@@ -483,6 +483,7 @@ fn ros2_loop(
   // event loop
 
   info!("Entering event_loop");
+  rosout!(ros_node, ros2::LogLevel::Info, "initialized, entering event loop");
   'event_loop: loop {
     let mut events = Events::with_capacity(100);
     poll.poll(&mut events, None).unwrap();
@@ -515,6 +516,7 @@ fn ros2_loop(
               }
               RosCommand::Reset => match reset_client.send_request(EmptyMessage::new()) {
                 Ok(id) => {
+                  rosout!(ros_node, ros2::LogLevel::Info, "Requested turtlesim reset");
                   info!("Reset request sent {:?}", id);
                 }
                 Err(e) => {
@@ -566,6 +568,9 @@ fn ros2_loop(
                       "RotateAbsoluteGoal sent. req_id={:?}  goal_id={:?}",
                       req_id, goal_id
                     );
+                    rosout!(ros_node, ros2::LogLevel::Info, 
+                      "RotateAbsoluteGoal sent. req_id={:?}  goal_id={:?}",
+                      req_id, goal_id);
                     rotate_goal_req_id = Some(req_id);
                     rotate_goal_id = Some(*goal_id);
                   }
@@ -664,6 +669,8 @@ fn ros2_loop(
                 .send(format!("RotateAbsolute result: {:?}", result_resp))
                 .unwrap();
               info!("RotateAbsolute result: {:?}", result_resp);
+              rosout!(ros_node, ros2::LogLevel::Info, 
+                      "RotateAbsolute result: {:?}", result_resp);
               rotate_cancel_req_id = None;
             }
           }

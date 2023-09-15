@@ -6,13 +6,13 @@ use rustdds::*;
 /// [Log](https://github.com/ros2/rcl_interfaces/blob/master/rcl_interfaces/msg/Log.msg)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Log {
-  timestamp: Timestamp,
-  level: u8,
-  name: String,
-  msg: String,
-  file: String,
-  function: String,
-  line: u32,
+  pub timestamp: Timestamp,
+  pub level: u8,
+  pub name: String,
+  pub msg: String,
+  pub file: String,
+  pub function: String,
+  pub line: u32,
 }
 
 impl Log {
@@ -55,3 +55,16 @@ impl Log {
     self.line
   }
 }
+
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum LogLevel {
+  Fatal = 50,
+  Error = 40,
+  Warn = 30,
+  Info = 20,
+  Debug = 10,
+}
+
+//impl From<u8> for Level

@@ -78,4 +78,5 @@ pub use action::{Action, ActionTypes};
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {
   pub use rustdds::{Duration, Timestamp};
+  pub use crate::log::LogLevel;
 }

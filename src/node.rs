@@ -12,13 +12,15 @@ use crate::{
   action::*,
   context::Context,
   gid::Gid,
-  log::Log,
+  log::Log, 
   message::MessageTypeName,
   node_entities_info::NodeEntitiesInfo,
   parameters::*,
   pubsub::{Publisher, Subscription},
   service::{Client, Server, Service, ServiceMapping},
 };
+
+use crate::log as ros_log;
 
 /// Configuration of [Node]
 /// This is a builder-like struct.
@@ -201,6 +203,25 @@ impl Node {
 
   pub fn domain_id(&self) -> u16 {
     self.ros_context.domain_id()
+  }
+
+
+  pub fn rosout_raw(&self, timestamp: Timestamp, level: crate::ros2::LogLevel, log_name: &str, log_msg: &str,
+    source_file: &str, source_function: &str, source_line: u32) {
+    match &self.rosout_writer {
+      None => debug!("Rosout not enabled. msg: {log_msg}"),
+      Some(writer) => {
+        writer.publish(ros_log::Log{
+          timestamp,
+          level: level as u8,
+          name: log_name.to_string(),
+          msg: log_msg.to_string(),
+          file: source_file.to_string(),
+          function: source_function.to_string(),
+          line: source_line,
+        }).unwrap_or_else(|e| debug!("Rosout publish failed: {e:?}"));
+      }
+    }
   }
 
   /// Creates ROS2 topic and handles necessary conversions from DDS to ROS2
@@ -582,4 +603,23 @@ impl Node {
       my_action_name: action_name.to_owned(),
     })
   }
+} // impl Node
+
+
+#[macro_export]
+macro_rules! rosout {
+    // rosout!(node, Level::Info, "a {} event", event.kind);
+
+    ($node:expr, $lvl:expr, $($arg:tt)+) => (
+        $node.rosout_raw(
+            crate::ros2::Timestamp::now(),
+            $lvl,
+            $node.name(),
+            &std::format!($($arg)+), // msg
+            std::file!(),
+            "<unknown_func>", // is there a macro to get current function name? (Which may be undefined)
+            std::line!(),
+        );
+    );
 }
+
