@@ -3,7 +3,7 @@ use nom::{
   error::{ParseError, dbg_dmp,},
   branch::alt,
   bytes::complete::{tag, take_while1, take_until, take_till, is_not},
-  character::complete::{char, space0, line_ending, not_line_ending},
+  character::complete::{char, space0, line_ending, not_line_ending, alphanumeric1,},
   combinator::{map, map_res, value, recognize, eof},
   multi::many0,
   sequence::{tuple, pair,delimited, terminated, }
@@ -44,8 +44,48 @@ fn main() -> io::Result<()> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item { 
   Comment { bytes: String},
-  Definition { bytes: String},
+  Field { type_name: String, field_name: String, default_value: Option<String> },
+  Constant{ type_name: String, const_name: String, value: String  },
   Whitespace,
+}
+
+fn field(i: &str) -> IResult<&str, Item> {
+  let (i,type_name) = type_spec(i)?;
+  let (i,_) = space0(i)?;
+  let (i,field_name) = identifier(i)?;
+  Ok(( i, Item::Field{ type_name, field_name, default_value:None} ))
+}
+
+fn constant(i: &str) -> IResult<&str, Item> {
+  let (i,type_name) = type_spec(i)?;
+  let (i,_) = space0(i)?;
+  let (i,const_name) = identifier(i)?;
+  let (i,_) = space0(i)?;
+  let (i,_) = tag("=")(i)?;
+  let (i,_) = space0(i)?;
+  let (i,value) = value_spec(i)?;
+  Ok(( i, Item::Constant{ type_name, const_name, value } ))
+}
+
+fn type_spec(i: &str) -> IResult<&str, String> {
+  map(
+    alphanumeric1,
+    String::from
+  )(i)
+}
+
+fn identifier(i: &str) -> IResult<&str, String> {
+  map(
+    alphanumeric1,
+    String::from
+  )(i)
+}
+
+fn value_spec(i: &str) -> IResult<&str, String> {
+  map(
+    alphanumeric1,
+    String::from
+  )(i)
 }
 
 
@@ -65,10 +105,11 @@ fn empty_line(i: &str) -> IResult<&str, Item> {
 }
 
 fn line(i: &str) -> IResult<&str, Item> {
-  map( 
-    take_while1(|c| c != '\n' && c != '#') ,
-    |s: &str| Item::Definition{ bytes: s.to_string() }
-  )(i)
+  delimited(space0, alt(( constant, field )), space0 )(i)
+  // map( 
+  //   take_while1(|c| c != '\n' && c != '#') ,
+  //   |s: &str| Item::Definition{ bytes: s.to_string() }
+  // )(i)
 }
 
 fn comment(i: &str) -> IResult<&str, Item> {
@@ -101,14 +142,14 @@ fn comment_test() {
 
 #[test]
 fn definition_test() {
-  assert_eq!(line("foo#\n"),       Ok(("#\n", Item::Definition{bytes: "foo".to_string()} )));
-  assert_eq!(line(" bar\n"),       Ok(("\n", Item::Definition{bytes: " bar".to_string()}  )));
+  // assert_eq!(line("foo#\n"),       Ok(("#\n", Item::Definition{bytes: "foo".to_string()} )));
+  // assert_eq!(line(" bar\n"),       Ok(("\n", Item::Definition{bytes: " bar".to_string()}  )));
   assert!(line("").is_err() );
 }
 
 #[test]
 fn item_test() {
-  assert_eq!(idl_item("foo#\n"),       Ok(("#\n", Item::Definition{bytes: "foo".to_string()} )));
+  // assert_eq!(idl_item("foo#\n"),       Ok(("#\n", Item::Definition{bytes: "foo".to_string()} )));
   assert_eq!(idl_item("# \n"),       Ok(("", Item::Comment{bytes: "# \n".to_string()}  )));
 }
 
@@ -116,11 +157,11 @@ fn item_test() {
 fn spec_test() {
   assert_eq!(idl_specification("\n"),       Ok(("", vec![Item::Whitespace]  )));  
   assert_eq!(idl_specification(""),       Ok(("", vec![] )));
-  assert_eq!(
-    idl_specification("foo#\n"),       
-    Ok(("", vec![
-      Item::Definition{bytes: "foo".to_string()}, 
-      Item::Comment { bytes: "#\n".to_string() }] )));
+  // assert_eq!(
+  //   idl_specification("foo#\n"),       
+  //   Ok(("", vec![
+  //     Item::Definition{bytes: "foo".to_string()}, 
+  //     Item::Comment { bytes: "#\n".to_string() }] )));
   assert_eq!(
     idl_specification("# \n"),
     Ok(("", vec![Item::Comment{bytes: "# \n".to_string()}]  )));
