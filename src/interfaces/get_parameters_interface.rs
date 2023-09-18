@@ -1,7 +1,6 @@
-use rustdds::ros2::builtin_datatypes::ParameterValue;
 use serde::{Deserialize, Serialize};
 
-use crate::{Message, Service};
+use crate::{Message, Service, parameters};
 
 pub struct GetParametersService {}
 
@@ -24,6 +23,6 @@ impl Message for GetParametersRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetParametersResponse {
-  pub values: Vec<ParameterValue>,
+  pub values: Vec<parameters::raw::ParameterValue>,
 }
 impl Message for GetParametersResponse {}
