@@ -2,8 +2,8 @@ use nom::{
   IResult,
   error::ParseError,
   branch::alt,
-  bytes::complete::{tag, take_while_m_n, take_until, take_till, is_not},
-  character::complete::{char, multispace0, newline, },
+  bytes::complete::{tag, take_while, take_until, take_till, is_not},
+  character::complete::{char, space0, line_ending, not_line_ending},
   combinator::{map, map_res, value, recognize},
   multi::many0,
   sequence::{tuple, pair,delimited, terminated, }
@@ -41,7 +41,7 @@ fn main() -> io::Result<()> {
   Ok(())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item { 
   Comment { bytes: String},
   Definition { bytes: String},
@@ -54,15 +54,13 @@ fn idl_specification(i: &str) -> IResult<&str, Vec<Item>> {
 }
 
 fn idl_item(i: &str) -> IResult<&str, Item> {
-  alt(( line, comment, empty_line ))(i)
+  alt(( comment, empty_line , line ))(i)
 }
 
 fn empty_line(i: &str) -> IResult<&str, Item> {
   value(
     Item::Whitespace,
-    recognize(
-      pair( multispace0, newline )
-    )
+    terminated( space0, line_ending )
   )(i)
 }
 
@@ -70,11 +68,9 @@ fn empty_line(i: &str) -> IResult<&str, Item> {
 
 pub fn line(i: &str) -> IResult<&str, Item> {
   map( 
-    recognize( 
-      terminated(
-        take_till(|c| c == '\n' || c == '#') ,
-        alt(( comment, empty_line ))
-      )
+    terminated(
+      take_while(|c| c != '\n' && c != '#') ,
+      alt(( comment, empty_line ))
     ),
     |s: &str| Item::Definition{ bytes: s.to_string() }
   )(i)
@@ -83,9 +79,14 @@ pub fn line(i: &str) -> IResult<&str, Item> {
 pub fn comment(i: &str) -> IResult<&str, Item> {
   map(
     recognize(
-      tuple(( tag("#"), is_not("\n"), newline ))
+      tuple(( tag("#"), not_line_ending, line_ending ))
     ),
     |s: &str| Item::Comment{ bytes: s.to_string() }
   )(i)
 }
 
+#[test]
+fn empty_test() {
+  assert_eq!(empty_line("\n"),       Ok(("", Item::Whitespace)));
+  assert_eq!(empty_line(" \n"),       Ok(("", Item::Whitespace)));
+}
