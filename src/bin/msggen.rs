@@ -1,10 +1,10 @@
 use nom::{
   IResult,
-  error::ParseError,
+  error::{ParseError, dbg_dmp,},
   branch::alt,
-  bytes::complete::{tag, take_while, take_until, take_till, is_not},
+  bytes::complete::{tag, take_while1, take_until, take_till, is_not},
   character::complete::{char, space0, line_ending, not_line_ending},
-  combinator::{map, map_res, value, recognize},
+  combinator::{map, map_res, value, recognize, eof},
   multi::many0,
   sequence::{tuple, pair,delimited, terminated, }
 };
@@ -54,7 +54,7 @@ fn idl_specification(i: &str) -> IResult<&str, Vec<Item>> {
 }
 
 fn idl_item(i: &str) -> IResult<&str, Item> {
-  alt(( comment, empty_line , line ))(i)
+  alt(( comment, empty_line, line ))(i)
 }
 
 fn empty_line(i: &str) -> IResult<&str, Item> {
@@ -64,19 +64,14 @@ fn empty_line(i: &str) -> IResult<&str, Item> {
   )(i)
 }
 
-
-
-pub fn line(i: &str) -> IResult<&str, Item> {
+fn line(i: &str) -> IResult<&str, Item> {
   map( 
-    terminated(
-      take_while(|c| c != '\n' && c != '#') ,
-      alt(( comment, empty_line ))
-    ),
+    take_while1(|c| c != '\n' && c != '#') ,
     |s: &str| Item::Definition{ bytes: s.to_string() }
   )(i)
 }
 
-pub fn comment(i: &str) -> IResult<&str, Item> {
+fn comment(i: &str) -> IResult<&str, Item> {
   map(
     recognize(
       tuple(( tag("#"), not_line_ending, line_ending ))
@@ -85,8 +80,48 @@ pub fn comment(i: &str) -> IResult<&str, Item> {
   )(i)
 }
 
+
+
+
 #[test]
 fn empty_test() {
   assert_eq!(empty_line("\n"),       Ok(("", Item::Whitespace)));
+  assert_eq!(empty_line("\n\n"),       Ok(("\n", Item::Whitespace)));
+  assert_eq!(empty_line("\n \n"),       Ok((" \n", Item::Whitespace)));
   assert_eq!(empty_line(" \n"),       Ok(("", Item::Whitespace)));
+}
+
+#[test]
+fn comment_test() {
+  assert_eq!(comment("#\n"),       Ok(("", Item::Comment{bytes: "#\n".to_string()} )));
+  assert_eq!(comment("# \n"),       Ok(("", Item::Comment{bytes: "# \n".to_string()}  )));
+  assert_eq!(comment("# This message:\n#"),
+    Ok(("#", Item::Comment{bytes: "# This message:\n".to_string()}  )));
+}
+
+#[test]
+fn definition_test() {
+  assert_eq!(line("foo#\n"),       Ok(("#\n", Item::Definition{bytes: "foo".to_string()} )));
+  assert_eq!(line(" bar\n"),       Ok(("\n", Item::Definition{bytes: " bar".to_string()}  )));
+  assert!(line("").is_err() );
+}
+
+#[test]
+fn item_test() {
+  assert_eq!(idl_item("foo#\n"),       Ok(("#\n", Item::Definition{bytes: "foo".to_string()} )));
+  assert_eq!(idl_item("# \n"),       Ok(("", Item::Comment{bytes: "# \n".to_string()}  )));
+}
+
+#[test]
+fn spec_test() {
+  assert_eq!(idl_specification("\n"),       Ok(("", vec![Item::Whitespace]  )));  
+  assert_eq!(idl_specification(""),       Ok(("", vec![] )));
+  assert_eq!(
+    idl_specification("foo#\n"),       
+    Ok(("", vec![
+      Item::Definition{bytes: "foo".to_string()}, 
+      Item::Comment { bytes: "#\n".to_string() }] )));
+  assert_eq!(
+    idl_specification("# \n"),
+    Ok(("", vec![Item::Comment{bytes: "# \n".to_string()}]  )));
 }
