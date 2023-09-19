@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use nom::{
   IResult,
   error::{ParseError, dbg_dmp,},
@@ -10,40 +11,10 @@ use nom::{
   sequence::{tuple, pair,delimited, terminated, }
 };
 
-use clap::{Arg, ArgMatches, Command}; // command line argument processing
 
-use std::{io,fs};
-
-
-fn main() -> io::Result<()> {
-  println!("msggen");
-
-  let arg_matches =
-    Command::new("msggen")
-      .version("0.0.1")
-      .author("Juhana Helovuo <juhe@iki.fi>")
-      .about("ros2-client IDL compiler for Rust")
-      .arg(Arg::new("input")
-        .short('i')
-        .help("Input .msg file name")
-        .value_name("file")
-      )
-      .get_matches();
-
-  let input_file_name = arg_matches.get_one::<String>("input").map(String::as_str)
-    .unwrap_or("-");
-
-  let input_file = fs::File::open(input_file_name)?;
-
-  let input = io::read_to_string(input_file)?;
-
-  println!("{:?}", msg_spec(&input) );
-
-  Ok(())
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Comment(String);
+pub struct Comment(String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item { 
@@ -51,7 +22,9 @@ pub enum Item {
   Constant{ type_name: String, const_name: String, value: String  },
 }
 
-fn msg_spec(i: &str) -> IResult<&str, Vec<(Option<Item>, Option<Comment>) >> {
+
+
+pub fn msg_spec(i: &str) -> IResult<&str, Vec<(Option<Item>, Option<Comment>) >> {
   many0(line)(i)
 }
 
@@ -125,7 +98,6 @@ fn comment(i: &str) -> IResult<&str, Comment> {
 
 
 
-#[test]
 #[test]
 fn comment_test() {
   assert_eq!(comment("#\n"),       Ok(("\n", Comment("#".to_string()) )));
