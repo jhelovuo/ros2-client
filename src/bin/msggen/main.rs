@@ -33,39 +33,4 @@ fn main() -> io::Result<()> {
   Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum BaseTypeName {
-  PrimitiveType{name: String},
-  BoundedString{ bound: usize },
-  ComplexType {
-    package_name: Option<String>,
-    type_name: String,
-  }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ArraySpecifier {
-  Static { size: usize },
-  Unbounded,
-  Bounded{ bound: usize },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TypeName {
-  base: BaseTypeName,
-  array_spec: ArraySpecifier,
-}
-
-#[derive(Debug, Clone, PartialEq,)]
-enum Value {
-  Bool(bool),
-  Byte(u8),
-  Char(u8), // not more than 8 bits
-  Float(f64), // Also can store a f32
-  Int(i64),
-  Uint(u64),
-  String(Vec<u8>), // ROS does not do Unicode
-}
-
-
 
