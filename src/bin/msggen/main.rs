@@ -3,8 +3,8 @@ use std::{io,fs};
 use clap::{Arg, Command}; // command line argument processing
 
 mod parser;
+mod stringparser;
 
-use parser::{Comment, Item, msg_spec};
 
 fn main() -> io::Result<()> {
   println!("msggen");
@@ -28,7 +28,9 @@ fn main() -> io::Result<()> {
 
   let input = io::read_to_string(input_file)?;
 
-  println!("{:?}", msg_spec(&input) );
+  println!("{:?}", parser::msg_spec(&input) );
+
+  //stringparser::parse_string("foo").unwrap();
 
   Ok(())
 }

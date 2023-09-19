@@ -13,6 +13,8 @@ use nom::{
 
 use std::str::FromStr;
 
+use super::stringparser::parse_string;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Comment(String);
 
@@ -120,8 +122,9 @@ fn value_spec(i: &str) -> IResult<&str, Value> {
     ));
   let float_value = map(float, |f| Value::Float(f) );
   let uint_value = map( digit1, |i| Value::Uint(u64::from_str(i).expect("bad uint")));
+  let string_value = map( parse_string, |s:String| Value::String(Vec::from(s)) );
 
-  alt(( bool_value, float_value, /*int_value,*/ uint_value ))(i)
+  alt(( bool_value, float_value, /*int_value,*/ uint_value, string_value ))(i)
 }
 
 fn comment(i: &str) -> IResult<&str, Comment> {
@@ -172,6 +175,7 @@ fn float(input: &str) -> IResult<&str, f64> {
       )
     )),
     | f: &str| f64::from_str(f).expect("Failed to parse floating point value.")
+    // Failing here means that this nom parser anf f64::from_str disagree on what is a valid float.
   )
   (input)
 }
