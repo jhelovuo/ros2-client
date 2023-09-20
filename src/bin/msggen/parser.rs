@@ -16,7 +16,7 @@ use std::str::FromStr;
 use super::stringparser::parse_string;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Comment(String);
+pub struct Comment(pub String);
 
 #[derive(Debug, Clone, PartialEq) ]
 pub enum Item { 
@@ -43,8 +43,8 @@ pub enum ArraySpecifier {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeName {
-  base: BaseTypeName,
-  array_spec: Option<ArraySpecifier>,
+  pub base: BaseTypeName,
+  pub array_spec: Option<ArraySpecifier>,
 }
 
 #[derive(Debug, Clone, PartialEq,)]
