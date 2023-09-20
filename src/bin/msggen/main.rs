@@ -30,8 +30,6 @@ fn main() -> io::Result<()> {
 
   println!("{:?}", parser::msg_spec(&input) );
 
-  //stringparser::parse_string("foo").unwrap();
-
   Ok(())
 }
 

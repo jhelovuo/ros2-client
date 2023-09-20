@@ -26,8 +26,8 @@ pub enum Item {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BaseTypeName {
-  Primitive{ name: String},
-  BoundedString{ bound: usize },
+  Primitive{ name: String },
+  BoundedString{ bound: u64 },
   ComplexType {
     package_name: Option<String>,
     type_name: String,
@@ -36,9 +36,9 @@ pub enum BaseTypeName {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArraySpecifier {
-  Static { size: usize },
+  Static { size: u64 },
   Unbounded,
-  Bounded{ bound: usize },
+  Bounded{ bound: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,18 +100,62 @@ fn constant(i: &str) -> IResult<&str, Item> {
 }
 
 fn type_spec(i: &str) -> IResult<&str, TypeName> {
-  //TODO
-  map(
-    recognize(many1( alt((alphanumeric1, tag("/"), tag("_") )) )),
-    |v: &str| TypeName{ base: BaseTypeName::Primitive{ name: v.to_string() } , array_spec: None } 
-  )(i)
+  // components of type_spec:
+  // array spec: [10] , [<=10], or []
+  let array_specifier_inner = 
+    alt((
+      map(  preceded(tag("<="), uint_value), 
+            |bound:u64| ArraySpecifier::Bounded{ bound } ),
+      map(  uint_value,
+            |size:u64| ArraySpecifier::Static{ size }  ),
+      map( space0, |_| ArraySpecifier::Unbounded ),
+    ));
+  let array_specifier = delimited( char('[') , array_specifier_inner , char(']') );
+
+  // "string<=20"
+  let bounded_string = 
+    map( 
+      preceded(tag("string<="), uint_value),
+      |bound:u64| BaseTypeName::BoundedString{ bound }
+    );
+
+  let primitive_type =
+    map(
+      alt(( 
+        tag("bool"), tag("byte"), tag("char"),
+        tag("float32"), tag("float64"),
+        tag("int8"), tag("int16"), tag("int32"), tag("int64"),
+        tag("uint8"), tag("uint16"), tag("uint32"), tag("uint64"),
+        tag("string")
+      )),
+      |s:&str| BaseTypeName::Primitive{ name: s.to_string() }
+    );
+
+  // "package_name/typename" or "typename"
+  let complex_type =
+    map(
+      pair( opt(terminated(identifier, tag("/") )) , identifier ),
+      |(package_name, type_name)| BaseTypeName::ComplexType{ package_name, type_name}
+    );
+
+  // type spec:
+  let (i, (base, array_spec)) =
+    pair(
+      alt(( bounded_string, primitive_type , complex_type )),
+      opt( array_specifier )
+    )(i)?;
+  Ok(( i, TypeName{ base, array_spec } ))
 }
 
 fn identifier(i: &str) -> IResult<&str, String> {
   map(
-    alphanumeric1,
+    recognize(many1( alt((alphanumeric1, tag("_") )) )),
     String::from
   )(i)
+}
+
+fn uint_value(i: &str) -> IResult<&str, u64> {
+  map( digit1, |s:&str| u64::from_str(s).expect("bad uint"))(i)
 }
 
 fn value_spec(i: &str) -> IResult<&str, Value> {
@@ -121,10 +165,13 @@ fn value_spec(i: &str) -> IResult<&str, Value> {
       value(Value::Bool(true), tag("true")),
     ));
   let float_value = map(float, |f| Value::Float(f) );
-  let uint_value = map( digit1, |i| Value::Uint(u64::from_str(i).expect("bad uint")));
   let string_value = map( parse_string, |s:String| Value::String(Vec::from(s)) );
+  let u_int_value = map( uint_value, |i| Value::Uint(i) );
+  let int_value = map(
+    preceded(tag("-"), uint_value ),
+    |i| Value::Int( -(i as i64) ));
 
-  alt(( bool_value, float_value, /*int_value,*/ uint_value, string_value ))(i)
+  alt(( bool_value, float_value, int_value, u_int_value, string_value ))(i)
 }
 
 fn comment(i: &str) -> IResult<&str, Comment> {
