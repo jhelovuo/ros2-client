@@ -9,32 +9,59 @@ use parser::{Comment, Item, BaseTypeName, ArraySpecifier, TypeName, Value, };
 
 
 fn main() -> io::Result<()> {
-  println!("msggen");
+  //println!("msggen");
 
   let arg_matches =
     Command::new("msggen")
       .version("0.0.1")
       .author("Juhana Helovuo <juhana.helovuo@atostek.com>")
-      .about("ros2-client IDL compiler for Rust")
+      .about("ros2-client .sg compiler for ros2-client / RustDDS")
       .arg(Arg::new("input")
         .short('i')
         .help("Input .msg file name")
         .value_name("file")
       )
+      .arg(Arg::new("type")
+        .short('t')
+        .help("ROS 2 type to be translated. Can be used multiple times.")
+        .value_name("package_name/type_name")
+        .conflicts_with("input")
+      )
+      .arg(Arg::new("output")
+        .short('o')
+        .help("Output path")
+        .value_name("file/dir")
+      )
       .get_matches();
 
-  let input_file_name = arg_matches.get_one::<String>("input").map(String::as_str)
-    .unwrap_or("-");
+  if let Some(input_file_name) = arg_matches.get_one::<String>("input").map(String::as_str) {
+    // Just one input file
+    let input_file = fs::File::open(input_file_name)?;
 
-  let input_file = fs::File::open(input_file_name)?;
+    let type_name = 
+      std::path::Path::new(input_file_name).file_stem()
+      .ok_or(io::Error::new(io::ErrorKind::Other, "Input file did not have base name?"))?
+      .to_string_lossy().into_owned();
 
-  let input = io::read_to_string(input_file)?;
+    let input = io::read_to_string(input_file)?;
 
-  let msg = parser::msg_spec(&input).unwrap_or_else(|e| panic!("Parse error: {:?}",e));
+    let msg = parser::msg_spec(&input).unwrap_or_else(|e| panic!("Parse error: {:?}",e));
 
-  println!("{:?}", &msg);
-  println!("\n");
-  print_struct_definition(&mut io::stdout(), input_file_name , &msg.1)?;
+    match arg_matches.get_one::<String>("output") {
+      None => {
+        print_struct_definition(&mut io::stdout(), &type_name , &msg.1)?;
+      }
+      Some(out_file_name) => {
+        let mut out_file = fs::File::create(out_file_name)?;
+        print_struct_definition(&mut out_file, &type_name , &msg.1)?;
+      }
+    }
+  } else if let Some(ros2_types_requested) = arg_matches.get_many::<String>("type") {
+
+
+  } else {
+    println!("Please specify input by either -i or -t option.")
+  }
 
   Ok(())
 }
