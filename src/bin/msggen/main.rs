@@ -14,7 +14,7 @@ fn main() -> io::Result<()> {
   let arg_matches =
     Command::new("msggen")
       .version("0.0.1")
-      .author("Juhana Helovuo <juhe@iki.fi>")
+      .author("Juhana Helovuo <juhana.helovuo@atostek.com>")
       .about("ros2-client IDL compiler for Rust")
       .arg(Arg::new("input")
         .short('i')
@@ -43,9 +43,39 @@ fn main() -> io::Result<()> {
 fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<Item>, Option<Comment>)]) 
   -> io::Result<()> 
 {
+  // assume that first we have only constants and comments
+  let is_not_field = |i:&Item| {match i { Item::Field{..} => false, _  => true, }};
+
+  let not_yet = lines.iter().take_while(|p| p.0.as_ref().map_or(true, is_not_field));
+  let got_field = lines.iter().skip_while(|p| p.0.as_ref().map_or(true, is_not_field));
+
+  for (item,comment) in not_yet {
+    match (item,comment) {
+      (None,None) => writeln!(w,"")?, // empty line
+      (None, Some(Comment(c))) => writeln!(w,"// {c}")?,
+      (Some(item), comment_opt) => {
+        match item {
+          Item::Field{ .. } => panic!("Why am i here?"),
+          Item::Constant{type_name, const_name, value} => {
+            let rust_type = translate_type(type_name)?;
+            let rust_value = translate_value(value);
+            write!(w, "pub const {const_name} : {rust_type} = {rust_value};")?;
+          }
+        }
+
+        if let Some(Comment(c)) = comment_opt {
+          writeln!(w, "// {c}")?;
+        } else {
+          writeln!(w,"")?;
+        }
+      }
+    }
+  }
+
+
   writeln!(w,"#[derive(Debug, Serialize, Deserialize)]")?;
   writeln!(w, "pub struct {name} {{")?;
-  for (item,comment) in lines {
+  for (item,comment) in got_field {
     match (item,comment) {
       (None,None) => writeln!(w,"")?, // empty line
       (None, Some(Comment(c))) => writeln!(w,"  // {c}")?,
@@ -54,9 +84,9 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
         match item {
           Item::Field{ type_name, field_name, .. } => {
             let rust_type = translate_type(type_name)?;
-            writeln!(w,"{field_name} : {rust_type},")?;
+            write!(w,"{field_name} : {rust_type}, ")?;
           }
-          Item::Constant{const_name,..} => write!(w,"// skipped constant {const_name}")?,
+          Item::Constant{const_name,..} => write!(w,"// skipped constant {const_name} in the middle of struct")?,
         }
 
         if let Some(Comment(c)) = comment_opt {
@@ -71,7 +101,7 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
   Ok(())
 } 
 
-const RUST_BYTESTRING : &'static str = "bstr";
+const RUST_BYTESTRING : &'static str = "BString";
 
 fn translate_type(t: &TypeName) -> io::Result<String> {
   let mut base = String::new();
@@ -95,7 +125,7 @@ fn translate_type(t: &TypeName) -> io::Result<String> {
         other => panic!("Unexpected primitive type {}", other),
       }
       ),
-    BaseTypeName::BoundedString{ ref bound} => base.push_str(RUST_BYTESTRING), // We do not have type to represent boundedness
+    BaseTypeName::BoundedString{ .. } => base.push_str(RUST_BYTESTRING), // We do not have type to represent boundedness
     BaseTypeName::ComplexType{ ref package_name, ref type_name} => {
       if let Some(pkg) = package_name {
         base.push_str(&pkg); base.push_str("::");
@@ -103,6 +133,27 @@ fn translate_type(t: &TypeName) -> io::Result<String> {
       base.push_str(&type_name);
     }
   }
-  //TODO: array specifier
+
+  match t.array_spec {
+    None => {},
+    Some(ArraySpecifier::Static{size}) => {
+      base = format!("[{};{}]", base, size);
+    }
+    Some(ArraySpecifier::Unbounded) |
+    Some(ArraySpecifier::Bounded{..}) => {
+      base = format!("Vec<{}>", base);
+    }
+  }
+
   Ok(base)
+}
+
+fn translate_value(v: &Value) -> String {
+  match v {
+    Value::Bool(b) => if *b { "true".to_string() } else { "false".to_string() },
+    Value::Float(f) => format!("{f}"),
+    Value::Int(i) => format!("{i}"),
+    Value::Uint(u) => format!("{u}"),
+    Value::String(v) => String::from_utf8(v.to_vec()).unwrap(),
+  }
 }
