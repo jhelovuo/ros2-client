@@ -57,7 +57,35 @@ fn main() -> io::Result<()> {
       }
     }
   } else if let Some(ros2_types_requested) = arg_matches.get_many::<String>("type") {
+    let output_dir = arg_matches.get_one::<String>("output")
+      .ok_or(io::Error::new(io::ErrorKind::Other, "Output dir required"))?;
 
+    // Use colcon to determine what we need to translate
+    let mut pkgs = Vec::new();
+    for ros2_type in ros2_types_requested {
+      use itertools::Itertools; // to get .unique()
+      let new_pkgs = list_packges_with_msgs(ros2_type)?;
+      let prev_pkgs = pkgs;
+      pkgs = prev_pkgs.iter().chain(new_pkgs.iter()).unique().cloned().collect();
+    }
+    
+    // Now we should have a Vec of unique required pkgs from most primitive to least primitive.
+
+    for pkg in &pkgs {
+      let mut output_file_name = output_dir.clone();
+      output_file_name.extend(["/",&pkg.name,".rs"]);
+      let mut out_file = fs::File::create(output_file_name)?;
+
+      for ros2type in &pkg.types {
+        let mut input_file_name = pkg.path.to_string();
+        input_file_name.extend(["/msg/",ros2type,".msg"]);
+        let input = io::read_to_string(fs::File::open(input_file_name)?)?;
+        let msg = parser::msg_spec(&input)
+          .unwrap_or_else(|e| panic!("Parse error: {:?}",e));
+        // TODO: msg.0 should be empty string here, warn if not.
+        print_struct_definition(&mut out_file, &ros2type , &msg.1)?;
+      }
+    }
 
   } else {
     println!("Please specify input by either -i or -t option.")
@@ -65,6 +93,21 @@ fn main() -> io::Result<()> {
 
   Ok(())
 }
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct RosPkg {
+  name: String,
+  path: String,
+  types: Vec<String>, // .msg file name stems
+}
+
+fn list_packges_with_msgs(ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
+  let (package_name,type_name) = ros2_abs_type.rsplit_once('/')
+    .ok_or(io::Error::new(io::ErrorKind::Other, "Need package_name/type_name"))?;
+  let colcon_cmd = format!("colcon list --topological-order --packages-up-to {}", package_name);
+  todo!()
+}
+
 
 
 fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<Item>, Option<Comment>)]) 
