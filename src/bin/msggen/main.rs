@@ -101,11 +101,58 @@ struct RosPkg {
   types: Vec<String>, // .msg file name stems
 }
 
+use bstr::{ByteSlice};
+use std::path::{PathBuf};
+
 fn list_packges_with_msgs(ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
-  let (package_name,type_name) = ros2_abs_type.rsplit_once('/')
+  let (package_name,_type_name) = ros2_abs_type.rsplit_once('/')
     .ok_or(io::Error::new(io::ErrorKind::Other, "Need package_name/type_name"))?;
-  let colcon_cmd = format!("colcon list --topological-order --packages-up-to {}", package_name);
-  todo!()
+  //let colcon_cmd = format!("colcon list --topological-order --packages-up-to {}", package_name);
+
+  let colcon_output = std::process::Command::new("colcon")
+    .arg("list")
+    .arg("--topological-order")
+    .arg(package_name)
+    .output()?;
+
+  if colcon_output.status.success() {
+    let mut result = Vec::new();
+    for line in colcon_output.stdout.lines() {
+      match line.fields_with(|c| c.is_whitespace()).collect::<Vec<&[u8]>>().as_slice() {
+        [package_name, package_path, _build_tool] => {
+          // let's see if there are any .msg
+          let package_path = String::from_utf8_lossy(package_path).into_owned();
+          let package_name = String::from_utf8_lossy(package_name).into_owned();
+          let mut msg_dir = PathBuf::from( package_path.clone() );
+          msg_dir.push("msg");
+          for dir_entry in fs::read_dir( msg_dir )? {
+            let mut types = Vec::new();
+            let path = dir_entry?.path();
+            if path.ends_with(".msg") {
+              if let Some(type_name) = path.file_stem() {
+                types.push( type_name.to_string_lossy().into_owned() );
+              } else { /* file name has no stem?? */}
+            } else {
+              /* not .msg */
+            }
+            let pkg = RosPkg {
+                name: package_name.clone(),
+                path: package_path.clone(),
+                types,
+            };
+            if ! pkg.types.is_empty() {
+              result.push(pkg);
+            }
+          }
+        }
+        other => panic!("Colcon list output: {:?}", other),
+      }
+    }
+    Ok(result)
+  } else {
+    Err(io::Error::new(io::ErrorKind::Other, format!("Colcon failure: {}", 
+      String::from_utf8_lossy( &colcon_output.stderr ))))
+  }
 }
 
 
