@@ -1,4 +1,5 @@
 use std::{io,fs};
+use std::collections::BTreeMap;
 
 use clap::{Arg, Command}; // command line argument processing
 
@@ -62,6 +63,7 @@ fn main() -> io::Result<()> {
 
     // Use colcon to determine what we need to translate
     let mut pkgs = Vec::new();
+    println!("Requested types: {:?}", ros2_types_requested.clone().collect::<Vec<&String>>());
     for ros2_type in ros2_types_requested {
       use itertools::Itertools; // to get .unique()
       let new_pkgs = list_packges_with_msgs(ros2_type)?;
@@ -74,13 +76,15 @@ fn main() -> io::Result<()> {
     for pkg in &pkgs {
       let mut output_file_name = output_dir.clone();
       output_file_name.extend(["/",&pkg.name,".rs"]);
+      println!("Generating to {:?}", output_file_name);
       let mut out_file = fs::File::create(output_file_name)?;
 
-      for ros2type in &pkg.types {
-        let mut input_file_name = pkg.path.to_string();
-        input_file_name.extend(["/msg/",ros2type,".msg"]);
-        let input = io::read_to_string(fs::File::open(input_file_name)?)?;
-        let msg = parser::msg_spec(&input)
+      for (ros2type, type_def) in &pkg.types {
+        // let mut input_file_name = pkg.path.to_string();
+        // input_file_name.extend(["/msg/",ros2type,".msg"]);
+        println!("  type {:?}", ros2type);
+        //let input = io::read_to_string(fs::File::open(input_file_name)?)?;
+        let msg = parser::msg_spec(&type_def)
           .unwrap_or_else(|e| panic!("Parse error: {:?}",e));
         // TODO: msg.0 should be empty string here, warn if not.
         print_struct_definition(&mut out_file, &ros2type , &msg.1)?;
@@ -98,20 +102,25 @@ fn main() -> io::Result<()> {
 struct RosPkg {
   name: String,
   path: String,
-  types: Vec<String>, // .msg file name stems
+  types: BTreeMap<String,String>, // .msg file name stems --> file contents
 }
 
 use bstr::{ByteSlice};
 use std::path::{PathBuf};
+use std::ffi::OsStr;
 
 fn list_packges_with_msgs(ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
   let (package_name,_type_name) = ros2_abs_type.rsplit_once('/')
     .ok_or(io::Error::new(io::ErrorKind::Other, "Need package_name/type_name"))?;
-  //let colcon_cmd = format!("colcon list --topological-order --packages-up-to {}", package_name);
 
+  let cwd = std::env::current_dir()?;
+
+  std::env::set_current_dir("/home/juhe/ros2_humble")?;
+  println!("Querying colcon");
   let colcon_output = std::process::Command::new("colcon")
     .arg("list")
     .arg("--topological-order")
+    .arg("--packages-up-to")
     .arg(package_name)
     .output()?;
 
@@ -125,32 +134,45 @@ fn list_packges_with_msgs(ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
           let package_name = String::from_utf8_lossy(package_name).into_owned();
           let mut msg_dir = PathBuf::from( package_path.clone() );
           msg_dir.push("msg");
-          for dir_entry in fs::read_dir( msg_dir )? {
-            let mut types = Vec::new();
-            let path = dir_entry?.path();
-            if path.ends_with(".msg") {
-              if let Some(type_name) = path.file_stem() {
-                types.push( type_name.to_string_lossy().into_owned() );
-              } else { /* file name has no stem?? */}
-            } else {
-              /* not .msg */
-            }
+          let mut types = BTreeMap::new();
+          if let Ok(dir_iter) = fs::read_dir( msg_dir.clone() ) {
+            println!("Package path {msg_dir:?}");
+            for dir_entry in dir_iter {
+              let path = dir_entry?.path();
+              if path.extension() == Some(OsStr::new("msg")) {
+                if let Some(type_name) = path.file_stem() {
+                  let msg_spec = io::read_to_string(fs::File::open(path.clone())?)?;
+                  types.insert(type_name.to_string_lossy().into_owned(),
+                    msg_spec);
+                } else { 
+                  // file name has no stem??
+                  println!("Weird file name {:?}", path);
+                }
+              } else {
+                println!("{:?} is not .msg", path);
+              }
+            } // for .msg files (types)
+          } else {
+            println!("No {msg_dir:?}");
+          }
+          if ! types.is_empty() {
             let pkg = RosPkg {
-                name: package_name.clone(),
-                path: package_path.clone(),
+                name: package_name,
+                path: package_path,
                 types,
             };
-            if ! pkg.types.is_empty() {
-              result.push(pkg);
-            }
+            result.push(pkg);
           }
-        }
+        } // package
         other => panic!("Colcon list output: {:?}", other),
       }
-    }
+    } // for packages
+    std::env::set_current_dir(cwd)?; // restore
+    println!("Got {} packages", result.len());
     Ok(result)
   } else {
-    Err(io::Error::new(io::ErrorKind::Other, format!("Colcon failure: {}", 
+    Err(io::Error::new(io::ErrorKind::Other, 
+      format!("Colcon failure: {}\nHave you run local_setup.bash?", 
       String::from_utf8_lossy( &colcon_output.stderr ))))
   }
 }
