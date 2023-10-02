@@ -1,10 +1,12 @@
 use std::{io,fs};
+use std::io::Write;
 use std::collections::BTreeMap;
 
 use clap::{Arg, Command}; // command line argument processing
 
 mod parser;
 mod stringparser;
+//mod gen;
 
 use parser::{Comment, Item, BaseTypeName, ArraySpecifier, TypeName, Value, };
 
@@ -33,6 +35,11 @@ fn main() -> io::Result<()> {
         .help("Output path")
         .value_name("file/dir")
       )
+      .arg(Arg::new("workspace")
+        .short('w')
+        .help("Ros 2 workspace path")
+        .value_name("dir")
+      )
       .get_matches();
 
   if let Some(input_file_name) = arg_matches.get_one::<String>("input").map(String::as_str) {
@@ -60,30 +67,40 @@ fn main() -> io::Result<()> {
   } else if let Some(ros2_types_requested) = arg_matches.get_many::<String>("type") {
     let output_dir = arg_matches.get_one::<String>("output")
       .ok_or(io::Error::new(io::ErrorKind::Other, "Output dir required"))?;
+    let workspace_dir = arg_matches.get_one::<String>("workspace")
+      .ok_or(io::Error::new(io::ErrorKind::Other, "ROS 2 workspace dir required"))?;
 
     // Use colcon to determine what we need to translate
     let mut pkgs = Vec::new();
     println!("Requested types: {:?}", ros2_types_requested.clone().collect::<Vec<&String>>());
     for ros2_type in ros2_types_requested {
       use itertools::Itertools; // to get .unique()
-      let new_pkgs = list_packges_with_msgs(ros2_type)?;
+      let new_pkgs = list_packges_with_msgs(workspace_dir, ros2_type)?;
       let prev_pkgs = pkgs;
       pkgs = prev_pkgs.iter().chain(new_pkgs.iter()).unique().cloned().collect();
     }
     
     // Now we should have a Vec of unique required pkgs from most primitive to least primitive.
 
+    let mut mod_file_name = output_dir.clone();
+    mod_file_name.extend(["/mod.rs"]);
+    let mut mod_file = fs::File::create(mod_file_name)?;
+
     for pkg in &pkgs {
       let mut output_file_name = output_dir.clone();
       output_file_name.extend(["/",&pkg.name,".rs"]);
       println!("Generating to {:?}", output_file_name);
       let mut out_file = fs::File::create(output_file_name)?;
+      writeln!(mod_file, "mod {};", pkg.name)?;
+
+      writeln!(out_file, "// Generated code. Do not modify.")?;
+      writeln!(out_file, "use serde::{{Serialize,Deserialize}};")?;
+      writeln!(out_file, "#[allow(unused_imports)]")?;
+      writeln!(out_file, "use widestring;")?;
+      writeln!(out_file, "")?;
 
       for (ros2type, type_def) in &pkg.types {
-        // let mut input_file_name = pkg.path.to_string();
-        // input_file_name.extend(["/msg/",ros2type,".msg"]);
         println!("  type {:?}", ros2type);
-        //let input = io::read_to_string(fs::File::open(input_file_name)?)?;
         let msg = parser::msg_spec(&type_def)
           .unwrap_or_else(|e| panic!("Parse error: {:?}",e));
         // TODO: msg.0 should be empty string here, warn if not.
@@ -109,13 +126,13 @@ use bstr::{ByteSlice};
 use std::path::{PathBuf};
 use std::ffi::OsStr;
 
-fn list_packges_with_msgs(ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
+fn list_packges_with_msgs(workspace_dir: &str, ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
   let (package_name,_type_name) = ros2_abs_type.rsplit_once('/')
     .ok_or(io::Error::new(io::ErrorKind::Other, "Need package_name/type_name"))?;
 
-  let cwd = std::env::current_dir()?;
+  let cwd = std::env::current_dir()?; 
+  std::env::set_current_dir(workspace_dir)?;
 
-  std::env::set_current_dir("/home/juhe/ros2_humble")?;
   println!("Querying colcon");
   let colcon_output = std::process::Command::new("colcon")
     .arg("list")
@@ -153,7 +170,7 @@ fn list_packges_with_msgs(ros2_abs_type: &str) -> io::Result<Vec<RosPkg>> {
               }
             } // for .msg files (types)
           } else {
-            println!("No {msg_dir:?}");
+            //println!("No {msg_dir:?}");
           }
           if ! types.is_empty() {
             let pkg = RosPkg {
@@ -223,7 +240,7 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
         match item {
           Item::Field{ type_name, field_name, .. } => {
             let rust_type = translate_type(type_name)?;
-            write!(w,"{field_name} : {rust_type}, ")?;
+            write!(w,"{} : {}, ", escape_keywords(field_name), rust_type)?;
           }
           Item::Constant{const_name,..} => write!(w,"// skipped constant {const_name} in the middle of struct")?,
         }
@@ -240,7 +257,19 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
   Ok(())
 } 
 
-const RUST_BYTESTRING : &'static str = "BString";
+fn escape_keywords(id: &str) -> String {
+  match id {
+    "type" => {
+      let mut s = "r#".to_string();
+      s.push_str(id);
+      s
+    }
+    _ => id.to_string(),
+  }
+}
+
+const RUST_BYTESTRING : &'static str = "String";
+const RUST_WIDE_STRING : &'static str = "widestring::U16String";
 
 fn translate_type(t: &TypeName) -> io::Result<String> {
   let mut base = String::new();
@@ -261,12 +290,14 @@ fn translate_type(t: &TypeName) -> io::Result<String> {
         "uint32" => "u32",
         "uint64" => "u64",
         "string" => RUST_BYTESTRING,
+        "wstring" => RUST_WIDE_STRING,
         other => panic!("Unexpected primitive type {}", other),
       }
       ),
     BaseTypeName::BoundedString{ .. } => base.push_str(RUST_BYTESTRING), // We do not have type to represent boundedness
     BaseTypeName::ComplexType{ ref package_name, ref type_name} => {
       if let Some(pkg) = package_name {
+        base.push_str("super::");
         base.push_str(&pkg); base.push_str("::");
       }
       base.push_str(&type_name);

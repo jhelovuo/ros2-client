@@ -126,7 +126,7 @@ fn type_spec(i: &str) -> IResult<&str, TypeName> {
         tag("float32"), tag("float64"),
         tag("int8"), tag("int16"), tag("int32"), tag("int64"),
         tag("uint8"), tag("uint16"), tag("uint32"), tag("uint64"),
-        tag("string")
+        tag("string"), tag("wstring")
       )),
       |s:&str| BaseTypeName::Primitive{ name: s.to_string() }
     );
