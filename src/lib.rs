@@ -57,6 +57,8 @@ pub mod participant_entities_info;
 #[doc(hidden)]
 pub mod pubsub;
 pub mod service;
+mod wide_string;
+
 
 #[doc(hidden)]
 pub(crate) mod node;
@@ -74,6 +76,8 @@ pub use pubsub::*;
 pub use service::{AService, Client, Server, Service, ServiceMapping};
 #[doc(inline)]
 pub use action::{Action, ActionTypes};
+#[doc(inline)]
+pub use wide_string::WString;
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {

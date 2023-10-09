@@ -96,7 +96,7 @@ fn main() -> io::Result<()> {
       writeln!(out_file, "// Generated code. Do not modify.")?;
       writeln!(out_file, "use serde::{{Serialize,Deserialize}};")?;
       writeln!(out_file, "#[allow(unused_imports)]")?;
-      writeln!(out_file, "use widestring;")?;
+      writeln!(out_file, "use ros2_client::WString;")?;
       writeln!(out_file, "")?;
 
       for (ros2type, type_def) in &pkg.types {
@@ -269,7 +269,7 @@ fn escape_keywords(id: &str) -> String {
 }
 
 const RUST_BYTESTRING : &'static str = "String";
-const RUST_WIDE_STRING : &'static str = "widestring::U16String";
+const RUST_WIDE_STRING : &'static str = "WString";
 
 fn translate_type(t: &TypeName) -> io::Result<String> {
   let mut base = String::new();
