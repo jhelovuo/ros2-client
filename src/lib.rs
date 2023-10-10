@@ -83,4 +83,9 @@ pub use wide_string::WString;
 pub mod ros2 {
   pub use rustdds::{Duration, Timestamp};
   pub use crate::log::LogLevel;
+  pub use rustdds::{QosPolicies, QosPolicyBuilder};
+  pub use rustdds::qos::policy;
+  //TODO: re-export RustDDS error types until ros2-client defines its own
+  pub use rustdds::dds::{ReadError, WriteError, CreateError, WaitError,};
+  // TODO: What to do about SecurityError (exists based on feature "security")
 }
