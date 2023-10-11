@@ -612,7 +612,7 @@ macro_rules! rosout {
 
     ($node:expr, $lvl:expr, $($arg:tt)+) => (
         $node.rosout_raw(
-            crate::ros2::Timestamp::now(),
+            $crate::ros2::Timestamp::now(),
             $lvl,
             $node.name(),
             &std::format!($($arg)+), // msg

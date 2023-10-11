@@ -16,8 +16,8 @@ categories = ["network-programming", "science::robotics"]
 [dependencies]
 
 # rustdds = {  path = "../RustDDS"  } # dev setting
-# rustdds = {   git = "https://github.com/jhelovuo/RustDDS.git" }
-rustdds = {  version = "=0.8.5"  } # release setting
+rustdds = {   git = "https://github.com/jhelovuo/RustDDS.git" }
+# rustdds = {  version = "=0.8.5"  } # release setting
 
 mio = "^0.6.23"
 mio-extras = "2.0.6"

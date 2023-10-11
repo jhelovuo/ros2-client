@@ -500,7 +500,7 @@ where
   }
 
   fn sequence_number(&self) -> request_id::SequenceNumber {
-    SequenceNumber::from(self.sequence_number_gen.load(atomic::Ordering::Acquire)).into()
+    self.sequence_number_gen.load(atomic::Ordering::Acquire).into()
   }
 }
 
