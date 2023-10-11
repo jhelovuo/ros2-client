@@ -57,7 +57,7 @@ pub enum Value {
 }
 
 
-
+#[allow(clippy::type_complexity)]
 pub fn msg_spec(i: &str) -> IResult<&str, Vec<(Option<Item>, Option<Comment>) >> {
   many0(line)(i)
 }
@@ -164,9 +164,9 @@ fn value_spec(i: &str) -> IResult<&str, Value> {
       value(Value::Bool(false), tag("false")),
       value(Value::Bool(true), tag("true")),
     ));
-  let float_value = map(float, |f| Value::Float(f) );
+  let float_value = map(float, Value::Float );
   let string_value = map( parse_string, |s:String| Value::String(Vec::from(s)) );
-  let u_int_value = map( uint_value, |i| Value::Uint(i) );
+  let u_int_value = map( uint_value, Value::Uint );
   let int_value = map(
     preceded(tag("-"), uint_value ),
     |i| Value::Int( -(i as i64) ));

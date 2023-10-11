@@ -24,6 +24,12 @@ impl WString {
   }
 }
 
+impl Default for WString {
+ fn default() -> Self {
+   Self::new()
+ }
+}
+
 impl From<Utf16String> for WString {
   fn from(inner: Utf16String) -> Self {
     WString { inner }
@@ -77,8 +83,8 @@ impl<'de> Visitor<'de> for WStringVisitor {
     A: SeqAccess<'de>,
   {
     let mut inner : Utf16String = seq.size_hint().map_or_else(
-        || Utf16String::new(),
-        |cap| Utf16String::with_capacity(cap)
+        Utf16String::new,
+        Utf16String::with_capacity
       );
     while let Some(wc) = seq.next_element()? {
       inner.push(wc)

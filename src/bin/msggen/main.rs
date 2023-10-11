@@ -97,14 +97,14 @@ fn main() -> io::Result<()> {
       writeln!(out_file, "use serde::{{Serialize,Deserialize}};")?;
       writeln!(out_file, "#[allow(unused_imports)]")?;
       writeln!(out_file, "use ros2_client::WString;")?;
-      writeln!(out_file, "")?;
+      writeln!(out_file)?;
 
       for (ros2type, type_def) in &pkg.types {
         println!("  type {:?}", ros2type);
-        let msg = parser::msg_spec(&type_def)
+        let msg = parser::msg_spec(type_def)
           .unwrap_or_else(|e| panic!("Parse error: {:?}",e));
         // TODO: msg.0 should be empty string here, warn if not.
-        print_struct_definition(&mut out_file, &ros2type , &msg.1)?;
+        print_struct_definition(&mut out_file, ros2type , &msg.1)?;
       }
     }
 
@@ -200,14 +200,14 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
   -> io::Result<()> 
 {
   // assume that first we have only constants and comments
-  let is_not_field = |i:&Item| {match i { Item::Field{..} => false, _  => true, }};
+  let is_not_field = |i:&Item| { ! matches!(i,Item::Field{..})};
 
   let not_yet = lines.iter().take_while(|p| p.0.as_ref().map_or(true, is_not_field));
   let got_field = lines.iter().skip_while(|p| p.0.as_ref().map_or(true, is_not_field));
 
   for (item,comment) in not_yet {
     match (item,comment) {
-      (None,None) => writeln!(w,"")?, // empty line
+      (None,None) => writeln!(w)?, // empty line
       (None, Some(Comment(c))) => writeln!(w,"// {c}")?,
       (Some(item), comment_opt) => {
         match item {
@@ -222,7 +222,7 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
         if let Some(Comment(c)) = comment_opt {
           writeln!(w, "// {c}")?;
         } else {
-          writeln!(w,"")?;
+          writeln!(w)?;
         }
       }
     }
@@ -233,7 +233,7 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
   writeln!(w, "pub struct {name} {{")?;
   for (item,comment) in got_field {
     match (item,comment) {
-      (None,None) => writeln!(w,"")?, // empty line
+      (None,None) => writeln!(w)?, // empty line
       (None, Some(Comment(c))) => writeln!(w,"  // {c}")?,
       (Some(item), comment_opt) => {
         write!(w,"  ")?;
@@ -248,7 +248,7 @@ fn print_struct_definition<W:io::Write>(w: &mut W, name: &str, lines: &[(Option<
         if let Some(Comment(c)) = comment_opt {
           writeln!(w, "// {c}")?;
         } else {
-          writeln!(w,"")?;
+          writeln!(w)?;
         }
       }
     }
@@ -268,8 +268,8 @@ fn escape_keywords(id: &str) -> String {
   }
 }
 
-const RUST_BYTESTRING : &'static str = "String";
-const RUST_WIDE_STRING : &'static str = "WString";
+const RUST_BYTESTRING : &str = "String";
+const RUST_WIDE_STRING : &str = "WString";
 
 fn translate_type(t: &TypeName) -> io::Result<String> {
   let mut base = String::new();
@@ -298,9 +298,9 @@ fn translate_type(t: &TypeName) -> io::Result<String> {
     BaseTypeName::ComplexType{ ref package_name, ref type_name} => {
       if let Some(pkg) = package_name {
         base.push_str("super::");
-        base.push_str(&pkg); base.push_str("::");
+        base.push_str(pkg); base.push_str("::");
       }
-      base.push_str(&type_name);
+      base.push_str(type_name);
     }
   }
 

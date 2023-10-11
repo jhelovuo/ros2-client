@@ -206,6 +206,7 @@ impl Node {
   }
 
 
+  #[allow(clippy::too_many_arguments)]
   pub fn rosout_raw(&self, timestamp: Timestamp, level: crate::ros2::LogLevel, log_name: &str, log_msg: &str,
     source_file: &str, source_function: &str, source_line: u32) {
     match &self.rosout_writer {
