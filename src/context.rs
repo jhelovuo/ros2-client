@@ -3,6 +3,10 @@ use std::{
   sync::{Arc, Mutex},
 };
 
+#[cfg(feature = "security")]
+use std::path::{PathBuf, Path};
+
+
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use mio::Evented;
@@ -36,6 +40,53 @@ lazy_static! {
     .build();
 }
 
+#[cfg(feature = "security")]
+struct SecurityConfig {
+  security_config_dir: PathBuf,
+  private_key_password: String,
+}
+
+
+pub struct ContextOptions {
+  domain_id: u16,
+  #[cfg(feature = "security")]
+  security_config: Option<SecurityConfig>,
+}
+
+impl ContextOptions {
+  pub fn new() -> Self {
+    Self {
+      domain_id: 0,
+      #[cfg(feature = "security")]
+      security_config: None,
+    }
+  }
+
+  pub fn domain_id(mut self, domain_id: u16) -> Self {
+    self.domain_id = domain_id;
+    self
+  }
+
+  #[cfg(feature = "security")]
+  pub fn enable_security(mut self, security_config_dir: impl AsRef<Path>, 
+    private_key_password: String) -> Self 
+  {
+    self.security_config = 
+      Some(SecurityConfig{ 
+        security_config_dir: security_config_dir.as_ref().to_path_buf() , 
+        private_key_password });
+    self
+  }
+
+}
+
+impl Default for ContextOptions {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+
 /// [Context] communicates with other
 /// participants information in ROS2 network. It keeps track of
 /// [`NodeEntitiesInfo`]s. Also acts as a wrapper for a RustDDS instance.
@@ -51,6 +102,26 @@ impl Context {
   pub fn new() -> CreateResult<Context> {
     Self::from_domain_participant(DomainParticipant::new(0)?)
   }
+
+  pub fn with_options(opt: ContextOptions) -> CreateResult<Context> {
+    #[allow(unused_mut)] // only mutated with security
+    let mut dpb =  DomainParticipantBuilder::new( opt.domain_id );
+
+    #[cfg(feature = "security")]
+    {
+      if let Some(sc) = opt.security_config {
+        dpb = 
+          dpb.builtin_security( 
+            DomainParticipantSecurityConfigFiles::with_ros_default_names(
+              sc.security_config_dir,
+              sc.private_key_password,
+            ) 
+          );
+      }
+    }
+
+    Self::from_domain_participant(dpb.build()?)
+  }   
 
   pub fn from_domain_participant(domain_participant: DomainParticipant) -> CreateResult<Context> {
     let i = ContextInner::from_domain_participant(domain_participant)?;
