@@ -5,15 +5,29 @@ It does not link to [rcl](https://github.com/ros2/rcl),
 [rclcpp](https://docs.ros2.org/galactic/api/rclcpp/index.html), or any non-Rust DDS library. 
 [RustDDS](https://github.com/jhelovuo/RustDDS) is used for communication.
 
-## Architecture Ideas
-
-The intetion is that this is a medium-level library between lower-level DDS and a higher-level library.
-The (yet-to-be-written) higher-level library should provide an event loop, Actions, and possibly an async API. These are to be implemented as a separate crate on top of this one.
 
 ## New in version 0.5:
 
 * Actions are supported
-* async programming interface. This may make a built-in event loop redundant, as Rust async executors sort of do that already.
+* async programming interface. This should make a built-in event loop unnecessary, as Rust async executors sort of do that already. This means that `ros2-client` is not going to implement a call similar to  [`rclcpp::spin(..)`](https://docs.ros.org/en/rolling/Concepts/Intermediate/About-Executors.html).
+
+## Example: minimal_action_server and minimal_action_client
+
+These are re-implementations of [similarly named ROS examples](https://docs.ros.org/en/iron/Tutorials/Intermediate/Writing-an-Action-Server-Client/Cpp.html). They should be interoperable with ROS 2 example programs in C++ or Python.
+
+To test this, start a server and then, in a separate terminal, a client, e.g.
+
+`ros2 run examples_rclcpp_minimal_action_server action_server_member_functions`
+and
+`cargo run --example=minimal_action_client`
+
+or
+
+`cargo run --example=minimal_action_server`
+and
+`ros2 run examples_rclpy_minimal_action_client client`
+
+You should see the client requesting for a sequence of Fibonacci numbers, and the server providing them until the requested sequence length is reached.
 
 ## Example: turtle_teleop
 
