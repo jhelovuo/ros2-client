@@ -508,7 +508,6 @@ fn ros2_loop(
                   }
                   Err(e) => {
                     error!("Failed to write to turtle writer. {:?}", e);
-                    ros_node.clear_node();
                     return;
                   }
                 }

@@ -24,12 +24,14 @@ use crate::log as ros_log;
 
 /// Configuration of [Node]
 /// This is a builder-like struct.
+#[must_use]
 pub struct NodeOptions {
   #[allow(dead_code)]
   cli_args: Vec<String>,
   #[allow(dead_code)]
   use_global_arguments: bool, // process-wide command line args
   enable_rosout: bool, // use rosout topic for logging?
+  enable_rosout_reading: bool,
   #[allow(dead_code)]
   start_parameter_services: bool,
   #[allow(dead_code)]
@@ -52,17 +54,19 @@ impl NodeOptions {
       cli_args: Vec::new(),
       use_global_arguments: true,
       enable_rosout: true,
+      enable_rosout_reading: false,
       start_parameter_services: true,
       parameter_overrides: Vec::new(),
       allow_undeclared_parameters: false,
       automatically_declare_parameters_from_overrides: false,
     }
   }
-  pub fn enable_rosout(self, enable: bool) -> NodeOptions {
-    NodeOptions {
-      enable_rosout: enable,
-      ..self
-    }
+  pub fn enable_rosout(self, enable_rosout: bool) -> NodeOptions {
+    NodeOptions { enable_rosout, ..self }
+  }
+
+  pub fn read_rosout(self, enable_rosout_reading: bool) -> NodeOptions {
+    NodeOptions { enable_rosout_reading, ..self }
   }
 }
 
@@ -95,7 +99,6 @@ pub struct Node {
 
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
-  #[allow(dead_code)]
   rosout_reader: Option<Subscription<Log>>,
   parameter_events_writer: Publisher<raw::ParameterEvent>,
 }
@@ -118,9 +121,11 @@ impl Node {
     } else {
       None
     };
+    let rosout_reader = if options.enable_rosout_reading {
+      Some( ros_context.create_subscription(&rosout_topic, None)?)
+    } else { None };
 
     let parameter_events_writer = ros_context
-      // topic already has QoS defined
       .create_publisher(&paramtopic, None)?;
 
     Ok(Node {
@@ -131,7 +136,7 @@ impl Node {
       readers: HashSet::new(),
       writers: HashSet::new(),
       rosout_writer,
-      rosout_reader: None, //TODO
+      rosout_reader,
       parameter_events_writer,
     })
   }
@@ -192,8 +197,9 @@ impl Node {
   }
 
   pub fn fully_qualified_name(&self) -> String {
-    let mut nn = self.name.clone();
-    nn.push_str(&self.namespace);
+    let mut nn = self.namespace.clone();
+    nn.push('/');
+    nn.push_str(&self.name);
     nn
   }
 
@@ -205,6 +211,12 @@ impl Node {
     self.ros_context.domain_id()
   }
 
+  /// Borrow the Subscription to our ROSOut Reader.
+  ///
+  /// Availability depends on Node configuration.
+  pub fn rosout_subscription(&self) -> Option<&Subscription<Log>> {
+    self.rosout_reader.as_ref()
+  }
 
   #[allow(clippy::too_many_arguments)]
   pub fn rosout_raw(&self, timestamp: Timestamp, level: crate::ros2::LogLevel, log_name: &str, log_msg: &str,
@@ -604,6 +616,7 @@ impl Node {
       my_action_name: action_name.to_owned(),
     })
   }
+
 } // impl Node
 
 

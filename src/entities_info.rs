@@ -74,6 +74,7 @@ impl NodeEntitiesInfo {
   /// Full name of the node namespace + name eg. /some_node
   pub fn get_full_name(&self) -> String {
     let mut name = self.node_namespace.clone();
+    name.push('/');
     name.push_str(&self.node_name);
     name
   }
