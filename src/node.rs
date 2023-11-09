@@ -85,6 +85,9 @@ impl Default for NodeOptions {
 /// parameter events topics internally.
 ///
 /// These are produced by a [`Context`].
+
+// TODO: We should notify ROS discovery when readers or writers are removed, but
+// now we do not do that.
 pub struct Node {
   // node info
   name: String,
@@ -93,7 +96,7 @@ pub struct Node {
 
   pub(crate) ros_context: Context,
 
-  // dynamic
+  // sets of Readers and Writers belonging to ( = created via) this Node
   readers: HashSet<GUID>,
   writers: HashSet<GUID>,
 
@@ -163,29 +166,12 @@ impl Node {
 
   fn add_reader(&mut self, reader: GUID) {
     self.readers.insert(reader);
-    self.ros_context.add_node_info(self.generate_node_info());
-  }
-
-  pub fn remove_reader(&mut self, reader: &GUID) {
-    self.readers.remove(reader);
-    self.ros_context.add_node_info(self.generate_node_info());
+    self.ros_context.update_node(self.generate_node_info());
   }
 
   fn add_writer(&mut self, writer: GUID) {
     self.writers.insert(writer);
-    self.ros_context.add_node_info(self.generate_node_info());
-  }
-
-  pub fn remove_writer(&mut self, writer: &GUID) {
-    self.writers.remove(writer);
-    self.ros_context.add_node_info(self.generate_node_info());
-  }
-
-  /// Clears both all reader and writer guids from this node.
-  pub fn clear_node(&mut self) {
-    self.readers.clear();
-    self.writers.clear();
-    self.ros_context.add_node_info(self.generate_node_info());
+    self.ros_context.update_node(self.generate_node_info());
   }
 
   pub fn name(&self) -> &str {
@@ -619,6 +605,11 @@ impl Node {
 
 } // impl Node
 
+impl Drop for Node {
+  fn drop(&mut self) {
+    self.ros_context.remove_node(self.fully_qualified_name().as_str());
+  }
+}
 
 #[macro_export]
 macro_rules! rosout {

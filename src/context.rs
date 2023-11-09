@@ -180,7 +180,7 @@ impl Context {
   }
 
   pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeEntitiesInfo> {
-    self.inner.lock().unwrap().nodes.clone()
+    self.inner.lock().unwrap().local_nodes.clone()
   }
 
   /// Gets our current participant info we have sent to ROS2 network
@@ -273,23 +273,13 @@ impl Context {
       .create_simple_datareader_no_key(topic, qos)
   }
 
-  // pub(crate) fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
-  //   self.inner.lock().unwrap().handle_node_read()
-  // }
-
-  // // Clears all nodes and updates our ContextInfo to ROS2 network
-  // pub(crate) fn clear(&mut self) {
-  //   self.inner.lock().unwrap().clear();
-  // }
-
-
-  pub(crate) fn add_node_info(&mut self, node_info: NodeEntitiesInfo) {
-    self.inner.lock().unwrap().add_node_info(node_info);
+  pub(crate) fn update_node(&mut self, node_info: NodeEntitiesInfo) {
+    self.inner.lock().unwrap().update_node(node_info);
   }
 
-  // pub(crate) fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
-  //   self.inner.lock().unwrap().remove_node_info(node_info);
-  // }
+  pub(crate) fn remove_node(&mut self, node_name: &str) {
+    self.inner.lock().unwrap().remove_node(node_name);
+  }
 
   fn get_ros_default_publisher(&self) -> rustdds::Publisher {
     self.inner.lock().unwrap().ros_default_publisher.clone()
@@ -302,16 +292,23 @@ impl Context {
 }
 
 struct ContextInner {
-  nodes: HashMap<String, NodeEntitiesInfo>,
+
+  local_nodes: HashMap<String, NodeEntitiesInfo>,
   external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
+
+  // ROS Discovery: topic, reader and writer
+  #[allow(dead_code)]
+  ros_discovery_topic: Topic,
   node_reader: no_key::DataReaderCdr<ParticipantEntitiesInfo>,
   node_writer: no_key::DataWriterCdr<ParticipantEntitiesInfo>,
 
+
   domain_participant: DomainParticipant,
-  #[allow(dead_code)]
-  ros_discovery_topic: Topic,
+  // DDS Requires Publisher and Subscriber to create (and group)
+  // DataWriters and DataReaders, so we create one of each.
   ros_default_publisher: rustdds::Publisher,
   ros_default_subscriber: rustdds::Subscriber,
+
 
   ros_parameter_events_topic: Topic,
   ros_rosout_topic: Topic,
@@ -322,15 +319,16 @@ impl ContextInner {
   pub fn from_domain_participant(
     domain_participant: DomainParticipant,
   ) -> CreateResult<ContextInner> {
+    let ros_default_publisher = domain_participant.create_publisher(&DEFAULT_PUBLISHER_QOS)?;
+    let ros_default_subscriber = domain_participant.create_subscriber(&DEFAULT_SUBSCRIPTION_QOS)?;
+
+    // This is for tracking (ROS) Node to (DDS) Participant mapping
     let ros_discovery_topic = domain_participant.create_topic(
       builtin_topics::ros_discovery::TOPIC_NAME.to_string(),
       builtin_topics::ros_discovery::TYPE_NAME.to_string(),
       &builtin_topics::ros_discovery::QOS_PUB,
       TopicKind::NoKey,
     )?;
-
-    let ros_default_publisher = domain_participant.create_publisher(&DEFAULT_PUBLISHER_QOS)?;
-    let ros_default_subscriber = domain_participant.create_subscriber(&DEFAULT_SUBSCRIPTION_QOS)?;
 
     let ros_parameter_events_topic = domain_participant.create_topic(
       builtin_topics::parameter_events::TOPIC_NAME.to_string(),
@@ -352,7 +350,7 @@ impl ContextInner {
     let node_writer = ros_default_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?;
 
     Ok(ContextInner {
-      nodes: HashMap::new(),
+      local_nodes: HashMap::new(),
       external_nodes: HashMap::new(),
       node_reader,
       node_writer,
@@ -370,32 +368,25 @@ impl ContextInner {
   pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
     ParticipantEntitiesInfo::new(
       Gid::from(self.domain_participant.guid()),
-      self.nodes.values().cloned().collect(),
+      self.local_nodes.values().cloned().collect(),
     )
   }
 
   // Adds new NodeEntitiesInfo and updates our ContextInfo to ROS2 network
-  fn add_node_info(&mut self, mut node_info: NodeEntitiesInfo) {
+  fn update_node(&mut self, mut node_info: NodeEntitiesInfo) {
+    // Each node connects also to the TOS discovery topic
     node_info.add_reader(Gid::from(self.node_reader.guid()));
     node_info.add_writer(Gid::from(self.node_writer.guid()));
 
-    self.nodes.insert(node_info.get_full_name(), node_info);
+    self.local_nodes.insert(node_info.get_full_name(), node_info);
     self.broadcast_node_infos();
   }
 
-  // /// Removes NodeEntitiesInfo and updates our ContextInfo to ROS2 network
-  // fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
-  //   self.nodes.remove(&node_info.get_full_name());
-  //   self.broadcast_node_infos();
-  // }
-
-  // /// Clears all nodes and updates our ContextInfo to ROS2 network
-  // pub fn clear(&mut self) {
-  //   if !self.nodes.is_empty() {
-  //     self.nodes.clear();
-  //     self.broadcast_node_infos();
-  //   }
-  // }
+  /// Removes NodeEntitiesInfo and updates our ContextInfo to ROS2 network
+  fn remove_node(&mut self, node_fqn: &str) {
+    self.local_nodes.remove(node_fqn);
+    self.broadcast_node_infos();
+  }
 
   fn broadcast_node_infos(&self) {
     match self
@@ -425,6 +416,14 @@ impl ContextInner {
   //   pts
   // }
 
+}
+
+impl Drop for ContextInner {
+  fn drop(&mut self) {
+    // Clears all nodes and updates our ContextInfo to ROS2 network
+    self.local_nodes.clear();
+    self.broadcast_node_infos();    
+  }
 }
 
 impl Evented for Context {
