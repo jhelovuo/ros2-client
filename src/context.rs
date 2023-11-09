@@ -175,11 +175,11 @@ impl Context {
   }
 
 
-  pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
-    self.inner.lock().unwrap().external_nodes.clone()
-  }
+  // pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
+  //   self.inner.lock().unwrap().external_nodes.clone()
+  // }
 
-  pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeEntitiesInfo> {
+  pub fn local_nodes(&self) -> HashMap<String, NodeEntitiesInfo> {
     self.inner.lock().unwrap().local_nodes.clone()
   }
 
@@ -294,7 +294,7 @@ impl Context {
 struct ContextInner {
 
   local_nodes: HashMap<String, NodeEntitiesInfo>,
-  external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
+  //external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
 
   // ROS Discovery: topic, reader and writer
   #[allow(dead_code)]
@@ -351,7 +351,7 @@ impl ContextInner {
 
     Ok(ContextInner {
       local_nodes: HashMap::new(),
-      external_nodes: HashMap::new(),
+      //external_nodes: HashMap::new(),
       node_reader,
       node_writer,
 
