@@ -370,15 +370,15 @@ impl ContextInner {
   /// Gets our current participant info we have sent to ROS2 network
   pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
     ParticipantEntitiesInfo::new(
-      Gid::from_guid(self.domain_participant.guid()),
+      Gid::from(self.domain_participant.guid()),
       self.nodes.values().cloned().collect(),
     )
   }
 
   // Adds new NodeEntitiesInfo and updates our ContextInfo to ROS2 network
   fn add_node_info(&mut self, mut node_info: NodeEntitiesInfo) {
-    node_info.add_reader(Gid::from_guid(self.node_reader.guid()));
-    node_info.add_writer(Gid::from_guid(self.node_writer.guid()));
+    node_info.add_reader(Gid::from(self.node_reader.guid()));
+    node_info.add_writer(Gid::from(self.node_writer.guid()));
 
     self.nodes.insert(node_info.get_full_name(), node_info);
     self.broadcast_node_infos();

@@ -140,17 +140,17 @@ impl Node {
   fn generate_node_info(&self) -> NodeEntitiesInfo {
     let mut node_info = NodeEntitiesInfo::new(self.name.clone(), self.namespace.clone());
 
-    node_info.add_writer(Gid::from_guid(self.parameter_events_writer.guid()));
+    node_info.add_writer(Gid::from(self.parameter_events_writer.guid()));
     if let Some(row) = &self.rosout_writer {
-      node_info.add_writer(Gid::from_guid(row.guid()));
+      node_info.add_writer(Gid::from(row.guid()));
     }
 
     for reader in &self.readers {
-      node_info.add_reader(Gid::from_guid(*reader));
+      node_info.add_reader(Gid::from(*reader));
     }
 
     for writer in &self.writers {
-      node_info.add_writer(Gid::from_guid(*writer));
+      node_info.add_writer(Gid::from(*writer));
     }
 
     node_info
