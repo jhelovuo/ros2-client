@@ -51,9 +51,8 @@ pub mod action;
 mod gid;
 pub mod log;
 pub mod message;
-pub mod node_entities_info;
+pub mod entities_info;
 pub mod parameters;
-pub mod participant_entities_info;
 #[doc(hidden)]
 pub mod pubsub;
 pub mod service;

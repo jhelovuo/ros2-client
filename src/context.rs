@@ -22,8 +22,7 @@ use crate::{
   builtin_topics,
   gid::Gid,
   node::{Node, NodeOptions},
-  node_entities_info::NodeEntitiesInfo,
-  participant_entities_info::ParticipantEntitiesInfo,
+  entities_info::{NodeEntitiesInfo,ParticipantEntitiesInfo,},
   pubsub::{Publisher, Subscription},
 };
 

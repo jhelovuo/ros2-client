@@ -14,7 +14,7 @@ use crate::{
   gid::Gid,
   log::Log, 
   message::MessageTypeName,
-  node_entities_info::NodeEntitiesInfo,
+  entities_info::NodeEntitiesInfo,
   parameters::*,
   pubsub::{Publisher, Subscription},
   service::{Client, Server, Service, ServiceMapping},
