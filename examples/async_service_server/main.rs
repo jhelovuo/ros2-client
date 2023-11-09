@@ -77,12 +77,12 @@ fn create_qos() -> QosPolicies {
         max_blocking_time: Duration::from_millis(100),
       })
       .durability(policy::Durability::Volatile)
-      .deadline(Deadline(Duration::DURATION_INFINITE))
+      .deadline(Deadline(Duration::INFINITE))
       .lifespan(Lifespan {
-        duration: Duration::DURATION_INFINITE,
+        duration: Duration::INFINITE,
       })
       .liveliness(policy::Liveliness::Automatic {
-        lease_duration: Duration::DURATION_INFINITE,
+        lease_duration: Duration::INFINITE,
       })
       .build()
   };

@@ -136,7 +136,7 @@ fn ros2_loop(
     QosPolicyBuilder::new()
       .durability(policy::Durability::Volatile)
       .liveliness(policy::Liveliness::Automatic {
-        lease_duration: ros2::Duration::DURATION_INFINITE,
+        lease_duration: ros2::Duration::INFINITE,
       })
       .reliability(policy::Reliability::Reliable {
         max_blocking_time: ros2::Duration::from_millis(100),
@@ -145,7 +145,7 @@ fn ros2_loop(
       .build()
   };
 
-  let mut ros_context = Context::new().unwrap();
+  let ros_context = Context::new().unwrap();
 
   let mut ros_node = ros_context
     .new_node(
@@ -495,7 +495,6 @@ fn ros2_loop(
             match command {
               RosCommand::StopEventLoop => {
                 info!("Stopping main event loop");
-                ros_context.clear();
                 break 'event_loop;
               }
               RosCommand::TurtleCmdVel { turtle_id, twist } => {

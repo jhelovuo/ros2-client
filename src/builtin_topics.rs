@@ -6,25 +6,21 @@ pub mod ros_discovery {
   lazy_static! {
     pub static ref QOS_PUB: QosPolicies = QosPolicyBuilder::new()
       .durability(Durability::TransientLocal)
-      .deadline(Deadline(Duration::DURATION_INFINITE))
+      .deadline(Deadline(Duration::INFINITE))
       .ownership(Ownership::Shared)
-      .reliability(Reliability::Reliable {
-        max_blocking_time: Duration::DURATION_ZERO
-      })
+      .reliable(Duration::ZERO)
       .history(History::KeepLast { depth: 1 })
       .lifespan(Lifespan {
-        duration: Duration::DURATION_INFINITE
+        duration: Duration::INFINITE
       })
       .build();
     pub static ref QOS_SUB: QosPolicies = QosPolicyBuilder::new()
       .durability(Durability::Volatile)
       .ownership(Ownership::Shared)
-      .reliability(Reliability::Reliable {
-        max_blocking_time: Duration::DURATION_ZERO
-      })
+      .reliable(Duration::ZERO)
       .history(History::KeepLast { depth: 1 })
       .lifespan(Lifespan {
-        duration: Duration::DURATION_INFINITE
+        duration: Duration::INFINITE
       })
       .build();
   }
@@ -40,9 +36,7 @@ pub mod parameter_events {
   lazy_static! {
     pub static ref QOS: QosPolicies = QosPolicyBuilder::new()
       .durability(Durability::TransientLocal)
-      .reliability(Reliability::Reliable {
-        max_blocking_time: Duration::DURATION_ZERO
-      })
+      .reliable(Duration::ZERO)
       .history(History::KeepLast { depth: 1 })
       .build();
   }
@@ -58,11 +52,9 @@ pub mod rosout {
   lazy_static! {
     pub static ref QOS: QosPolicies = QosPolicyBuilder::new()
       .durability(Durability::TransientLocal)
-      .deadline(Deadline(Duration::DURATION_INFINITE))
+      .deadline(Deadline(Duration::INFINITE))
       .ownership(Ownership::Shared)
-      .reliability(Reliability::Reliable {
-        max_blocking_time: Duration::DURATION_ZERO
-      })
+      .reliable(Duration::ZERO)
       .history(History::KeepLast { depth: 1 })
       .lifespan(Lifespan {
         duration: Duration::from_secs(10)

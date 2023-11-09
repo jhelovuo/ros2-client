@@ -28,21 +28,38 @@ use crate::{
 };
 
 lazy_static! {
-  pub static ref DEFAULT_QOS: QosPolicies = QosPolicyBuilder::new()
+  pub static ref DEFAULT_SUBSCRIPTION_QOS: QosPolicies = QosPolicyBuilder::new()
+    .durability(Durability::Volatile) // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
+    .deadline(Deadline(Duration::INFINITE)) // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
+    .ownership(Ownership::Shared) // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
+    .reliability(Reliability::BestEffort) // default for DataReaders and Topics
+    .history(History::KeepLast { depth: 1 }) // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
+    .lifespan(Lifespan {
+      // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
+      duration: Duration::INFINITE
+    })
+    .build();
+}
+
+lazy_static! {
+  pub static ref DEFAULT_PUBLISHER_QOS: QosPolicies = QosPolicyBuilder::new()
     .durability(Durability::Volatile)
-    .deadline(Deadline(Duration::DURATION_INFINITE))
+    .deadline(Deadline(Duration::INFINITE))
     .ownership(Ownership::Shared)
-    .reliability(Reliability::BestEffort)
+    .reliability(Reliability::Reliable{max_blocking_time: Duration::from_millis(100)}) 
+      // Reliability = Reliable is the default for DataWriters, different from above.
     .history(History::KeepLast { depth: 1 })
     .lifespan(Lifespan {
-      duration: Duration::DURATION_INFINITE
+      duration: Duration::INFINITE
     })
     .build();
 }
 
 #[cfg(feature = "security")]
 struct SecurityConfig {
+  /// Path to a directory of configuration files.
   security_config_dir: PathBuf,
+  /// Password used for decryption the private key file.
   private_key_password: String,
 }
 
@@ -62,11 +79,21 @@ impl ContextOptions {
     }
   }
 
+  /// Set the DDS Domain Id.
+  ///
+  /// Please refer to the 
+  /// [ROS_DOMAIN_ID](https://docs.ros.org/en/iron/Concepts/Intermediate/About-Domain-ID.html)
+  /// or DDS documentation.
   pub fn domain_id(mut self, domain_id: u16) -> Self {
     self.domain_id = domain_id;
     self
   }
 
+  /// Enable DDS security features.
+  ///
+  /// Using security requires providing appropriate configuration files.
+  ///
+  /// [Security in RustDDS](https://github.com/jhelovuo/RustDDS/blob/master/SECURITY.md)
   #[cfg(feature = "security")]
   pub fn enable_security(mut self, security_config_dir: impl AsRef<Path>, 
     private_key_password: String) -> Self 
@@ -99,10 +126,12 @@ pub struct Context {
 }
 
 impl Context {
+  /// Create a new Context with default settings.
   pub fn new() -> CreateResult<Context> {
     Self::from_domain_participant(DomainParticipant::new(0)?)
   }
 
+  /// Create a new Context.
   pub fn with_options(opt: ContextOptions) -> CreateResult<Context> {
     #[allow(unused_mut)] // only mutated with security
     let mut dpb =  DomainParticipantBuilder::new( opt.domain_id );
@@ -123,18 +152,73 @@ impl Context {
     Self::from_domain_participant(dpb.build()?)
   }   
 
+  /// Create a new Context from an existing [`DomainParticipant`].
   pub fn from_domain_participant(domain_participant: DomainParticipant) -> CreateResult<Context> {
     let i = ContextInner::from_domain_participant(domain_participant)?;
     Ok(Context {
       inner: Arc::new(Mutex::new(i)),
     })
   }
-  /// Create a new ROS2 node
+
+  /// Create a new ROS2 [`Node`]
   pub fn new_node(&self, name: &str, namespace: &str, options: NodeOptions) -> CreateResult<Node> {
     Node::new(name, namespace, options, self.clone())
   }
 
-  pub fn create_publisher<M>(
+  /// Query which DDS Domain Id we are using.
+  pub fn domain_id(&self) -> u16 {
+    self.inner.lock().unwrap().domain_participant.domain_id()
+  }
+
+  /// Which topics have been discovered?
+  pub fn discovered_topics(&self) -> Vec<rustdds::discovery::DiscoveredTopicData> {
+    self.domain_participant().discovered_topics()
+  }
+
+
+  pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
+    self.inner.lock().unwrap().external_nodes.clone()
+  }
+
+  pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeEntitiesInfo> {
+    self.inner.lock().unwrap().nodes.clone()
+  }
+
+  /// Gets our current participant info we have sent to ROS2 network
+  pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
+    self.inner.lock().unwrap().get_ros_participant_info()
+  }
+
+  /// Get a (handle to) the ROSOut logging Topic.
+  ///
+  pub fn get_parameter_events_topic(&self) -> Topic {
+    self
+      .inner
+      .lock()
+      .unwrap()
+      .ros_parameter_events_topic
+      .clone()
+  }
+
+  /// Get a (handle to) the ROSOut logging Topic.
+  ///
+  /// Note: The recommended way to write log messages to ROSOut is via the
+  /// [`rosout`] macro in module [`node`].
+  pub fn get_rosout_topic(&self) -> Topic {
+    self.inner.lock().unwrap().ros_rosout_topic.clone()
+  }
+
+  /// Get the contained DDS [`DomainParticipant`]. 
+  ///
+  /// The return value is owned, but it is just a smart pointer.
+  ///
+  pub fn domain_participant(&self) -> DomainParticipant {
+    self.inner.lock().unwrap().domain_participant.clone()
+  }
+
+  // -----------------------------------------------------------------------
+
+  pub(crate) fn create_publisher<M>(
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
@@ -149,7 +233,7 @@ impl Context {
     Ok(Publisher::new(datawriter))
   }
 
-  pub fn create_subscription<M>(
+  pub(crate) fn create_subscription<M>(
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
@@ -176,7 +260,7 @@ impl Context {
       .create_datawriter_no_key(topic, qos)
   }
 
-  pub fn create_simpledatareader<M, DA>(
+  pub(crate) fn create_simpledatareader<M, DA>(
     &self,
     topic: &Topic,
     qos: Option<QosPolicies>,
@@ -190,59 +274,23 @@ impl Context {
       .create_simple_datareader_no_key(topic, qos)
   }
 
-  pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
-    self.inner.lock().unwrap().handle_node_read()
-  }
-  /// Clears all nodes and updates our ContextInfo to ROS2 network
-  pub fn clear(&mut self) {
-    self.inner.lock().unwrap().clear();
-  }
+  // pub(crate) fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
+  //   self.inner.lock().unwrap().handle_node_read()
+  // }
 
-  pub fn domain_id(&self) -> u16 {
-    self.inner.lock().unwrap().domain_participant.domain_id()
-  }
+  // // Clears all nodes and updates our ContextInfo to ROS2 network
+  // pub(crate) fn clear(&mut self) {
+  //   self.inner.lock().unwrap().clear();
+  // }
 
-  pub fn discovered_topics(&self) -> Vec<rustdds::discovery::DiscoveredTopicData> {
-    self.domain_participant().discovered_topics()
-  }
 
-  pub fn add_node_info(&mut self, node_info: NodeEntitiesInfo) {
+  pub(crate) fn add_node_info(&mut self, node_info: NodeEntitiesInfo) {
     self.inner.lock().unwrap().add_node_info(node_info);
   }
 
-  pub fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
-    self.inner.lock().unwrap().remove_node_info(node_info);
-  }
-
-  pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
-    self.inner.lock().unwrap().external_nodes.clone()
-  }
-
-  pub fn get_all_discovered_local_ros_node_infos(&self) -> HashMap<String, NodeEntitiesInfo> {
-    self.inner.lock().unwrap().nodes.clone()
-  }
-
-  /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
-    self.inner.lock().unwrap().get_ros_participant_info()
-  }
-
-  pub fn get_parameter_events_topic(&self) -> Topic {
-    self
-      .inner
-      .lock()
-      .unwrap()
-      .ros_parameter_events_topic
-      .clone()
-  }
-
-  pub fn get_rosout_topic(&self) -> Topic {
-    self.inner.lock().unwrap().ros_rosout_topic.clone()
-  }
-
-  pub fn domain_participant(&self) -> DomainParticipant {
-    self.inner.lock().unwrap().domain_participant.clone()
-  }
+  // pub(crate) fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
+  //   self.inner.lock().unwrap().remove_node_info(node_info);
+  // }
 
   fn get_ros_default_publisher(&self) -> rustdds::Publisher {
     self.inner.lock().unwrap().ros_default_publisher.clone()
@@ -251,6 +299,7 @@ impl Context {
   fn get_ros_default_subscriber(&self) -> rustdds::Subscriber {
     self.inner.lock().unwrap().ros_default_subscriber.clone()
   }
+
 }
 
 struct ContextInner {
@@ -281,8 +330,8 @@ impl ContextInner {
       TopicKind::NoKey,
     )?;
 
-    let ros_default_publisher = domain_participant.create_publisher(&DEFAULT_QOS)?;
-    let ros_default_subscriber = domain_participant.create_subscriber(&DEFAULT_QOS)?;
+    let ros_default_publisher = domain_participant.create_publisher(&DEFAULT_PUBLISHER_QOS)?;
+    let ros_default_subscriber = domain_participant.create_subscriber(&DEFAULT_SUBSCRIPTION_QOS)?;
 
     let ros_parameter_events_topic = domain_participant.create_topic(
       builtin_topics::parameter_events::TOPIC_NAME.to_string(),
@@ -335,19 +384,19 @@ impl ContextInner {
     self.broadcast_node_infos();
   }
 
-  /// Removes NodeEntitiesInfo and updates our ContextInfo to ROS2 network
-  fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
-    self.nodes.remove(&node_info.get_full_name());
-    self.broadcast_node_infos();
-  }
+  // /// Removes NodeEntitiesInfo and updates our ContextInfo to ROS2 network
+  // fn remove_node_info(&mut self, node_info: &NodeEntitiesInfo) {
+  //   self.nodes.remove(&node_info.get_full_name());
+  //   self.broadcast_node_infos();
+  // }
 
-  /// Clears all nodes and updates our ContextInfo to ROS2 network
-  pub fn clear(&mut self) {
-    if !self.nodes.is_empty() {
-      self.nodes.clear();
-      self.broadcast_node_infos();
-    }
-  }
+  // /// Clears all nodes and updates our ContextInfo to ROS2 network
+  // pub fn clear(&mut self) {
+  //   if !self.nodes.is_empty() {
+  //     self.nodes.clear();
+  //     self.broadcast_node_infos();
+  //   }
+  // }
 
   fn broadcast_node_infos(&self) {
     match self
@@ -359,33 +408,24 @@ impl ContextInner {
     }
   }
 
-  /// Fetches all unread ParticipantEntitiesInfos we have received
-  pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
-    let mut pts = Vec::new();
-    while let Ok(Some(sample)) = self.node_reader.take_next_sample() {
-      let rpi = sample.value();
-      match self.external_nodes.get_mut(&rpi.guid()) {
-        Some(rpi2) => {
-          *rpi2 = rpi.nodes().clone();
-        }
-        None => {
-          self.external_nodes.insert(rpi.guid(), rpi.nodes().clone());
-        }
-      };
-      pts.push(rpi.clone());
-    }
-    pts
-  }
+  // /// Fetches all unread ParticipantEntitiesInfos we have received
+  // pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
+  //   let mut pts = Vec::new();
+  //   while let Ok(Some(sample)) = self.node_reader.take_next_sample() {
+  //     let rpi = sample.value();
+  //     match self.external_nodes.get_mut(&rpi.guid()) {
+  //       Some(rpi2) => {
+  //         *rpi2 = rpi.nodes().clone();
+  //       }
+  //       None => {
+  //         self.external_nodes.insert(rpi.guid(), rpi.nodes().clone());
+  //       }
+  //     };
+  //     pts.push(rpi.clone());
+  //   }
+  //   pts
+  // }
 
-  //rustdds::ros2::ros_node::ContextInner
-  //external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo, Global>, RandomState>
-
-  /*
-  pub fn get_all_discovered_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
-    //let mut pts = Vec::new();
-    self.external_nodes.clone()
-  }
-  */
 }
 
 impl Evented for Context {

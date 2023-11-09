@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use log::error;
 
 use crate::message::Message;
 
@@ -18,7 +19,17 @@ impl Time {
   };
 
   pub fn now() -> Self {
-    Self::from_nanos(chrono::Utc::now().timestamp_nanos() as u64)
+    match chrono::Utc::now().timestamp_nanos_opt() {
+      None => {
+        error!("Timestamp out of range.");
+        Time::ZERO // Since we have to return something
+      }
+      Some(negative) if negative < 0 => {
+        error!("Timestamp out of range (negative).");
+        Time::ZERO // Since we have to return something
+      }
+      Some(non_negative) => Self::from_nanos(non_negative as u64),
+    }
   }
 
   fn from_nanos(nanos_since_epoch: u64) -> Self {
