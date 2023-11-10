@@ -11,7 +11,7 @@ use rustdds::{
   *,
 };
 
-use crate::{message::Message, pubsub::MessageInfo};
+use crate::{message::Message, message_info::MessageInfo};
 use super::{request_id, RmwRequestId, ServiceMapping};
 
 // trait Wrapper is for interfacing to Service-specific (De)SerializerAdapter.

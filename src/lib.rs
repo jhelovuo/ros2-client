@@ -51,6 +51,7 @@ pub mod action;
 mod gid;
 pub mod log;
 pub mod message;
+pub mod message_info;
 pub mod entities_info;
 pub mod parameters;
 #[doc(hidden)]
@@ -67,6 +68,8 @@ pub(crate) mod node;
 pub use context::*;
 #[doc(inline)]
 pub use message::{Message, MessageTypeName};
+#[doc(inline)]
+pub use message_info::MessageInfo;
 #[doc(inline)]
 pub use node::*;
 #[doc(inline)]

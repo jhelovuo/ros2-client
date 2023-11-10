@@ -6,13 +6,12 @@ use std::{
 #[cfg(feature = "security")]
 use std::path::{PathBuf, Path};
 
-
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
-  dds::CreateResult,
+  dds::{CreateResult},
   no_key::{DeserializerAdapter, SerializerAdapter},
   policy::*,
   *,
@@ -174,18 +173,10 @@ impl Context {
     self.domain_participant().discovered_topics()
   }
 
-
-  // pub fn get_all_discovered_external_ros_node_infos(&self) -> HashMap<Gid, Vec<NodeEntitiesInfo>> {
-  //   self.inner.lock().unwrap().external_nodes.clone()
-  // }
-
-  pub fn local_nodes(&self) -> HashMap<String, NodeEntitiesInfo> {
-    self.inner.lock().unwrap().local_nodes.clone()
-  }
-
-  /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
-    self.inner.lock().unwrap().get_ros_participant_info()
+  /// Gets the ParticipantEntitiesInfo describing the current state of
+  /// this Context. This is what we send to ROS Discovery.
+  pub fn participant_entities_info(&self) -> ParticipantEntitiesInfo {
+    self.inner.lock().unwrap().participant_entities_info()
   }
 
   /// Get a (handle to) the ROSOut logging Topic.
@@ -209,11 +200,15 @@ impl Context {
 
   /// Get the contained DDS [`DomainParticipant`]. 
   ///
-  /// The return value is owned, but it is just a smart pointer.
+  /// The return value is owned, but it is just a cloned smart pointer.
   ///
   pub fn domain_participant(&self) -> DomainParticipant {
     self.inner.lock().unwrap().domain_participant.clone()
   }
+
+  // pub fn ros_discovery_stream(&self) -> impl Stream<Item = ReadResult<(ParticipantEntitiesInfo, MessageInfo)>> + FusedStream + '_ {
+  //   self.inner.lock().unwrap().node_reader.async_stream()
+  // }
 
   // -----------------------------------------------------------------------
 
@@ -297,10 +292,9 @@ struct ContextInner {
   //external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
 
   // ROS Discovery: topic, reader and writer
-  #[allow(dead_code)]
-  ros_discovery_topic: Topic,
-  node_reader: no_key::DataReaderCdr<ParticipantEntitiesInfo>,
-  node_writer: no_key::DataWriterCdr<ParticipantEntitiesInfo>,
+  //ros_discovery_topic: Topic,
+  node_reader: Subscription<ParticipantEntitiesInfo>,
+  node_writer: Publisher<ParticipantEntitiesInfo>,
 
 
   domain_participant: DomainParticipant,
@@ -308,7 +302,6 @@ struct ContextInner {
   // DataWriters and DataReaders, so we create one of each.
   ros_default_publisher: rustdds::Publisher,
   ros_default_subscriber: rustdds::Subscriber,
-
 
   ros_parameter_events_topic: Topic,
   ros_rosout_topic: Topic,
@@ -345,18 +338,20 @@ impl ContextInner {
     )?;
 
     let node_reader =
-      ros_default_subscriber.create_datareader_no_key(&ros_discovery_topic, None)?;
+      Subscription::new(ros_default_subscriber
+        .create_simple_datareader_no_key(&ros_discovery_topic, None)?);
 
-    let node_writer = ros_default_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?;
+    let node_writer = 
+      Publisher::new(ros_default_publisher
+        .create_datawriter_no_key(&ros_discovery_topic, None)?);
 
     Ok(ContextInner {
       local_nodes: HashMap::new(),
-      //external_nodes: HashMap::new(),
       node_reader,
       node_writer,
 
       domain_participant,
-      ros_discovery_topic,
+      //ros_discovery_topic,
       ros_default_publisher,
       ros_default_subscriber,
       ros_parameter_events_topic,
@@ -365,7 +360,7 @@ impl ContextInner {
   }
 
   /// Gets our current participant info we have sent to ROS2 network
-  pub fn get_ros_participant_info(&self) -> ParticipantEntitiesInfo {
+  pub fn participant_entities_info(&self) -> ParticipantEntitiesInfo {
     ParticipantEntitiesInfo::new(
       Gid::from(self.domain_participant.guid()),
       self.local_nodes.values().cloned().collect(),
@@ -389,34 +384,13 @@ impl ContextInner {
   }
 
   fn broadcast_node_infos(&self) {
-    match self
+    self
       .node_writer
-      .write(self.get_ros_participant_info(), None)
-    {
-      Ok(_) => (),
-      Err(e) => error!("Failed to write into node_writer {:?}", e),
-    }
+      .publish(self.participant_entities_info())
+      .unwrap_or_else(|e| error!("Failed to write into node_writer {:?}", e));
   }
 
-  // /// Fetches all unread ParticipantEntitiesInfos we have received
-  // pub fn handle_node_read(&mut self) -> Vec<ParticipantEntitiesInfo> {
-  //   let mut pts = Vec::new();
-  //   while let Ok(Some(sample)) = self.node_reader.take_next_sample() {
-  //     let rpi = sample.value();
-  //     match self.external_nodes.get_mut(&rpi.guid()) {
-  //       Some(rpi2) => {
-  //         *rpi2 = rpi.nodes().clone();
-  //       }
-  //       None => {
-  //         self.external_nodes.insert(rpi.guid(), rpi.nodes().clone());
-  //       }
-  //     };
-  //     pts.push(rpi.clone());
-  //   }
-  //   pts
-  // }
-
-}
+} // impl ContextInner
 
 impl Drop for ContextInner {
   fn drop(&mut self) {

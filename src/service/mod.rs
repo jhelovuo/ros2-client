@@ -10,7 +10,7 @@ use rustdds::{
   *,
 };
 
-use crate::{message::Message, node::Node, pubsub::MessageInfo};
+use crate::{message::Message, node::Node, message_info::MessageInfo};
 
 pub mod request_id;
 pub(super) mod wrappers;

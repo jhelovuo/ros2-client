@@ -270,7 +270,7 @@ impl Node {
     Ok(topic)
   }
 
-  /// Creates ROS2 Subscriber to no key topic.
+  /// Creates ROS2 Subscriber 
   ///
   /// # Arguments
   ///
@@ -300,7 +300,7 @@ impl Node {
     Ok(prefix)
   }
 
-  /// Creates ROS2 Publisher to no key topic.
+  /// Creates ROS2 Publisher
   ///
   /// # Arguments
   ///
