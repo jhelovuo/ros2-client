@@ -5,12 +5,16 @@ use rustdds::{
 };
 use async_io::Timer;
 fn main() {
+  // Here is a fixed path, so this example must be started from
+  // RustDDS main directory
+  log4rs::init_file("examples/async_talker/log4rs.yaml", Default::default()).unwrap();
+
   let mut node = create_node();
   let topic_qos = create_qos();
 
   let chatter_topic = node
     .create_topic(
-      "/chatter",
+      "/topic",
       String::from("std_msgs::msg::dds_::String_"),
       &topic_qos,
     )
@@ -57,7 +61,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_listener",
+      "rustdds_talker",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )

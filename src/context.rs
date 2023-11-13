@@ -384,9 +384,11 @@ impl ContextInner {
   }
 
   fn broadcast_node_infos(&self) {
+    let pei = self.participant_entities_info();
+    debug!("ROS discovery publish: {pei:?}");
     self
       .node_writer
-      .publish(self.participant_entities_info())
+      .publish(pei)
       .unwrap_or_else(|e| error!("Failed to write into node_writer {:?}", e));
   }
 

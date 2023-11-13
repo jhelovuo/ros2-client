@@ -16,8 +16,8 @@ root:
 loggers:
   rustdds:
     level: warn
-  rustdds::dds::reader:
-    level: warn
+  rustdds::dds::message_receiver:
+    level: info
   rustdds::dds::fragment_assembler:
     level: warn
  # rustdds::dds::with_key::datareader:

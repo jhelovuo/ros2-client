@@ -184,7 +184,6 @@ impl Node {
 
   pub fn fully_qualified_name(&self) -> String {
     let mut nn = self.namespace.clone();
-    nn.push('/');
     nn.push_str(&self.name);
     nn
   }

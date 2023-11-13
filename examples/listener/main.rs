@@ -22,7 +22,7 @@ fn main() {
 
   let chatter_topic = node
     .create_topic(
-      "/chatter",
+      "/topic",
       String::from("std_msgs::msg::dds_::String_"),
       &topic_qos,
     )

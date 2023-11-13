@@ -26,7 +26,7 @@ fn main() {
 
   let chatter_topic = node
     .create_topic(
-      "/chatter",
+      "/topic",
       String::from("std_msgs::msg::dds_::String_"),
       &topic_qos,
     )
@@ -97,7 +97,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_listener",
+      "rustdds_talker",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )
