@@ -1,10 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashSet,HashMap};
+
+use futures::{pin_mut, StreamExt};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
-  dds::{CreateError, CreateResult},
+  dds::{CreateError, CreateResult, },
   *,
 };
 
@@ -14,7 +16,7 @@ use crate::{
   gid::Gid,
   log::Log, 
   message::MessageTypeName,
-  entities_info::NodeEntitiesInfo,
+  entities_info::{NodeEntitiesInfo,ParticipantEntitiesInfo,},
   parameters::*,
   pubsub::{Publisher, Subscription},
   service::{Client, Server, Service, ServiceMapping},
@@ -100,6 +102,9 @@ pub struct Node {
   readers: HashSet<GUID>,
   writers: HashSet<GUID>,
 
+  // Keep track of ros_discovery_info
+  external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
+
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
   rosout_reader: Option<Subscription<Log>>,
@@ -138,6 +143,7 @@ impl Node {
       ros_context,
       readers: HashSet::new(),
       writers: HashSet::new(),
+      external_nodes: HashMap::new(),
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
@@ -194,6 +200,35 @@ impl Node {
 
   pub fn domain_id(&self) -> u16 {
     self.ros_context.domain_id()
+  }
+
+  /// Spin (run) the ROS2 and DDS Discovery mechanisms. Use an async task to
+  /// call this function. The function will normally not return until the Context
+  /// is dropped. 
+  pub async fn spin(&self) -> CreateResult<()> {
+    let mut keep_spinning = true;
+
+    let ros_discovery_topic = self.ros_context.ros_discovery_topic();
+    let ros_discovery_reader : Subscription<ParticipantEntitiesInfo>
+      = self.ros_context.create_subscription(&ros_discovery_topic, None)?;
+
+    let ros_discovery_stream = ros_discovery_reader.async_stream();
+    let dds_status_listener = self.ros_context.domain_participant().status_listener();
+    let dds_status_stream = dds_status_listener.as_async_status_stream();
+    pin_mut!(ros_discovery_stream);
+    pin_mut!(dds_status_stream);
+
+    while keep_spinning {
+      futures::select!{
+        participant_info_update = ros_discovery_stream.select_next_some() => {
+          println!("{:?}", participant_info_update);
+        }
+        dp_status_event = dds_status_stream.select_next_some() => {
+          println!("{:?}", dp_status_event );
+        }
+      }
+    }
+    Ok(())
   }
 
   /// Borrow the Subscription to our ROSOut Reader.

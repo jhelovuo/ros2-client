@@ -50,6 +50,7 @@ fn main() {
   let (stop_sender, stop_receiver) = smol::channel::bounded(2);
   ctrlc::set_handler(move || {
     // We will send two stop commands, one for reader, the other for writer.
+    println!("Stopping.");
     stop_sender.send_blocking(()).unwrap_or(());
   })
   .expect("Error setting Ctrl-C handler");
@@ -194,7 +195,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_client",
+      "fibonacci_client",
       "/rustdds",
       NodeOptions::new().enable_rosout(true),
     )

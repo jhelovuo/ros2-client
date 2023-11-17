@@ -2,16 +2,17 @@ use std::{
   collections::HashMap,
   sync::{Arc, Mutex},
 };
+//use futures::{pin_mut, StreamExt};
 
 #[cfg(feature = "security")]
 use std::path::{PathBuf, Path};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use mio::Evented;
+//use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
-  dds::{CreateResult},
+  dds::{CreateResult, },
   no_key::{DeserializerAdapter, SerializerAdapter},
   policy::*,
   *,
@@ -210,6 +211,8 @@ impl Context {
   //   self.inner.lock().unwrap().node_reader.async_stream()
   // }
 
+
+
   // -----------------------------------------------------------------------
 
   pub(crate) fn create_publisher<M>(
@@ -284,16 +287,18 @@ impl Context {
     self.inner.lock().unwrap().ros_default_subscriber.clone()
   }
 
+  pub(crate) fn ros_discovery_topic(&self) -> Topic {
+    self.inner.lock().unwrap().ros_discovery_topic.clone()
+  }
+
 }
 
 struct ContextInner {
 
   local_nodes: HashMap<String, NodeEntitiesInfo>,
-  //external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
 
   // ROS Discovery: topic, reader and writer
-  //ros_discovery_topic: Topic,
-  node_reader: Subscription<ParticipantEntitiesInfo>,
+  ros_discovery_topic: Topic,
   node_writer: Publisher<ParticipantEntitiesInfo>,
 
 
@@ -337,9 +342,9 @@ impl ContextInner {
       TopicKind::NoKey,
     )?;
 
-    let node_reader =
-      Subscription::new(ros_default_subscriber
-        .create_simple_datareader_no_key(&ros_discovery_topic, None)?);
+    // let node_reader =
+    //   Subscription::new(ros_default_subscriber
+    //     .create_simple_datareader_no_key(&ros_discovery_topic, None)?);
 
     let node_writer = 
       Publisher::new(ros_default_publisher
@@ -347,17 +352,18 @@ impl ContextInner {
 
     Ok(ContextInner {
       local_nodes: HashMap::new(),
-      node_reader,
+      //node_reader,
       node_writer,
 
       domain_participant,
-      //ros_discovery_topic,
+      ros_discovery_topic,
       ros_default_publisher,
       ros_default_subscriber,
       ros_parameter_events_topic,
       ros_rosout_topic,
     })
   }
+
 
   /// Gets our current participant info we have sent to ROS2 network
   pub fn participant_entities_info(&self) -> ParticipantEntitiesInfo {
@@ -369,8 +375,8 @@ impl ContextInner {
 
   // Adds new NodeEntitiesInfo and updates our ContextInfo to ROS2 network
   fn update_node(&mut self, mut node_info: NodeEntitiesInfo) {
-    // Each node connects also to the TOS discovery topic
-    node_info.add_reader(Gid::from(self.node_reader.guid()));
+    // Each node connects also to the ROS discovery topic
+    //node_info.add_reader(Gid::from(self.node_reader.guid()));
     node_info.add_writer(Gid::from(self.node_writer.guid()));
 
     self.local_nodes.insert(node_info.get_full_name(), node_info);
@@ -402,38 +408,38 @@ impl Drop for ContextInner {
   }
 }
 
-impl Evented for Context {
-  fn register(
-    &self,
-    poll: &mio::Poll,
-    token: mio::Token,
-    interest: mio::Ready,
-    opts: mio::PollOpt,
-  ) -> std::io::Result<()> {
-    poll.register(
-      &self.inner.lock().unwrap().node_reader,
-      token,
-      interest,
-      opts,
-    )
-  }
+// impl Evented for Context {
+//   fn register(
+//     &self,
+//     poll: &mio::Poll,
+//     token: mio::Token,
+//     interest: mio::Ready,
+//     opts: mio::PollOpt,
+//   ) -> std::io::Result<()> {
+//     poll.register(
+//       &self.inner.lock().unwrap().node_reader,
+//       token,
+//       interest,
+//       opts,
+//     )
+//   }
 
-  fn reregister(
-    &self,
-    poll: &mio::Poll,
-    token: mio::Token,
-    interest: mio::Ready,
-    opts: mio::PollOpt,
-  ) -> std::io::Result<()> {
-    poll.reregister(
-      &self.inner.lock().unwrap().node_reader,
-      token,
-      interest,
-      opts,
-    )
-  }
+//   fn reregister(
+//     &self,
+//     poll: &mio::Poll,
+//     token: mio::Token,
+//     interest: mio::Ready,
+//     opts: mio::PollOpt,
+//   ) -> std::io::Result<()> {
+//     poll.reregister(
+//       &self.inner.lock().unwrap().node_reader,
+//       token,
+//       interest,
+//       opts,
+//     )
+//   }
 
-  fn deregister(&self, poll: &mio::Poll) -> std::io::Result<()> {
-    poll.deregister(&self.inner.lock().unwrap().node_reader)
-  }
-}
+//   fn deregister(&self, poll: &mio::Poll) -> std::io::Result<()> {
+//     poll.deregister(&self.inner.lock().unwrap().node_reader)
+//   }
+// }
