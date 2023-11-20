@@ -17,8 +17,8 @@ use crate::gid::Gid;
 /// Gives a list of ROS 2 nodes that are represented by a DDS DomainPArticipant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticipantEntitiesInfo {
-  gid: Gid, // GUID of a DomainParticipant
-  node_entities_info_seq: Vec<NodeEntitiesInfo>, // ROS 2 Nodes implemented by the DomainParticipant
+  pub(crate) gid: Gid, // GUID of a DomainParticipant
+  pub(crate) node_entities_info_seq: Vec<NodeEntitiesInfo>, // ROS 2 Nodes implemented by the DomainParticipant
   // field names from .msg definition
 }
 

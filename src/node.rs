@@ -1,6 +1,8 @@
 use std::collections::{HashSet,HashMap};
+use std::sync::Mutex;
 
-use futures::{pin_mut, StreamExt};
+use futures::{pin_mut, StreamExt, FutureExt};
+use async_channel;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -103,7 +105,9 @@ pub struct Node {
   writers: HashSet<GUID>,
 
   // Keep track of ros_discovery_info
-  external_nodes: HashMap<Gid, Vec<NodeEntitiesInfo>>,
+  external_nodes: Mutex<HashMap<Gid, Vec<NodeEntitiesInfo>>>,
+  stop_spin_sender: async_channel::Sender<()>,
+  stop_spin_receiver: async_channel::Receiver<()>,
 
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
@@ -135,6 +139,7 @@ impl Node {
 
     let parameter_events_writer = ros_context
       .create_publisher(&paramtopic, None)?;
+    let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
 
     Ok(Node {
       name: String::from(name),
@@ -143,7 +148,9 @@ impl Node {
       ros_context,
       readers: HashSet::new(),
       writers: HashSet::new(),
-      external_nodes: HashMap::new(),
+      external_nodes: Mutex::new(HashMap::new()),
+      stop_spin_sender,
+      stop_spin_receiver,
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
@@ -206,8 +213,6 @@ impl Node {
   /// call this function. The function will normally not return until the Context
   /// is dropped. 
   pub async fn spin(&self) -> CreateResult<()> {
-    let mut keep_spinning = true;
-
     let ros_discovery_topic = self.ros_context.ros_discovery_topic();
     let ros_discovery_reader : Subscription<ParticipantEntitiesInfo>
       = self.ros_context.create_subscription(&ros_discovery_topic, None)?;
@@ -218,16 +223,29 @@ impl Node {
     pin_mut!(ros_discovery_stream);
     pin_mut!(dds_status_stream);
 
-    while keep_spinning {
+    loop {
       futures::select!{
+        _ = self.stop_spin_receiver.recv().fuse() => {
+          break;
+        }
         participant_info_update = ros_discovery_stream.select_next_some() => {
           println!("{:?}", participant_info_update);
+          match participant_info_update {
+            Ok((part_update, _msg_info)) => {
+              let mut info_map = self.external_nodes.lock().unwrap();
+              info_map.insert( part_update.gid, part_update.node_entities_info_seq);
+            }
+            Err(e) => {
+              warn!("ros_discovery_info error {e:?}");
+            }
+          }
         }
         dp_status_event = dds_status_stream.select_next_some() => {
           println!("{:?}", dp_status_event );
         }
       }
     }
+    info!("Spin ended");
     Ok(())
   }
 
@@ -641,6 +659,8 @@ impl Node {
 
 impl Drop for Node {
   fn drop(&mut self) {
+    self.stop_spin_sender.try_send( () )
+      .unwrap_or_else(|e| error!("Cannot notify spin task to stop: {e:?}"));
     self.ros_context.remove_node(self.fully_qualified_name().as_str());
   }
 }
