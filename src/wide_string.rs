@@ -1,15 +1,14 @@
 // Wide string, i.e. UTF-16 Strings
 // We just wrap a pre-existing library to get proper Serialize and Deserialize.
 
+use std::fmt;
+
 use serde::{
-  de::{Visitor, SeqAccess,},
-  Serialize, Deserialize, 
-  Serializer, Deserializer,
+  de::{SeqAccess, Visitor},
   ser::SerializeSeq,
+  Deserialize, Deserializer, Serialize, Serializer,
 };
 use widestring::Utf16String;
-
-use std::fmt;
 
 #[derive(Clone, Debug)]
 pub struct WString {
@@ -25,9 +24,9 @@ impl WString {
 }
 
 impl Default for WString {
- fn default() -> Self {
-   Self::new()
- }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl From<Utf16String> for WString {
@@ -42,7 +41,6 @@ impl From<WString> for Utf16String {
   }
 }
 
-
 impl core::ops::Deref for WString {
   type Target = Utf16String;
   fn deref(&self) -> &Self::Target {
@@ -51,8 +49,8 @@ impl core::ops::Deref for WString {
 }
 
 impl Serialize for WString {
- fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-    let mut seq = serializer.serialize_seq(Some(self.inner.len()) )?;
+  fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+    let mut seq = serializer.serialize_seq(Some(self.inner.len()))?;
     for e in self.inner.as_slice() {
       seq.serialize_element(e)?;
     }
@@ -63,9 +61,9 @@ impl Serialize for WString {
 impl<'de> Deserialize<'de> for WString {
   fn deserialize<D>(deserializer: D) -> Result<WString, D::Error>
   where
-      D: Deserializer<'de>,
+    D: Deserializer<'de>,
   {
-      deserializer.deserialize_seq(WStringVisitor)
+    deserializer.deserialize_seq(WStringVisitor)
   }
 }
 
@@ -82,10 +80,9 @@ impl<'de> Visitor<'de> for WStringVisitor {
   where
     A: SeqAccess<'de>,
   {
-    let mut inner : Utf16String = seq.size_hint().map_or_else(
-        Utf16String::new,
-        Utf16String::with_capacity
-      );
+    let mut inner: Utf16String = seq
+      .size_hint()
+      .map_or_else(Utf16String::new, Utf16String::with_capacity);
     while let Some(wc) = seq.next_element()? {
       inner.push(wc)
     }

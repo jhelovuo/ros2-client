@@ -12,7 +12,12 @@ pub struct RmwRequestId {
 }
 
 impl From<RmwRequestId> for SampleIdentity {
-  fn from(RmwRequestId{ writer_guid, sequence_number} : RmwRequestId) -> SampleIdentity {
+  fn from(
+    RmwRequestId {
+      writer_guid,
+      sequence_number,
+    }: RmwRequestId,
+  ) -> SampleIdentity {
     SampleIdentity {
       writer_guid,
       sequence_number,
@@ -21,7 +26,12 @@ impl From<RmwRequestId> for SampleIdentity {
 }
 
 impl From<SampleIdentity> for RmwRequestId {
-  fn from(SampleIdentity{ writer_guid, sequence_number}: SampleIdentity) -> RmwRequestId {
+  fn from(
+    SampleIdentity {
+      writer_guid,
+      sequence_number,
+    }: SampleIdentity,
+  ) -> RmwRequestId {
     RmwRequestId {
       writer_guid,
       sequence_number,

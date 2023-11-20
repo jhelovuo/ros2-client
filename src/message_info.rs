@@ -1,7 +1,4 @@
-use rustdds::{
-  rpc::SampleIdentity,
-  *,
-};
+use rustdds::{rpc::SampleIdentity, *};
 
 // This is just a thinly veiled RustDDS SampleInfo
 #[derive(Debug, Clone)]

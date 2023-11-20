@@ -48,17 +48,16 @@ pub mod unique_identifier_msgs;
 pub mod interfaces;
 
 pub mod action;
+pub mod entities_info;
 mod gid;
 pub mod log;
 pub mod message;
 pub mod message_info;
-pub mod entities_info;
 pub mod parameters;
 #[doc(hidden)]
 pub mod pubsub;
 pub mod service;
 mod wide_string;
-
 
 #[doc(hidden)]
 pub(crate) mod node;
@@ -83,11 +82,10 @@ pub use wide_string::WString;
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {
-  pub use rustdds::{Duration, Timestamp};
-  pub use crate::log::LogLevel;
-  pub use rustdds::{QosPolicies, QosPolicyBuilder};
-  pub use rustdds::qos::policy;
+  pub use rustdds::{qos::policy, Duration, QosPolicies, QosPolicyBuilder, Timestamp};
   //TODO: re-export RustDDS error types until ros2-client defines its own
-  pub use rustdds::dds::{ReadError, WriteError, CreateError, WaitError,};
+  pub use rustdds::dds::{CreateError, ReadError, WaitError, WriteError};
+
+  pub use crate::log::LogLevel;
   // TODO: What to do about SecurityError (exists based on feature "security")
 }

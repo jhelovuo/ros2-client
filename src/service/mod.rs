@@ -10,7 +10,7 @@ use rustdds::{
   *,
 };
 
-use crate::{message::Message, node::Node, message_info::MessageInfo};
+use crate::{message::Message, message_info::MessageInfo, node::Node};
 
 pub mod request_id;
 pub(super) mod wrappers;
@@ -500,7 +500,10 @@ where
   }
 
   fn sequence_number(&self) -> request_id::SequenceNumber {
-    self.sequence_number_gen.load(atomic::Ordering::Acquire).into()
+    self
+      .sequence_number_gen
+      .load(atomic::Ordering::Acquire)
+      .into()
   }
 }
 

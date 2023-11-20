@@ -28,7 +28,11 @@ pub fn main() {
     }
   });
 
-  rosout!(node, ros2::LogLevel::Info, "wow  very listening   such topics  much subscribe.");
+  rosout!(
+    node,
+    ros2::LogLevel::Info,
+    "wow  very listening   such topics  much subscribe."
+  );
 
   smol::block_on(async {
     subscription_stream

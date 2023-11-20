@@ -1,30 +1,30 @@
-use std::collections::{BTreeSet,BTreeMap};
-use std::sync::Mutex;
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  sync::Mutex,
+};
 
-use futures::{pin_mut, StreamExt, FutureExt};
-use async_channel;
+use futures::{pin_mut, FutureExt, StreamExt};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
-  dds::{CreateError, CreateResult, },
+  dds::{CreateError, CreateResult},
   *,
 };
 
 use crate::{
   action::*,
   context::Context,
+  entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
-  log::Log, 
+  log as ros_log,
+  log::Log,
   message::MessageTypeName,
-  entities_info::{NodeEntitiesInfo,ParticipantEntitiesInfo,},
   parameters::*,
   pubsub::{Publisher, Subscription},
   service::{Client, Server, Service, ServiceMapping},
 };
-
-use crate::log as ros_log;
 
 /// Configuration of [Node]
 /// This is a builder-like struct.
@@ -66,11 +66,17 @@ impl NodeOptions {
     }
   }
   pub fn enable_rosout(self, enable_rosout: bool) -> NodeOptions {
-    NodeOptions { enable_rosout, ..self }
+    NodeOptions {
+      enable_rosout,
+      ..self
+    }
   }
 
   pub fn read_rosout(self, enable_rosout_reading: bool) -> NodeOptions {
-    NodeOptions { enable_rosout_reading, ..self }
+    NodeOptions {
+      enable_rosout_reading,
+      ..self
+    }
   }
 }
 
@@ -141,11 +147,12 @@ impl Node {
       None
     };
     let rosout_reader = if options.enable_rosout_reading {
-      Some( ros_context.create_subscription(&rosout_topic, None)?)
-    } else { None };
+      Some(ros_context.create_subscription(&rosout_topic, None)?)
+    } else {
+      None
+    };
 
-    let parameter_events_writer = ros_context
-      .create_publisher(&paramtopic, None)?;
+    let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
     let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
 
     Ok(Node {
@@ -220,11 +227,12 @@ impl Node {
 
   /// Spin (run) the ROS2 and DDS Discovery mechanisms. Use an async task to
   /// call this function. The function will normally not return until the Node
-  /// is dropped. 
+  /// is dropped.
   pub async fn spin(&self) -> CreateResult<()> {
     let ros_discovery_topic = self.ros_context.ros_discovery_topic();
-    let ros_discovery_reader : Subscription<ParticipantEntitiesInfo>
-      = self.ros_context.create_subscription(&ros_discovery_topic, None)?;
+    let ros_discovery_reader: Subscription<ParticipantEntitiesInfo> = self
+      .ros_context
+      .create_subscription(&ros_discovery_topic, None)?;
 
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     let dds_status_listener = self.ros_context.domain_participant().status_listener();
@@ -233,7 +241,7 @@ impl Node {
     pin_mut!(dds_status_stream);
 
     loop {
-      futures::select!{
+      futures::select! {
         _ = self.stop_spin_receiver.recv().fuse() => {
           break;
         }
@@ -262,16 +270,16 @@ impl Node {
               self.readers_to_remote_writers.lock().unwrap()
                 .entry(local_reader)
                 .and_modify(|s| {s.insert(remote_writer);} )
-                .or_insert(BTreeSet::from([remote_writer]));              
+                .or_insert(BTreeSet::from([remote_writer]));
             }
             DomainParticipantStatusEvent::ReaderLost {guid, ..} => {
-              for ( _local, readers) 
+              for ( _local, readers)
               in self.writers_to_remote_readers.lock().unwrap().iter_mut() {
                 readers.remove(&guid);
               }
             }
             DomainParticipantStatusEvent::WriterLost {guid, ..} => {
-              for ( _local, writers) 
+              for ( _local, writers)
               in self.readers_to_remote_writers.lock().unwrap().iter_mut() {
                 writers.remove(&guid);
               }
@@ -287,8 +295,12 @@ impl Node {
   }
 
   pub(crate) fn get_publisher_count(&self, subscription_guid: GUID) -> usize {
-    self.readers_to_remote_writers.lock().unwrap()
-      .get(&subscription_guid).map(BTreeSet::len)
+    self
+      .readers_to_remote_writers
+      .lock()
+      .unwrap()
+      .get(&subscription_guid)
+      .map(BTreeSet::len)
       .unwrap_or_else(|| {
         error!("get_publisher_count: Subscriber {subscription_guid:?} not known to node.");
         0
@@ -296,8 +308,12 @@ impl Node {
   }
 
   pub(crate) fn get_subscription_count(&self, publisher_guid: GUID) -> usize {
-    self.writers_to_remote_readers.lock().unwrap()
-      .get(&publisher_guid).map(BTreeSet::len)
+    self
+      .writers_to_remote_readers
+      .lock()
+      .unwrap()
+      .get(&publisher_guid)
+      .map(BTreeSet::len)
       .unwrap_or_else(|| {
         error!("get_subscription_count: Publisher {publisher_guid:?} not known to node.");
         0
@@ -312,20 +328,30 @@ impl Node {
   }
 
   #[allow(clippy::too_many_arguments)]
-  pub fn rosout_raw(&self, timestamp: Timestamp, level: crate::ros2::LogLevel, log_name: &str, log_msg: &str,
-    source_file: &str, source_function: &str, source_line: u32) {
+  pub fn rosout_raw(
+    &self,
+    timestamp: Timestamp,
+    level: crate::ros2::LogLevel,
+    log_name: &str,
+    log_msg: &str,
+    source_file: &str,
+    source_function: &str,
+    source_line: u32,
+  ) {
     match &self.rosout_writer {
       None => debug!("Rosout not enabled. msg: {log_msg}"),
       Some(writer) => {
-        writer.publish(ros_log::Log{
-          timestamp,
-          level: level as u8,
-          name: log_name.to_string(),
-          msg: log_msg.to_string(),
-          file: source_file.to_string(),
-          function: source_function.to_string(),
-          line: source_line,
-        }).unwrap_or_else(|e| debug!("Rosout publish failed: {e:?}"));
+        writer
+          .publish(ros_log::Log {
+            timestamp,
+            level: level as u8,
+            name: log_name.to_string(),
+            msg: log_msg.to_string(),
+            file: source_file.to_string(),
+            function: source_function.to_string(),
+            line: source_line,
+          })
+          .unwrap_or_else(|e| debug!("Rosout publish failed: {e:?}"));
       }
     }
   }
@@ -377,7 +403,7 @@ impl Node {
     Ok(topic)
   }
 
-  /// Creates ROS2 Subscriber 
+  /// Creates ROS2 Subscriber
   ///
   /// # Arguments
   ///
@@ -709,14 +735,17 @@ impl Node {
       my_action_name: action_name.to_owned(),
     })
   }
-
 } // impl Node
 
 impl Drop for Node {
   fn drop(&mut self) {
-    self.stop_spin_sender.try_send( () )
+    self
+      .stop_spin_sender
+      .try_send(())
       .unwrap_or_else(|e| error!("Cannot notify spin task to stop: {e:?}"));
-    self.ros_context.remove_node(self.fully_qualified_name().as_str());
+    self
+      .ros_context
+      .remove_node(self.fully_qualified_name().as_str());
   }
 }
 
@@ -736,4 +765,3 @@ macro_rules! rosout {
         );
     );
 }
-

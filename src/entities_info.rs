@@ -5,10 +5,9 @@ use crate::gid::Gid;
 // For background, see
 // https://design.ros2.org/articles/Node_to_Participant_mapping.html
 
-// Each time a Node adds/removes a Reader or Writer (Publisher / Subscrption in ROS terms)
-// is must publish a new ParticipantEntitiesInfo that describes its current composition.
-// This overwrites the previsous ParticipantEntitiesInfo.
-
+// Each time a Node adds/removes a Reader or Writer (Publisher / Subscrption in
+// ROS terms) is must publish a new ParticipantEntitiesInfo that describes its
+// current composition. This overwrites the previsous ParticipantEntitiesInfo.
 
 /// Information structure for other DomainParticipants in ROS2 network
 ///
@@ -18,13 +17,17 @@ use crate::gid::Gid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticipantEntitiesInfo {
   pub(crate) gid: Gid, // GUID of a DomainParticipant
-  pub(crate) node_entities_info_seq: Vec<NodeEntitiesInfo>, // ROS 2 Nodes implemented by the DomainParticipant
-  // field names from .msg definition
+  pub(crate) node_entities_info_seq: Vec<NodeEntitiesInfo>, /* ROS 2 Nodes implemented by the
+                                                             * DomainParticipant
+                                                             * field names from .msg definition */
 }
 
 impl ParticipantEntitiesInfo {
   pub fn new(gid: Gid, node_entities_info_seq: Vec<NodeEntitiesInfo>) -> ParticipantEntitiesInfo {
-    ParticipantEntitiesInfo { gid, node_entities_info_seq }
+    ParticipantEntitiesInfo {
+      gid,
+      node_entities_info_seq,
+    }
   }
 
   pub fn gid(&self) -> Gid {
@@ -36,13 +39,12 @@ impl ParticipantEntitiesInfo {
   }
 }
 
-
 /// Information about a node in ROS2 network
 ///
 /// See [NodeEntitiesInfo](https://github.com/ros2/rmw_dds_common/blob/master/rmw_dds_common/msg/NodeEntitiesInfo.msg)
 ///
 /// Defines a ROS 2 Node and how it is mapped to DDS entities.
-/// 
+///
 /// Consists of name and namespace definitions, and lists of
 /// Reader and Writer ids that belong to this Node.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -89,5 +91,4 @@ impl NodeEntitiesInfo {
       self.reader_gid_seq.push(gid);
     }
   }
-
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Message, Service, parameters};
+use crate::{parameters, Message, Service};
 
 pub struct GetParametersService {}
 

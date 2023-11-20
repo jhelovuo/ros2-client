@@ -49,7 +49,8 @@ impl<M: Serialize> Publisher<M> {
 
   /// Returns the count of currently matched subscribers.
   ///
-  /// `my_node` must be the Node that created this Publisher, or the result is undefined.
+  /// `my_node` must be the Node that created this Publisher, or the result is
+  /// undefined.
   pub fn get_subscription_count(&self, my_node: &Node) -> usize {
     my_node.get_subscription_count(self.guid())
   }
@@ -125,7 +126,8 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
 
   /// Returns the count of currently matched Publishers.
   ///
-  /// `my_node` must be the Node that created this Subscription, or the result is undefined.
+  /// `my_node` must be the Node that created this Subscription, or the result
+  /// is undefined.
   pub fn get_publisher_count(&self, my_node: &Node) -> usize {
     my_node.get_publisher_count(self.guid())
   }

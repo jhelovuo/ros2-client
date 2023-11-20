@@ -56,7 +56,6 @@ impl Log {
   }
 }
 
-
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum LogLevel {

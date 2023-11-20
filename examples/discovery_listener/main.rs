@@ -1,6 +1,6 @@
-use futures::{future, StreamExt, join};
+use futures::{future, join, StreamExt};
 use log::error;
-use ros2_client::{Context,NodeOptions};
+use ros2_client::{Context, NodeOptions};
 
 pub fn main() {
   let context = Context::new().unwrap();
@@ -30,8 +30,7 @@ pub fn main() {
   });
   smol::block_on(async {
     join!(
-      subscription_stream
-        .for_each(|_result| future::ready(())),
+      subscription_stream.for_each(|_result| future::ready(())),
       async { node.spin().await.unwrap_or_else(|e| error!("{e:?}")) }
     )
   });

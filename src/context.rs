@@ -3,16 +3,15 @@ use std::{
   sync::{Arc, Mutex},
 };
 //use futures::{pin_mut, StreamExt};
-
 #[cfg(feature = "security")]
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 //use mio::Evented;
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
-  dds::{CreateResult, },
+  dds::CreateResult,
   no_key::{DeserializerAdapter, SerializerAdapter},
   policy::*,
   *,
@@ -20,9 +19,9 @@ use rustdds::{
 
 use crate::{
   builtin_topics,
+  entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
   node::{Node, NodeOptions},
-  entities_info::{NodeEntitiesInfo,ParticipantEntitiesInfo,},
   pubsub::{Publisher, Subscription},
 };
 
@@ -45,7 +44,7 @@ lazy_static! {
     .durability(Durability::Volatile)
     .deadline(Deadline(Duration::INFINITE))
     .ownership(Ownership::Shared)
-    .reliability(Reliability::Reliable{max_blocking_time: Duration::from_millis(100)}) 
+    .reliability(Reliability::Reliable{max_blocking_time: Duration::from_millis(100)})
       // Reliability = Reliable is the default for DataWriters, different from above.
     .history(History::KeepLast { depth: 1 })
     .lifespan(Lifespan {
@@ -61,7 +60,6 @@ struct SecurityConfig {
   /// Password used for decryption the private key file.
   private_key_password: String,
 }
-
 
 pub struct ContextOptions {
   domain_id: u16,
@@ -80,7 +78,7 @@ impl ContextOptions {
 
   /// Set the DDS Domain Id.
   ///
-  /// Please refer to the 
+  /// Please refer to the
   /// [ROS_DOMAIN_ID](https://docs.ros.org/en/iron/Concepts/Intermediate/About-Domain-ID.html)
   /// or DDS documentation.
   pub fn domain_id(mut self, domain_id: u16) -> Self {
@@ -94,16 +92,17 @@ impl ContextOptions {
   ///
   /// [Security in RustDDS](https://github.com/jhelovuo/RustDDS/blob/master/SECURITY.md)
   #[cfg(feature = "security")]
-  pub fn enable_security(mut self, security_config_dir: impl AsRef<Path>, 
-    private_key_password: String) -> Self 
-  {
-    self.security_config = 
-      Some(SecurityConfig{ 
-        security_config_dir: security_config_dir.as_ref().to_path_buf() , 
-        private_key_password });
+  pub fn enable_security(
+    mut self,
+    security_config_dir: impl AsRef<Path>,
+    private_key_password: String,
+  ) -> Self {
+    self.security_config = Some(SecurityConfig {
+      security_config_dir: security_config_dir.as_ref().to_path_buf(),
+      private_key_password,
+    });
     self
   }
-
 }
 
 impl Default for ContextOptions {
@@ -111,7 +110,6 @@ impl Default for ContextOptions {
     Self::new()
   }
 }
-
 
 /// [Context] communicates with other
 /// participants information in ROS2 network. It keeps track of
@@ -133,23 +131,22 @@ impl Context {
   /// Create a new Context.
   pub fn with_options(opt: ContextOptions) -> CreateResult<Context> {
     #[allow(unused_mut)] // only mutated with security
-    let mut dpb =  DomainParticipantBuilder::new( opt.domain_id );
+    let mut dpb = DomainParticipantBuilder::new(opt.domain_id);
 
     #[cfg(feature = "security")]
     {
       if let Some(sc) = opt.security_config {
-        dpb = 
-          dpb.builtin_security( 
-            DomainParticipantSecurityConfigFiles::with_ros_default_names(
-              sc.security_config_dir,
-              sc.private_key_password,
-            ) 
-          );
+        dpb = dpb.builtin_security(
+          DomainParticipantSecurityConfigFiles::with_ros_default_names(
+            sc.security_config_dir,
+            sc.private_key_password,
+          ),
+        );
       }
     }
 
     Self::from_domain_participant(dpb.build()?)
-  }   
+  }
 
   /// Create a new Context from an existing [`DomainParticipant`].
   pub fn from_domain_participant(domain_participant: DomainParticipant) -> CreateResult<Context> {
@@ -181,7 +178,6 @@ impl Context {
   }
 
   /// Get a (handle to) the ROSOut logging Topic.
-  ///
   pub fn get_parameter_events_topic(&self) -> Topic {
     self
       .inner
@@ -199,19 +195,17 @@ impl Context {
     self.inner.lock().unwrap().ros_rosout_topic.clone()
   }
 
-  /// Get the contained DDS [`DomainParticipant`]. 
+  /// Get the contained DDS [`DomainParticipant`].
   ///
   /// The return value is owned, but it is just a cloned smart pointer.
-  ///
   pub fn domain_participant(&self) -> DomainParticipant {
     self.inner.lock().unwrap().domain_participant.clone()
   }
 
-  // pub fn ros_discovery_stream(&self) -> impl Stream<Item = ReadResult<(ParticipantEntitiesInfo, MessageInfo)>> + FusedStream + '_ {
+  // pub fn ros_discovery_stream(&self) -> impl Stream<Item =
+  // ReadResult<(ParticipantEntitiesInfo, MessageInfo)>> + FusedStream + '_ {
   //   self.inner.lock().unwrap().node_reader.async_stream()
   // }
-
-
 
   // -----------------------------------------------------------------------
 
@@ -290,17 +284,14 @@ impl Context {
   pub(crate) fn ros_discovery_topic(&self) -> Topic {
     self.inner.lock().unwrap().ros_discovery_topic.clone()
   }
-
 }
 
 struct ContextInner {
-
   local_nodes: HashMap<String, NodeEntitiesInfo>,
 
   // ROS Discovery: topic, reader and writer
   ros_discovery_topic: Topic,
   node_writer: Publisher<ParticipantEntitiesInfo>,
-
 
   domain_participant: DomainParticipant,
   // DDS Requires Publisher and Subscriber to create (and group)
@@ -346,9 +337,8 @@ impl ContextInner {
     //   Subscription::new(ros_default_subscriber
     //     .create_simple_datareader_no_key(&ros_discovery_topic, None)?);
 
-    let node_writer = 
-      Publisher::new(ros_default_publisher
-        .create_datawriter_no_key(&ros_discovery_topic, None)?);
+    let node_writer =
+      Publisher::new(ros_default_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?);
 
     Ok(ContextInner {
       local_nodes: HashMap::new(),
@@ -364,7 +354,6 @@ impl ContextInner {
     })
   }
 
-
   /// Gets our current participant info we have sent to ROS2 network
   pub fn participant_entities_info(&self) -> ParticipantEntitiesInfo {
     ParticipantEntitiesInfo::new(
@@ -379,7 +368,9 @@ impl ContextInner {
     //node_info.add_reader(Gid::from(self.node_reader.guid()));
     node_info.add_writer(Gid::from(self.node_writer.guid()));
 
-    self.local_nodes.insert(node_info.get_full_name(), node_info);
+    self
+      .local_nodes
+      .insert(node_info.get_full_name(), node_info);
     self.broadcast_node_infos();
   }
 
@@ -397,14 +388,13 @@ impl ContextInner {
       .publish(pei)
       .unwrap_or_else(|e| error!("Failed to write into node_writer {:?}", e));
   }
-
 } // impl ContextInner
 
 impl Drop for ContextInner {
   fn drop(&mut self) {
     // Clears all nodes and updates our ContextInfo to ROS2 network
     self.local_nodes.clear();
-    self.broadcast_node_infos();    
+    self.broadcast_node_infos();
   }
 }
 
@@ -415,13 +405,8 @@ impl Drop for ContextInner {
 //     token: mio::Token,
 //     interest: mio::Ready,
 //     opts: mio::PollOpt,
-//   ) -> std::io::Result<()> {
-//     poll.register(
-//       &self.inner.lock().unwrap().node_reader,
-//       token,
-//       interest,
-//       opts,
-//     )
+//   ) -> std::io::Result<()> { poll.register(
+//     &self.inner.lock().unwrap().node_reader, token, interest, opts, )
 //   }
 
 //   fn reregister(
@@ -430,13 +415,8 @@ impl Drop for ContextInner {
 //     token: mio::Token,
 //     interest: mio::Ready,
 //     opts: mio::PollOpt,
-//   ) -> std::io::Result<()> {
-//     poll.reregister(
-//       &self.inner.lock().unwrap().node_reader,
-//       token,
-//       interest,
-//       opts,
-//     )
+//   ) -> std::io::Result<()> { poll.reregister(
+//     &self.inner.lock().unwrap().node_reader, token, interest, opts, )
 //   }
 
 //   fn deregister(&self, poll: &mio::Poll) -> std::io::Result<()> {

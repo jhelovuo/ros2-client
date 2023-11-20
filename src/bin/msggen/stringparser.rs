@@ -6,19 +6,21 @@
 //! - Enclosed by double quotes
 //! - Can contain any raw unescaped code point besides \ and "
 //! - Matches the following escape sequences: \b, \f, \n, \r, \t, \", \\, \/
-//! - Matches code points like Rust: \u{XXXX}, where XXXX can be up to 6
-//!   hex characters
+//! - Matches code points like Rust: \u{XXXX}, where XXXX can be up to 6 hex
+//!   characters
 //! - an escape followed by whitespace consumes all whitespace between the
 //!   escape and the next non-whitespace character
 
-use nom::branch::alt;
-use nom::bytes::streaming::{is_not, take_while_m_n};
-use nom::character::streaming::{char, multispace1};
-use nom::combinator::{map, map_opt, map_res, value, verify};
-use nom::error::{FromExternalError, ParseError};
-use nom::multi::fold_many0;
-use nom::sequence::{delimited, preceded};
-use nom::{IResult, Parser};
+use nom::{
+  branch::alt,
+  bytes::streaming::{is_not, take_while_m_n},
+  character::streaming::{char, multispace1},
+  combinator::{map, map_opt, map_res, value, verify},
+  error::{FromExternalError, ParseError},
+  multi::fold_many0,
+  sequence::{delimited, preceded},
+  IResult, Parser,
+};
 
 // parser combinators are constructed from the bottom up:
 // first we write parsers for the smallest elements (escaped characters),
@@ -164,7 +166,6 @@ where
   delimited(char('"'), build_string, char('"')).parse(input)
 }
 
-
 // fn main() {
 //   let data = "\"abc\"";
 //   println!("EXAMPLE 1:\nParsing a simple input string: {}", data);
@@ -172,18 +173,18 @@ where
 //   assert_eq!(result, Ok(("", String::from("abc"))));
 //   println!("Result: {}\n\n", result.unwrap().1);
 
-//   let data = "\"tab:\\tafter tab, newline:\\nnew line, quote: \\\", emoji: \\u{1F602}, newline:\\nescaped whitespace: \\    abc\"";
-//   println!(
-//     "EXAMPLE 2:\nParsing a string with escape sequences, newline literal, and escaped whitespace:\n\n{}\n",
-//     data
+//   let data = "\"tab:\\tafter tab, newline:\\nnew line, quote: \\\", emoji:
+// \\u{1F602}, newline:\\nescaped whitespace: \\    abc\"";   println!(
+//     "EXAMPLE 2:\nParsing a string with escape sequences, newline literal, and
+// escaped whitespace:\n\n{}\n",     data
 //   );
 //   let result = parse_string::<()>(data);
 //   assert_eq!(
 //     result,
 //     Ok((
 //       "",
-//       String::from("tab:\tafter tab, newline:\nnew line, quote: \", emoji: 😂, newline:\nescaped whitespace: abc")
-//     ))
+//       String::from("tab:\tafter tab, newline:\nnew line, quote: \", emoji:
+// 😂, newline:\nescaped whitespace: abc")     ))
 //   );
 //   println!("Result:\n\n{}", result.unwrap().1);
 // }
