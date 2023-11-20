@@ -1,4 +1,4 @@
-use std::collections::{HashSet,HashMap};
+use std::collections::{BTreeSet,BTreeMap};
 use std::sync::Mutex;
 
 use futures::{pin_mut, StreamExt, FutureExt};
@@ -101,11 +101,18 @@ pub struct Node {
   pub(crate) ros_context: Context,
 
   // sets of Readers and Writers belonging to ( = created via) this Node
-  readers: HashSet<Gid>,
-  writers: HashSet<Gid>,
+  // These indicate what has been created locally.
+  readers: BTreeSet<Gid>,
+  writers: BTreeSet<Gid>,
+
+  // Keep track of who is matched via DDS Discovery
+  // Map keys are lists of local Subscriptions and Publishers.
+  // Map values are lists of matched Publishers / Subscriptions.
+  readers_to_remote_writers: Mutex<BTreeMap<GUID, BTreeSet<GUID>>>,
+  writers_to_remote_readers: Mutex<BTreeMap<GUID, BTreeSet<GUID>>>,
 
   // Keep track of ros_discovery_info
-  external_nodes: Mutex<HashMap<Gid, Vec<NodeEntitiesInfo>>>,
+  external_nodes: Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>,
   stop_spin_sender: async_channel::Sender<()>,
   stop_spin_receiver: async_channel::Receiver<()>,
 
@@ -146,9 +153,11 @@ impl Node {
       namespace: String::from(namespace),
       options,
       ros_context,
-      readers: HashSet::new(),
-      writers: HashSet::new(),
-      external_nodes: Mutex::new(HashMap::new()),
+      readers: BTreeSet::new(),
+      writers: BTreeSet::new(),
+      readers_to_remote_writers: Mutex::new(BTreeMap::new()),
+      writers_to_remote_readers: Mutex::new(BTreeMap::new()),
+      external_nodes: Mutex::new(BTreeMap::new()),
       stop_spin_sender,
       stop_spin_receiver,
       rosout_writer,
@@ -242,6 +251,34 @@ impl Node {
         }
         dp_status_event = dds_status_stream.select_next_some() => {
           println!("{:?}", dp_status_event );
+          match dp_status_event {
+            DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, remote_reader } => {
+              self.writers_to_remote_readers.lock().unwrap()
+                .entry(local_writer)
+                .and_modify(|s| {s.insert(remote_reader);} )
+                .or_insert(BTreeSet::from([remote_reader]));
+            }
+            DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, remote_writer } => {
+              self.readers_to_remote_writers.lock().unwrap()
+                .entry(local_reader)
+                .and_modify(|s| {s.insert(remote_writer);} )
+                .or_insert(BTreeSet::from([remote_writer]));              
+            }
+            DomainParticipantStatusEvent::ReaderLost {guid, ..} => {
+              for ( _local, readers) 
+              in self.writers_to_remote_readers.lock().unwrap().iter_mut() {
+                readers.remove(&guid);
+              }
+            }
+            DomainParticipantStatusEvent::WriterLost {guid, ..} => {
+              for ( _local, writers) 
+              in self.readers_to_remote_writers.lock().unwrap().iter_mut() {
+                writers.remove(&guid);
+              }
+            }
+
+            _ => {}
+          }
         }
       }
     }
