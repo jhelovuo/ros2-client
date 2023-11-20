@@ -286,6 +286,24 @@ impl Node {
     Ok(())
   }
 
+  pub(crate) fn get_publisher_count(&self, subscription_guid: GUID) -> usize {
+    self.readers_to_remote_writers.lock().unwrap()
+      .get(&subscription_guid).map(BTreeSet::len)
+      .unwrap_or_else(|| {
+        error!("get_publisher_count: Subscriber {subscription_guid:?} not known to node.");
+        0
+      })
+  }
+
+  pub(crate) fn get_subscription_count(&self, publisher_guid: GUID) -> usize {
+    self.writers_to_remote_readers.lock().unwrap()
+      .get(&publisher_guid).map(BTreeSet::len)
+      .unwrap_or_else(|| {
+        error!("get_subscription_count: Publisher {publisher_guid:?} not known to node.");
+        0
+      })
+  }
+
   /// Borrow the Subscription to our ROSOut Reader.
   ///
   /// Availability depends on Node configuration.

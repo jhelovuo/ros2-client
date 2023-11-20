@@ -11,7 +11,7 @@ use rustdds::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::message_info::MessageInfo;
+use super::{message_info::MessageInfo, node::Node};
 
 /// A ROS2 Publisher
 ///
@@ -45,6 +45,13 @@ impl<M: Serialize> Publisher<M> {
 
   pub fn guid(&self) -> rustdds::GUID {
     self.datawriter.guid()
+  }
+
+  /// Returns the count of currently matched subscribers.
+  ///
+  /// `my_node` must be the Node that created this Publisher, or the result is undefined.
+  pub fn get_subscription_count(&self, my_node: &Node) -> usize {
+    my_node.get_subscription_count(self.guid())
   }
 
   pub async fn async_publish(&self, message: M) -> WriteResult<(), M> {
@@ -114,6 +121,13 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
 
   pub fn guid(&self) -> rustdds::GUID {
     self.datareader.guid()
+  }
+
+  /// Returns the count of currently matched Publishers.
+  ///
+  /// `my_node` must be the Node that created this Subscription, or the result is undefined.
+  pub fn get_publisher_count(&self, my_node: &Node) -> usize {
+    my_node.get_publisher_count(self.guid())
   }
 }
 
