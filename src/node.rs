@@ -101,8 +101,8 @@ pub struct Node {
   pub(crate) ros_context: Context,
 
   // sets of Readers and Writers belonging to ( = created via) this Node
-  readers: HashSet<GUID>,
-  writers: HashSet<GUID>,
+  readers: HashSet<Gid>,
+  writers: HashSet<Gid>,
 
   // Keep track of ros_discovery_info
   external_nodes: Mutex<HashMap<Gid, Vec<NodeEntitiesInfo>>>,
@@ -167,22 +167,22 @@ impl Node {
     }
 
     for reader in &self.readers {
-      node_info.add_reader(Gid::from(*reader));
+      node_info.add_reader(*reader);
     }
 
     for writer in &self.writers {
-      node_info.add_writer(Gid::from(*writer));
+      node_info.add_writer(*writer);
     }
 
     node_info
   }
 
-  fn add_reader(&mut self, reader: GUID) {
+  fn add_reader(&mut self, reader: Gid) {
     self.readers.insert(reader);
     self.ros_context.update_node(self.generate_node_info());
   }
 
-  fn add_writer(&mut self, writer: GUID) {
+  fn add_writer(&mut self, writer: Gid) {
     self.writers.insert(writer);
     self.ros_context.update_node(self.generate_node_info());
   }
@@ -210,7 +210,7 @@ impl Node {
   }
 
   /// Spin (run) the ROS2 and DDS Discovery mechanisms. Use an async task to
-  /// call this function. The function will normally not return until the Context
+  /// call this function. The function will normally not return until the Node
   /// is dropped. 
   pub async fn spin(&self) -> CreateResult<()> {
     let ros_discovery_topic = self.ros_context.ros_discovery_topic();
@@ -335,7 +335,7 @@ impl Node {
     qos: Option<QosPolicies>,
   ) -> CreateResult<Subscription<D>> {
     let sub = self.ros_context.create_subscription(topic, qos)?;
-    self.add_reader(sub.guid());
+    self.add_reader(sub.guid().into());
     Ok(sub)
   }
 
@@ -366,7 +366,7 @@ impl Node {
     qos: Option<QosPolicies>,
   ) -> CreateResult<Publisher<D>> {
     let p = self.ros_context.create_publisher(topic, qos)?;
-    self.add_writer(p.guid());
+    self.add_writer(p.guid().into());
     Ok(p)
   }
 
