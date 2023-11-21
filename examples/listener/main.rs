@@ -14,7 +14,7 @@ use rustdds::{
 
 fn main() {
   // Here is a fixed path, so this example must be started from
-  // RustDDS main directory
+  // package main directory
   log4rs::init_file("examples/listener/log4rs.yaml", Default::default()).unwrap();
 
   let mut node = create_node();

@@ -1,4 +1,4 @@
-use futures::{future, StreamExt};
+use futures::StreamExt;
 use ros2_client::*;
 
 pub fn main() {
@@ -21,22 +21,22 @@ pub fn main() {
   let chatter_subscription = node
     .create_subscription::<String>(&chatter_topic, None)
     .unwrap();
-  let subscription_stream = chatter_subscription.async_stream().then(|result| async {
-    match result {
-      Ok((msg, _)) => println!("I heard: {msg}"),
-      Err(e) => eprintln!("Receive request error: {:?}", e),
-    }
-  });
 
+  let subscription_stream = chatter_subscription
+    .async_stream()
+    .for_each(|result| async {
+      match result {
+        Ok((msg, _)) => println!("I heard: {msg}"),
+        Err(e) => eprintln!("Receive request error: {:?}", e),
+      }
+    });
+
+  // Since we enabled rosout, let's log something
   rosout!(
     node,
     ros2::LogLevel::Info,
-    "wow  very listening   such topics  much subscribe."
+    "wow. very listening. such topics. much subscribe."
   );
 
-  smol::block_on(async {
-    subscription_stream
-      .for_each(|_result| future::ready(()))
-      .await
-  });
+  smol::block_on(async { subscription_stream.await });
 }
