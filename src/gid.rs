@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use rustdds::*;
 
@@ -5,7 +7,7 @@ use rustdds::*;
 ///
 /// See https://github.com/ros2/rmw_dds_common/blob/master/rmw_dds_common/msg/Gid.msg
 #[derive(
-  Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, CdrEncodingSize,
+  Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, CdrEncodingSize,
 )]
 pub struct Gid(
   [u8; 24], /* Gid definition has changed in ROS 2 from 24 bytes to 16 bytes in Jan 2023
@@ -14,6 +16,15 @@ pub struct Gid(
              * This is between Humble (May 2022) and Iron (May 2023)
              */
 );
+
+impl fmt::Debug for Gid {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for b in self.0.iter() {
+      write!(f, "{:02x}", b)?;
+    }
+    Ok(())
+  }
+}
 
 impl From<GUID> for Gid {
   fn from(guid: GUID) -> Self {

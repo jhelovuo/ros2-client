@@ -4,7 +4,7 @@ use std::{
 };
 
 use futures::{pin_mut, FutureExt, StreamExt};
-
+use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
@@ -88,6 +88,12 @@ impl Default for NodeOptions {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+#[derive(Clone, Debug)]
+pub enum NodeEvent {
+  DDS(DomainParticipantStatusEvent),
+  ROS(ParticipantEntitiesInfo),
+}
+
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
@@ -122,6 +128,10 @@ pub struct Node {
   stop_spin_sender: async_channel::Sender<()>,
   stop_spin_receiver: async_channel::Receiver<()>,
 
+  // Channel to report discovery events
+  status_event_sender: async_channel::Sender<NodeEvent>,
+  status_event_receiver: async_channel::Receiver<NodeEvent>,
+
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
   rosout_reader: Option<Subscription<Log>>,
@@ -154,6 +164,7 @@ impl Node {
 
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
     let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
+    let (status_event_sender, status_event_receiver) = async_channel::bounded(16);
 
     Ok(Node {
       name: String::from(name),
@@ -167,6 +178,8 @@ impl Node {
       external_nodes: Mutex::new(BTreeMap::new()),
       stop_spin_sender,
       stop_spin_receiver,
+      status_event_sender,
+      status_event_receiver,
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
@@ -246,11 +259,15 @@ impl Node {
           break;
         }
         participant_info_update = ros_discovery_stream.select_next_some() => {
-          println!("{:?}", participant_info_update);
+          //println!("{:?}", participant_info_update);
           match participant_info_update {
             Ok((part_update, _msg_info)) => {
+              // insert to Node-local ros_discovery_info bookkeeping
               let mut info_map = self.external_nodes.lock().unwrap();
-              info_map.insert( part_update.gid, part_update.node_entities_info_seq);
+              info_map.insert( part_update.gid, part_update.node_entities_info_seq.clone());
+              // also notify any status listeneners
+              self.status_event_sender.try_send( NodeEvent::ROS(part_update))
+                .unwrap_or_else(|_e| trace!("Status channel full") /* this is normal*/ );
             }
             Err(e) => {
               warn!("ros_discovery_info error {e:?}");
@@ -258,7 +275,10 @@ impl Node {
           }
         }
         dp_status_event = dds_status_stream.select_next_some() => {
-          println!("{:?}", dp_status_event );
+          //println!("{:?}", dp_status_event );
+          // also notify any status listeneners
+          self.status_event_sender.try_send( NodeEvent::DDS(dp_status_event.clone()))
+                .unwrap_or_else(|_e| trace!("Status channel full") /* this is normal*/ );
           match dp_status_event {
             DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, remote_reader } => {
               self.writers_to_remote_readers.lock().unwrap()
@@ -292,6 +312,14 @@ impl Node {
     }
     info!("Spin ended");
     Ok(())
+  }
+
+  /// Get an async Receiver for discovery events.
+  ///
+  /// Only one such receiver should be in use at a time.
+  /// There must a task executing `spin` to get any data.
+  pub fn status_receiver(&self) -> Receiver<NodeEvent> {
+    self.status_event_receiver.clone()
   }
 
   pub(crate) fn get_publisher_count(&self, subscription_guid: GUID) -> usize {

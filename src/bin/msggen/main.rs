@@ -331,9 +331,9 @@ fn translate_type(t: &TypeName) -> io::Result<String> {
       "wstring" => RUST_WIDE_STRING,
       other => panic!("Unexpected primitive type {}", other),
     }),
-    BaseTypeName::BoundedString { .. } => base.push_str(RUST_BYTESTRING), /* We do not have type
-                                                                            * to represent
-                                                                            * boundedness */
+    BaseTypeName::BoundedString { .. } => base.push_str(RUST_BYTESTRING), /* We do not have type */
+    // to represent
+    // boundedness
     BaseTypeName::ComplexType {
       ref package_name,
       ref type_name,

@@ -1,4 +1,4 @@
-use futures::{future, join, StreamExt};
+use futures::{join, StreamExt};
 use log::error;
 use ros2_client::{Context, NodeOptions};
 
@@ -22,16 +22,27 @@ pub fn main() {
   let chatter_subscription = node
     .create_subscription::<String>(&chatter_topic, None)
     .unwrap();
-  let subscription_stream = chatter_subscription.async_stream().then(|result| async {
-    match result {
-      Ok((msg, _)) => println!("I heard: {msg}"),
-      Err(e) => eprintln!("Receive request error: {:?}", e),
-    }
+  let subscription_stream = chatter_subscription
+    .async_stream()
+    .for_each(|result| async {
+      match result {
+        Ok((msg, _)) => println!("I heard: {msg}"),
+        Err(e) => eprintln!("Receive request error: {:?}", e),
+      }
+    });
+
+  let status_event_stream = node.status_receiver().for_each(|event| async move {
+    println!("{:?}", event);
   });
+
   smol::block_on(async {
     join!(
-      subscription_stream.for_each(|_result| future::ready(())),
-      async { node.spin().await.unwrap_or_else(|e| error!("{e:?}")) }
+      // actual data subscription
+      subscription_stream,
+      // spin worker task
+      async { node.spin().await.unwrap_or_else(|e| error!("{e:?}")) },
+      // subsribe and print discovery events produced by spinner
+      status_event_stream
     )
   });
 }

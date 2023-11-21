@@ -17,9 +17,9 @@ use crate::gid::Gid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticipantEntitiesInfo {
   pub(crate) gid: Gid, // GUID of a DomainParticipant
-  pub(crate) node_entities_info_seq: Vec<NodeEntitiesInfo>, /* ROS 2 Nodes implemented by the
-                                                             * DomainParticipant
-                                                             * field names from .msg definition */
+  pub(crate) node_entities_info_seq: Vec<NodeEntitiesInfo>,
+  // ^ ROS 2 Nodes implemented by the DomainParticipant.
+  // Field names are from .msg definition
 }
 
 impl ParticipantEntitiesInfo {
