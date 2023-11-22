@@ -2,7 +2,7 @@ use std::time::Duration;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt, join};
 use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
@@ -39,7 +39,7 @@ fn main() {
   let (stop_sender, stop_receiver) = smol::channel::bounded(2);
   ctrlc::set_handler(move || {
     // We will send two stop commands, one for reader, the other for writer.
-    stop_sender.send_blocking(()).unwrap_or(());
+    //stop_sender.send_blocking(()).unwrap_or(());
     stop_sender.send_blocking(()).unwrap_or(());
     // ignore errors, as we are quitting anyway
   })
@@ -74,38 +74,61 @@ fn main() {
 
     while run {
       futures::select! {
-        _ = stop => run = false,
+        _ = stop => {
+          run = false;
+          println!("Stopping");
+        }
         _tick = tick_stream.select_next_some() => {
-          request_generator += 3;
-          let a = request_generator % 5;
-          let b = request_generator % 7;
-          match client.async_send_request(AddTwoIntsRequest { a, b }).await {
-            Ok(req_id) => {
-              println!(">>> request sent a={} b={}, {:?}", a, b, req_id.sequence_number);
-              match
-                client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
-                  .or(async {
-                        smol::Timer::after(Duration::from_secs(2)).await;
-                        Err(WriteError::WouldBlock { data: () }.into() )
-                      }).await
+          let service_is_ready = client.wait_for_service(&node).map(|_| true)
+              .or(async {
+                smol::Timer::after(Duration::from_secs(1));
+                false
+              }).await;
+          if service_is_ready  {
+            request_generator += 3;
+            let a = request_generator % 5;
+            let b = request_generator % 7;
+            match client.async_send_request(AddTwoIntsRequest { a, b }).await {
+              Ok(req_id) => {
+                println!(">>> request sent a={} b={}, {:?}", a, b, req_id.sequence_number);
+                match
+                  client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
+                    .or(async {
+                          smol::Timer::after(Duration::from_secs(2)).await;
+                          Err(WriteError::WouldBlock { data: () }.into() )
+                        }).await
 
-              {
-                Ok(response) => {
-                  println!("<<< response: {:?}", response);
+                {
+                  Ok(response) => {
+                    println!("<<< response: {:?}", response);
+                  }
+                  Err(e) => println!("<<< response error {:?}", e),
                 }
-                Err(e) => println!("<<< response error {:?}", e),
               }
-            }
-            Err(e) => println!(">>> request sending error {:?}", e),
+              Err(e) => println!(">>> request sending error {:?}", e),
+            } // match async_send_request
+
+          } else { // service not ready
+            println!(">>> waiting for Server to appear.");
           }
         }
       } // select!
     } // while
     debug!("main loop done");
   };
+  
+  // let status_event_stream = node.status_receiver().for_each(|event| async move {
+  //   println!("{:?}", event);
+  // });
 
   // run it!
-  smol::block_on(main_loop);
+  smol::block_on( async { 
+    join!(
+      main_loop,
+      async { node.spin().await.unwrap_or_else(|e| error!("{e:?}")) },
+      //status_event_stream
+      );
+  });
 }
 
 fn create_qos() -> QosPolicies {

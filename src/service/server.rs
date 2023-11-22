@@ -172,6 +172,7 @@ where
       .map(|_| ())
       .map_err(|e| e.forget_data()) // lose SampleIdentity result
   }
+
 }
 
 impl<S> Evented for Server<S>

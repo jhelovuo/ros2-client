@@ -5,7 +5,7 @@ use mio::{Evented, Poll, PollOpt, Ready, Token};
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use futures::{pin_mut, StreamExt};
+use futures::{pin_mut, StreamExt, join};
 use rustdds::{
   dds::{CreateResult, ReadError, ReadResult, WriteError, WriteResult},
   rpc::*,
@@ -208,6 +208,19 @@ where
       .await
       .map_err(CallServiceError::from)
   }
+
+  /// Wait for a Server to be connected to the Request and Response topics.
+  ///
+  /// This does not distinguish between diagnostinc tools and actual servers.
+  /// It is enough that someone has subscribed the Requests, and someone is
+  /// a publisher for Responses.
+  pub async fn wait_for_service(&self, my_node: &Node) {
+    join!(
+      my_node.wait_for_reader( self.request_sender.guid() ),
+      my_node.wait_for_writer( self.response_receiver.guid() )
+    );
+  }
+
 
   fn increment_sequence_number(&self) {
     self
