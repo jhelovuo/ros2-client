@@ -38,5 +38,5 @@ pub fn main() {
     "wow. very listening. such topics. much subscribe."
   );
 
-  smol::block_on(async { subscription_stream.await });
+  smol::block_on( subscription_stream );
 }

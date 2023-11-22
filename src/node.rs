@@ -352,14 +352,13 @@ impl Node {
         .map(|writers| ! writers.is_empty()) // there is someone matched
         .unwrap_or(false); // we do not even know the reader
 
-    if already_present { return }
-    else {
-      loop {
-        match status_receiver.select_next_some().await {
-          NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, .. }) => {
-            if local_reader == reader { break } // we got a match
-          }
-          _ => {}
+    if ! already_present { 
+      loop { // waiting loop
+        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, .. })
+          = status_receiver.select_next_some().await {
+          if local_reader == reader { 
+            break // we got a match
+          } 
         }
       } 
     }
@@ -375,14 +374,13 @@ impl Node {
         .map(|readers| ! readers.is_empty()) // there is someone matched
         .unwrap_or(false); // we do not even know who is asking
 
-    if already_present { return }
-    else {
+    if ! already_present {
       loop {
-        match status_receiver.select_next_some().await {
-          NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, .. }) => {
-            if local_writer == writer { break } // we got a match
-          }
-          _ => {}
+        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, .. })
+          = status_receiver.select_next_some().await {
+          if local_writer == writer { 
+            break // we got a match
+          } 
         }
       } 
     }
