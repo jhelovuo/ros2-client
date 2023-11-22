@@ -2,7 +2,7 @@ use std::time::Duration;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt, join};
+use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt};
 use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
@@ -116,19 +116,13 @@ fn main() {
     } // while
     debug!("main loop done");
   };
-  
-  // let status_event_stream = node.status_receiver().for_each(|event| async move {
-  //   println!("{:?}", event);
+
+  // let status_event_stream = node.status_receiver().for_each(|event| async move
+  // {   println!("{:?}", event);
   // });
 
   // run it!
-  smol::block_on( async { 
-    join!(
-      main_loop,
-      async { node.spin().await.unwrap_or_else(|e| error!("{e:?}")) },
-      //status_event_stream
-      );
-  });
+  smol::block_on(smol::future::or(main_loop, node.spin().map(|_| ())));
 }
 
 fn create_qos() -> QosPolicies {

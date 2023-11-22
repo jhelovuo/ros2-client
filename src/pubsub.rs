@@ -11,7 +11,7 @@ use rustdds::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::{message_info::MessageInfo, node::Node, gid::Gid};
+use super::{gid::Gid, message_info::MessageInfo, node::Node};
 
 /// A ROS2 Publisher
 ///
@@ -59,12 +59,13 @@ impl<M: Serialize> Publisher<M> {
     my_node.get_subscription_count(self.guid())
   }
 
-  /// Waits until there is at least one matched subscription on this topic, possibly forever.
+  /// Waits until there is at least one matched subscription on this topic,
+  /// possibly forever.
   ///
-  /// `my_node` must be the Node that created this Subscription, or the length of the wait
-  /// is undefined.
+  /// `my_node` must be the Node that created this Subscription, or the length
+  /// of the wait is undefined.
   pub async fn wait_for_subscription(&self, my_node: &Node) {
-    my_node.wait_for_reader( self.guid() ).await
+    my_node.wait_for_reader(self.guid()).await
   }
 
   pub async fn async_publish(&self, message: M) -> WriteResult<(), M> {
@@ -148,14 +149,14 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
     my_node.get_publisher_count(self.guid())
   }
 
-  /// Waits until there is at least one matched publisher on this topic, possibly forever.
+  /// Waits until there is at least one matched publisher on this topic,
+  /// possibly forever.
   ///
-  /// `my_node` must be the Node that created this Subscription, or the length of the wait
-  /// is undefined.
+  /// `my_node` must be the Node that created this Subscription, or the length
+  /// of the wait is undefined.
   pub async fn wait_for_publisher(&self, my_node: &Node) {
-    my_node.wait_for_writer( self.guid() ).await
+    my_node.wait_for_writer(self.guid()).await
   }
-
 }
 
 // helper

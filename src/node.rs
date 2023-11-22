@@ -316,7 +316,10 @@ impl Node {
   /// There must be an async task executing `spin` to get any data.
   pub fn status_receiver(&self) -> Receiver<NodeEvent> {
     let (status_event_sender, status_event_receiver) = async_channel::bounded(8);
-    self.status_event_senders.lock().unwrap()
+    self
+      .status_event_senders
+      .lock()
+      .unwrap()
       .push(status_event_sender);
     status_event_receiver
   }
@@ -324,7 +327,7 @@ impl Node {
   fn send_status_event(&self, event: &NodeEvent) {
     let mut closed = Vec::new();
     let mut sender_array = self.status_event_senders.lock().unwrap();
-    for (i,sender) in sender_array.iter().enumerate() {
+    for (i, sender) in sender_array.iter().enumerate() {
       match sender.try_send(event.clone()) {
         Ok(()) => {}
         Err(async_channel::TrySendError::Closed(_)) => {
@@ -341,51 +344,61 @@ impl Node {
   }
 
   // reader waits for at least one writer to be present
-  pub(crate) async fn wait_for_writer(&self, reader:GUID) {
+  pub(crate) async fn wait_for_writer(&self, reader: GUID) {
     // TODO: This may contain some synchrnoization hazard
     let status_receiver = self.status_receiver();
     pin_mut!(status_receiver);
 
-    let already_present = 
-      self.readers_to_remote_writers.lock().unwrap()
-        .get(&reader)
-        .map(|writers| ! writers.is_empty()) // there is someone matched
-        .unwrap_or(false); // we do not even know the reader
+    let already_present = self
+      .readers_to_remote_writers
+      .lock()
+      .unwrap()
+      .get(&reader)
+      .map(|writers| !writers.is_empty()) // there is someone matched
+      .unwrap_or(false); // we do not even know the reader
 
-    if ! already_present { 
-      loop { // waiting loop
-        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, .. })
-          = status_receiver.select_next_some().await {
-          if local_reader == reader { 
-            break // we got a match
-          } 
+    if !already_present {
+      loop {
+        // waiting loop
+        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched {
+          local_reader,
+          ..
+        }) = status_receiver.select_next_some().await
+        {
+          if local_reader == reader {
+            break; // we got a match
+          }
         }
-      } 
+      }
     }
   }
 
-  pub(crate) async fn wait_for_reader(&self, writer:GUID) {
+  pub(crate) async fn wait_for_reader(&self, writer: GUID) {
     let status_receiver = self.status_receiver();
     pin_mut!(status_receiver);
 
-    let already_present = 
-      self.writers_to_remote_readers.lock().unwrap()
-        .get(&writer)
-        .map(|readers| ! readers.is_empty()) // there is someone matched
-        .unwrap_or(false); // we do not even know who is asking
+    let already_present = self
+      .writers_to_remote_readers
+      .lock()
+      .unwrap()
+      .get(&writer)
+      .map(|readers| !readers.is_empty()) // there is someone matched
+      .unwrap_or(false); // we do not even know who is asking
 
-    if ! already_present {
+    if !already_present {
       loop {
-        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, .. })
-          = status_receiver.select_next_some().await {
-          if local_writer == writer { 
-            break // we got a match
-          } 
+        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched {
+          local_writer,
+          ..
+        }) = status_receiver.select_next_some().await
+        {
+          if local_writer == writer {
+            break; // we got a match
+          }
         }
-      } 
+      }
     }
   }
-
 
   pub(crate) fn get_publisher_count(&self, subscription_guid: GUID) -> usize {
     self

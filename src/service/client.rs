@@ -1,11 +1,9 @@
 use std::{io, sync::atomic};
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
-
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-
-use futures::{pin_mut, StreamExt, join};
+use futures::{join, pin_mut, StreamExt};
 use rustdds::{
   dds::{CreateResult, ReadError, ReadResult, WriteError, WriteResult},
   rpc::*,
@@ -13,7 +11,6 @@ use rustdds::{
 };
 
 use crate::{message::Message, message_info::MessageInfo, node::Node, service::*};
-
 
 /// Client end of a ROS2 Service
 pub struct Client<S>
@@ -216,11 +213,10 @@ where
   /// a publisher for Responses.
   pub async fn wait_for_service(&self, my_node: &Node) {
     join!(
-      my_node.wait_for_reader( self.request_sender.guid() ),
-      my_node.wait_for_writer( self.response_receiver.guid() )
+      my_node.wait_for_reader(self.request_sender.guid()),
+      my_node.wait_for_writer(self.response_receiver.guid())
     );
   }
-
 
   fn increment_sequence_number(&self) {
     self

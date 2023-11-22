@@ -1,14 +1,14 @@
-use std::{marker::PhantomData, };
+use std::marker::PhantomData;
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
 use crate::message::Message;
 
-pub mod request_id;
-pub(super) mod wrappers;
-pub mod server;
 pub mod client;
+pub mod request_id;
+pub mod server;
+pub(super) mod wrappers;
 
 pub use request_id::*;
 use wrappers::*;

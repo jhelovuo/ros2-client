@@ -1,34 +1,49 @@
-//! ROS2 interface using DDS module
+//! ROS 2 interface using RustDDS
 //!
-//! # Examples
+//! # Example
 //!
 //! ```
-//! use rustdds::*;
+//! use futures::StreamExt;
 //! use ros2_client::*;
-//! use ros2_client::node_entities_info::NodeEntitiesInfo;
 //!
+//!   let context = Context::new().unwrap();
+//!   let mut node = context
+//!     .new_node(
+//!       "rustdds_listener",
+//!       "/rustdds",
+//!       NodeOptions::new().enable_rosout(true),
+//!     )
+//!     .unwrap();
 //!
-//! let mut ros_context = Context::new().unwrap();
+//!   let chatter_topic = node
+//!     .create_topic(
+//!       "/topic",
+//!       String::from("std_msgs::msg::dds_::String_"),
+//!       &ros2_client::DEFAULT_SUBSCRIPTION_QOS,
+//!     )
+//!     .unwrap();
+//!   let chatter_subscription = node
+//!     .create_subscription::<String>(&chatter_topic, None)
+//!     .unwrap();
 //!
+//!   let subscription_stream = chatter_subscription
+//!     .async_stream()
+//!     .for_each(|result| async {
+//!       match result {
+//!         Ok((msg, _)) => println!("I heard: {msg}"),
+//!         Err(e) => eprintln!("Receive request error: {:?}", e),
+//!       }
+//!     });
 //!
-//! let mut ros_node = ros_context.new_node(
-//!   "some_node_name",
-//!   "/some_namespace",
-//!   NodeOptions::new().enable_rosout(true),
-//!   ).unwrap();
+//!   // Since we enabled rosout, let's log something
+//!   rosout!(
+//!     node,
+//!     ros2::LogLevel::Info,
+//!     "wow. very listening. such topics. much subscribe."
+//!   );
 //!
-//! let some_topic = ros_node.create_topic(
-//!     "some_topic_name",
-//!     "NodeEntitiesInfo".to_string(),
-//!     &QosPolicies::builder().build() )
-//!   .unwrap();
-//!
-//! // declaring some writer that use non keyed types
-//! let some_writer = ros_node
-//!   .create_publisher::<NodeEntitiesInfo>(&some_topic, None)
-//!   .unwrap();
-//!
-//! // Publisher and subscription implement [`mio::Evented`], so they can be polled.
+//!   // Uncomment this to execute until interrupted.
+//!   // --> smol::block_on( subscription_stream );
 //! ```
 
 #[macro_use]
