@@ -128,9 +128,8 @@ pub struct Node {
   stop_spin_sender: async_channel::Sender<()>,
   stop_spin_receiver: async_channel::Receiver<()>,
 
-  // Channel to report discovery events
-  status_event_sender: async_channel::Sender<NodeEvent>,
-  status_event_receiver: async_channel::Receiver<NodeEvent>,
+  // Channels to report discovery events
+  status_event_senders: Mutex<Vec<async_channel::Sender<NodeEvent>>>,
 
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
@@ -164,7 +163,6 @@ impl Node {
 
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
     let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
-    let (status_event_sender, status_event_receiver) = async_channel::bounded(16);
 
     Ok(Node {
       name: String::from(name),
@@ -178,8 +176,7 @@ impl Node {
       external_nodes: Mutex::new(BTreeMap::new()),
       stop_spin_sender,
       stop_spin_receiver,
-      status_event_sender,
-      status_event_receiver,
+      status_event_senders: Mutex::new(Vec::new()),
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
@@ -266,8 +263,7 @@ impl Node {
               let mut info_map = self.external_nodes.lock().unwrap();
               info_map.insert( part_update.gid, part_update.node_entities_info_seq.clone());
               // also notify any status listeneners
-              self.status_event_sender.try_send( NodeEvent::ROS(part_update))
-                .unwrap_or_else(|_e| trace!("Status channel full") /* this is normal*/ );
+              self.send_status_event( &NodeEvent::ROS(part_update) );
             }
             Err(e) => {
               warn!("ros_discovery_info error {e:?}");
@@ -277,8 +273,6 @@ impl Node {
         dp_status_event = dds_status_stream.select_next_some() => {
           //println!("{:?}", dp_status_event );
           // also notify any status listeneners
-          self.status_event_sender.try_send( NodeEvent::DDS(dp_status_event.clone()))
-                .unwrap_or_else(|_e| trace!("Status channel full") /* this is normal*/ );
           match dp_status_event {
             DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, remote_reader } => {
               self.writers_to_remote_readers.lock().unwrap()
@@ -307,6 +301,9 @@ impl Node {
 
             _ => {}
           }
+
+          self.send_status_event( &NodeEvent::DDS(dp_status_event) );
+
         }
       }
     }
@@ -316,11 +313,81 @@ impl Node {
 
   /// Get an async Receiver for discovery events.
   ///
-  /// Only one such receiver should be in use at a time.
-  /// There must a task executing `spin` to get any data.
+  /// There must be an async task executing `spin` to get any data.
   pub fn status_receiver(&self) -> Receiver<NodeEvent> {
-    self.status_event_receiver.clone()
+    let (status_event_sender, status_event_receiver) = async_channel::bounded(8);
+    self.status_event_senders.lock().unwrap()
+      .push(status_event_sender);
+    status_event_receiver
   }
+
+  fn send_status_event(&self, event: &NodeEvent) {
+    let mut closed = Vec::new();
+    let mut sender_array = self.status_event_senders.lock().unwrap();
+    for (i,sender) in sender_array.iter().enumerate() {
+      match sender.try_send(event.clone()) {
+        Ok(()) => {}
+        Err(async_channel::TrySendError::Closed(_)) => {
+          closed.push(i) // mark for deletion
+        }
+        Err(_) => {}
+      }
+    }
+
+    // remove senders that reported they were closed
+    for c in closed.iter().rev() {
+      sender_array.swap_remove(*c);
+    }
+  }
+
+  // reader waits for at least one writer to be present
+  pub(crate) async fn wait_for_writer(&self, reader:GUID) {
+    // TODO: This may contain some synchrnoization hazard
+    let status_receiver = self.status_receiver();
+    pin_mut!(status_receiver);
+
+    let already_present = 
+      self.readers_to_remote_writers.lock().unwrap()
+        .get(&reader)
+        .map(|writers| ! writers.is_empty()) // there is someone matched
+        .unwrap_or(false); // we do not even know the reader
+
+    if already_present { return }
+    else {
+      loop {
+        match status_receiver.select_next_some().await {
+          NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, .. }) => {
+            if local_reader == reader { break } // we got a match
+          }
+          _ => {}
+        }
+      } 
+    }
+  }
+
+  pub(crate) async fn wait_for_reader(&self, writer:GUID) {
+    let status_receiver = self.status_receiver();
+    pin_mut!(status_receiver);
+
+    let already_present = 
+      self.writers_to_remote_readers.lock().unwrap()
+        .get(&writer)
+        .map(|readers| ! readers.is_empty()) // there is someone matched
+        .unwrap_or(false); // we do not even know who is asking
+
+    if already_present { return }
+    else {
+      loop {
+        match status_receiver.select_next_some().await {
+          NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, .. }) => {
+            if local_writer == writer { break } // we got a match
+          }
+          _ => {}
+        }
+      } 
+    }
+  }
+
 
   pub(crate) fn get_publisher_count(&self, subscription_guid: GUID) -> usize {
     self
