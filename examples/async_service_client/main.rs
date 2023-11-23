@@ -63,6 +63,9 @@ fn main() {
     )
     .unwrap();
 
+  let spinner = node.spinner();
+  smol::spawn(spinner.spin()).detach();
+
   debug!(">>> ros2_service client created");
 
   let mut request_generator = 0;

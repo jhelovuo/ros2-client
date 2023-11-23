@@ -1,9 +1,10 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::Mutex,
+  sync::{Mutex, Arc},
+  pin::pin,
 };
 
-use futures::{pin_mut, FutureExt, StreamExt};
+use futures::{pin_mut, FutureExt, StreamExt, future, Future};
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -96,6 +97,57 @@ pub enum NodeEvent {
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
+pub struct Spinner {
+  ros_context: Context,
+  stop_spin_receiver: async_channel::Receiver<()>,
+
+  readers_to_remote_writers: Arc<Mutex<BTreeMap<GUID, BTreeSet<GUID>>>>,
+  writers_to_remote_readers: Arc<Mutex<BTreeMap<GUID, BTreeSet<GUID>>>>,
+  // Keep track of ros_discovery_info
+  external_nodes: Arc<Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>>,
+  
+  status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
+}
+impl Spinner {
+
+  pub async fn spin(self) -> CreateResult<()> {
+
+    loop {
+      futures::select! {
+        _ = self.stop_spin_receiver.recv().fuse() => {
+          break;
+        }
+
+      }
+    }
+    info!("Spinner exiting .spin()");
+    Ok(())
+    //}
+  } // fn
+
+  fn send_status_event(&self, event: &NodeEvent) {
+    let mut closed = Vec::new();
+    let mut sender_array = self.status_event_senders.lock().unwrap();
+    for (i, sender) in sender_array.iter().enumerate() {
+      match sender.try_send(event.clone()) {
+        Ok(()) => {}
+        Err(async_channel::TrySendError::Closed(_)) => {
+          closed.push(i) // mark for deletion
+        }
+        Err(_) => {}
+      }
+    }
+
+    // remove senders that reported they were closed
+    for c in closed.iter().rev() {
+      sender_array.swap_remove(*c);
+    }
+  }
+
+} // impl Spinner
+
+// ----------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
 
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
 /// parameter events topics internally.
@@ -120,16 +172,15 @@ pub struct Node {
   // Keep track of who is matched via DDS Discovery
   // Map keys are lists of local Subscriptions and Publishers.
   // Map values are lists of matched Publishers / Subscriptions.
-  readers_to_remote_writers: Mutex<BTreeMap<GUID, BTreeSet<GUID>>>,
-  writers_to_remote_readers: Mutex<BTreeMap<GUID, BTreeSet<GUID>>>,
+  readers_to_remote_writers: Arc<Mutex<BTreeMap<GUID, BTreeSet<GUID>>>>,
+  writers_to_remote_readers: Arc<Mutex<BTreeMap<GUID, BTreeSet<GUID>>>>,
 
   // Keep track of ros_discovery_info
-  external_nodes: Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>,
-  stop_spin_sender: async_channel::Sender<()>,
-  stop_spin_receiver: async_channel::Receiver<()>,
+  external_nodes: Arc<Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>>,
+  stop_spin_sender: Option<async_channel::Sender<()>>,
 
   // Channels to report discovery events
-  status_event_senders: Mutex<Vec<async_channel::Sender<NodeEvent>>>,
+  status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
@@ -162,7 +213,6 @@ impl Node {
     };
 
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
-    let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
 
     Ok(Node {
       name: String::from(name),
@@ -171,16 +221,30 @@ impl Node {
       ros_context,
       readers: BTreeSet::new(),
       writers: BTreeSet::new(),
-      readers_to_remote_writers: Mutex::new(BTreeMap::new()),
-      writers_to_remote_readers: Mutex::new(BTreeMap::new()),
-      external_nodes: Mutex::new(BTreeMap::new()),
-      stop_spin_sender,
-      stop_spin_receiver,
-      status_event_senders: Mutex::new(Vec::new()),
+      readers_to_remote_writers: Arc::new(Mutex::new(BTreeMap::new())),
+      writers_to_remote_readers: Arc::new(Mutex::new(BTreeMap::new())),
+      external_nodes: Arc::new(Mutex::new(BTreeMap::new())),
+      stop_spin_sender: None,
+      status_event_senders: Arc::new(Mutex::new(Vec::new())),
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
     })
+  }
+
+  /// Create a Spinner object to execute Node backround tasks.
+  pub fn spinner(&mut self) -> Spinner {
+    let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
+    self.stop_spin_sender = Some(stop_spin_sender);
+    
+    Spinner {
+      ros_context: self.ros_context.clone(),
+      stop_spin_receiver,
+      readers_to_remote_writers: Arc::clone(&self.readers_to_remote_writers),
+      writers_to_remote_readers: Arc::clone(&self.writers_to_remote_readers),
+      external_nodes: Arc::clone(&self.external_nodes),
+      status_event_senders: Arc::clone(&self.status_event_senders),
+    }
   }
 
   // Generates ROS2 node info from added readers and writers.
@@ -235,79 +299,11 @@ impl Node {
     self.ros_context.domain_id()
   }
 
+
   /// Spin (run) the ROS2 and DDS Discovery mechanisms. Use an async task to
   /// call this function. The function will normally not return until the Node
   /// is dropped.
   pub async fn spin(&self) -> CreateResult<()> {
-    let ros_discovery_topic = self.ros_context.ros_discovery_topic();
-    let ros_discovery_reader: Subscription<ParticipantEntitiesInfo> = self
-      .ros_context
-      .create_subscription(&ros_discovery_topic, None)?;
-
-    let ros_discovery_stream = ros_discovery_reader.async_stream();
-    let dds_status_listener = self.ros_context.domain_participant().status_listener();
-    let dds_status_stream = dds_status_listener.as_async_status_stream();
-    pin_mut!(ros_discovery_stream);
-    pin_mut!(dds_status_stream);
-
-    loop {
-      futures::select! {
-        _ = self.stop_spin_receiver.recv().fuse() => {
-          break;
-        }
-        participant_info_update = ros_discovery_stream.select_next_some() => {
-          //println!("{:?}", participant_info_update);
-          match participant_info_update {
-            Ok((part_update, _msg_info)) => {
-              // insert to Node-local ros_discovery_info bookkeeping
-              let mut info_map = self.external_nodes.lock().unwrap();
-              info_map.insert( part_update.gid, part_update.node_entities_info_seq.clone());
-              // also notify any status listeneners
-              self.send_status_event( &NodeEvent::ROS(part_update) );
-            }
-            Err(e) => {
-              warn!("ros_discovery_info error {e:?}");
-            }
-          }
-        }
-        dp_status_event = dds_status_stream.select_next_some() => {
-          //println!("{:?}", dp_status_event );
-          // also notify any status listeneners
-          match dp_status_event {
-            DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, remote_reader } => {
-              self.writers_to_remote_readers.lock().unwrap()
-                .entry(local_writer)
-                .and_modify(|s| {s.insert(remote_reader);} )
-                .or_insert(BTreeSet::from([remote_reader]));
-            }
-            DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, remote_writer } => {
-              self.readers_to_remote_writers.lock().unwrap()
-                .entry(local_reader)
-                .and_modify(|s| {s.insert(remote_writer);} )
-                .or_insert(BTreeSet::from([remote_writer]));
-            }
-            DomainParticipantStatusEvent::ReaderLost {guid, ..} => {
-              for ( _local, readers)
-              in self.writers_to_remote_readers.lock().unwrap().iter_mut() {
-                readers.remove(&guid);
-              }
-            }
-            DomainParticipantStatusEvent::WriterLost {guid, ..} => {
-              for ( _local, writers)
-              in self.readers_to_remote_writers.lock().unwrap().iter_mut() {
-                writers.remove(&guid);
-              }
-            }
-
-            _ => {}
-          }
-
-          self.send_status_event( &NodeEvent::DDS(dp_status_event) );
-
-        }
-      }
-    }
-    info!("Spin ended");
     Ok(())
   }
 
@@ -324,24 +320,6 @@ impl Node {
     status_event_receiver
   }
 
-  fn send_status_event(&self, event: &NodeEvent) {
-    let mut closed = Vec::new();
-    let mut sender_array = self.status_event_senders.lock().unwrap();
-    for (i, sender) in sender_array.iter().enumerate() {
-      match sender.try_send(event.clone()) {
-        Ok(()) => {}
-        Err(async_channel::TrySendError::Closed(_)) => {
-          closed.push(i) // mark for deletion
-        }
-        Err(_) => {}
-      }
-    }
-
-    // remove senders that reported they were closed
-    for c in closed.iter().rev() {
-      sender_array.swap_remove(*c);
-    }
-  }
 
   // reader waits for at least one writer to be present
   pub(crate) async fn wait_for_writer(&self, reader: GUID) {
@@ -845,10 +823,12 @@ impl Node {
 
 impl Drop for Node {
   fn drop(&mut self) {
-    self
-      .stop_spin_sender
-      .try_send(())
-      .unwrap_or_else(|e| error!("Cannot notify spin task to stop: {e:?}"));
+    if let Some(ref stop_spin_sender) = self.stop_spin_sender {
+      stop_spin_sender
+        .try_send(())
+        .unwrap_or_else(|e| error!("Cannot notify spin task to stop: {e:?}"));
+    }
+      
     self
       .ros_context
       .remove_node(self.fully_qualified_name().as_str());
