@@ -115,17 +115,34 @@ impl Spinner {
     let dds_status_stream = dds_status_listener.as_async_status_stream();
     pin_mut!(dds_status_stream);
 
-    // let ros_discovery_topic = self.ros_context.ros_discovery_topic();
-    // let ros_discovery_reader = self.ros_context
-    //   .create_subscription::<ParticipantEntitiesInfo>(&ros_discovery_topic, None)?;
-    // let ros_discovery_stream = ros_discovery_reader.async_stream();
-    // pin_mut!(ros_discovery_stream);
+    let ros_discovery_topic = self.ros_context.ros_discovery_topic();
+    let ros_discovery_reader = self.ros_context
+       .create_subscription::<ParticipantEntitiesInfo>(&ros_discovery_topic, None)?;
+    let ros_discovery_stream = ros_discovery_reader.async_stream();
+    pin_mut!(ros_discovery_stream);
 
     loop {
       futures::select! {
         _ = self.stop_spin_receiver.recv().fuse() => {
           break;
         }
+
+        participant_info_update = ros_discovery_stream.select_next_some() => {
+          //println!("{:?}", participant_info_update);
+          match participant_info_update {
+            Ok((part_update, _msg_info)) => {
+              // insert to Node-local ros_discovery_info bookkeeping
+              let mut info_map = self.external_nodes.lock().unwrap();
+              info_map.insert( part_update.gid, part_update.node_entities_info_seq.clone());
+              // also notify any status listeneners
+              self.send_status_event( &NodeEvent::ROS(part_update) );
+            }
+            Err(e) => {
+              warn!("ros_discovery_info error {e:?}");
+            }
+          }
+        }
+
         dp_status_event = dds_status_stream.select_next_some() => {
           println!("{:?}", dp_status_event );
 
