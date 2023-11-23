@@ -111,13 +111,57 @@ pub struct Spinner {
 impl Spinner {
 
   pub async fn spin(self) -> CreateResult<()> {
+    let dds_status_listener = self.ros_context.domain_participant().status_listener();
+    let dds_status_stream = dds_status_listener.as_async_status_stream();
+    pin_mut!(dds_status_stream);
+
+    // let ros_discovery_topic = self.ros_context.ros_discovery_topic();
+    // let ros_discovery_reader = self.ros_context
+    //   .create_subscription::<ParticipantEntitiesInfo>(&ros_discovery_topic, None)?;
+    // let ros_discovery_stream = ros_discovery_reader.async_stream();
+    // pin_mut!(ros_discovery_stream);
 
     loop {
       futures::select! {
         _ = self.stop_spin_receiver.recv().fuse() => {
           break;
         }
+        dp_status_event = dds_status_stream.select_next_some() => {
+          println!("{:?}", dp_status_event );
 
+          // update remote reader/writer databases
+          match dp_status_event {
+            DomainParticipantStatusEvent::RemoteReaderMatched { local_writer, remote_reader } => {
+              self.writers_to_remote_readers.lock().unwrap()
+                .entry(local_writer)
+                .and_modify(|s| {s.insert(remote_reader);} )
+                .or_insert(BTreeSet::from([remote_reader]));
+            }
+            DomainParticipantStatusEvent::RemoteWriterMatched { local_reader, remote_writer } => {
+              self.readers_to_remote_writers.lock().unwrap()
+                .entry(local_reader)
+                .and_modify(|s| {s.insert(remote_writer);} )
+                .or_insert(BTreeSet::from([remote_writer]));
+            }
+            DomainParticipantStatusEvent::ReaderLost {guid, ..} => {
+              for ( _local, readers)
+              in self.writers_to_remote_readers.lock().unwrap().iter_mut() {
+                readers.remove(&guid);
+              }
+            }
+            DomainParticipantStatusEvent::WriterLost {guid, ..} => {
+              for ( _local, writers)
+              in self.readers_to_remote_writers.lock().unwrap().iter_mut() {
+                writers.remove(&guid);
+              }
+            }
+
+            _ => {}
+          }
+
+          // also notify any status listeneners
+          self.send_status_event( &NodeEvent::DDS(dp_status_event) );
+        }
       }
     }
     info!("Spinner exiting .spin()");

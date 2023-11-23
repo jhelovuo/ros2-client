@@ -63,8 +63,8 @@ fn main() {
     )
     .unwrap();
 
-  let spinner = node.spinner();
-  smol::spawn(spinner.spin()).detach();
+  //let spinner = node.spinner();
+  smol::spawn(node.spinner().spin()).detach();
 
   debug!(">>> ros2_service client created");
 
