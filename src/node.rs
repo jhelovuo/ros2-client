@@ -9,7 +9,7 @@ use async_channel::Receiver;
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
-  dds::{CreateError, CreateResult},
+  dds::{statusevents::DomainParticipantStatusEvent, CreateError, CreateResult},
   *,
 };
 
@@ -246,7 +246,7 @@ impl Node {
 
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     let dds_status_listener = self.ros_context.domain_participant().status_listener();
-    let dds_status_stream = dds_status_listener.as_async_status_stream();
+    let dds_status_stream = dds_status_listener.as_async_stream();
     pin_mut!(ros_discovery_stream);
     pin_mut!(dds_status_stream);
 
