@@ -1,10 +1,10 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
   sync::{Mutex, Arc},
-  pin::pin,
+  //pin::pin,
 };
 
-use futures::{pin_mut, FutureExt, StreamExt, future, Future};
+use futures::{pin_mut, FutureExt, StreamExt, };
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -144,7 +144,7 @@ impl Spinner {
         }
 
         dp_status_event = dds_status_stream.select_next_some() => {
-          println!("{:?}", dp_status_event );
+          //println!("{:?}", dp_status_event );
 
           // update remote reader/writer databases
           match dp_status_event {
@@ -360,13 +360,6 @@ impl Node {
     self.ros_context.domain_id()
   }
 
-
-  /// Spin (run) the ROS2 and DDS Discovery mechanisms. Use an async task to
-  /// call this function. The function will normally not return until the Node
-  /// is dropped.
-  pub async fn spin(&self) -> CreateResult<()> {
-    Ok(())
-  }
 
   /// Get an async Receiver for discovery events.
   ///

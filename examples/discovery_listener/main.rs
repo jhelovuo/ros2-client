@@ -1,10 +1,9 @@
-use futures::{join, StreamExt};
-use log::error;
+use futures::StreamExt;
 use ros2_client::{Context, NodeOptions};
 
 pub fn main() {
   let context = Context::new().unwrap();
-  let node = context
+  let mut node = context
     .new_node(
       "discovery_listener",
       "/rustdds",
@@ -16,12 +15,7 @@ pub fn main() {
     println!("{:?}", event);
   });
 
-  smol::block_on(async {
-    join!(
-      // spin worker task
-      async { node.spin().await.unwrap_or_else(|e| error!("{e:?}")) },
-      // subsribe and print discovery events produced by spinner
-      status_event_stream
-    )
-  });
+  smol::spawn(node.spinner().spin()).detach();
+  
+  smol::block_on(status_event_stream);
 }

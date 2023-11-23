@@ -125,7 +125,7 @@ fn main() {
   // });
 
   // run it!
-  smol::block_on(smol::future::or(main_loop, node.spin().map(|_| ())));
+  smol::block_on(main_loop);
 }
 
 fn create_qos() -> QosPolicies {
