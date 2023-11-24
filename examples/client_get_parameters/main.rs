@@ -3,7 +3,7 @@ use std::env;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
   interfaces::{GetParametersRequest, GetParametersResponse},
-  Context, Node, NodeOptions, AService, ServiceMapping, ServiceTypeName,
+  AService, Context, Node, NodeOptions, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
 
@@ -26,7 +26,7 @@ fn main() {
     .create_client::<AService<GetParametersRequest, GetParametersResponse>>(
       ServiceMapping::Enhanced,
       &args[1],
-      &ServiceTypeName::new("rcl_interfaces","GetParameters"),
+      &ServiceTypeName::new("rcl_interfaces", "GetParameters"),
       service_qos.clone(),
       service_qos,
     )

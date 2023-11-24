@@ -1,9 +1,8 @@
-
 //! This module defines types to represent ROS 2 names for
 //! * Message types, e.g. `std_msgs/String`
 //! * Service types, e.g. `turtlesim/Spawn`
 //! * action types, e.g. `turtlesim/RotateAbsolute`
-//! * 
+//! *
 
 // TODO:
 // Conform fully to https://design.ros2.org/articles/topic_and_service_names.html
@@ -43,16 +42,15 @@ impl MessageTypeName {
 
   /// Convert to type name used over DDS
   pub fn dds_msg_type(&self) -> String {
-    slash_to_colons(self.ros2_package_name.clone() + "/" + &self.prefix + "/dds_/" + &self.ros2_type_name + "_")
+    slash_to_colons(
+      self.ros2_package_name.clone() + "/" + &self.prefix + "/dds_/" + &self.ros2_type_name + "_",
+    )
   }
-
-
 }
 
 fn slash_to_colons(s: String) -> String {
   s.replace('/', "::")
 }
-
 
 pub struct ServiceTypeName {
   prefix: String,
@@ -84,13 +82,23 @@ impl ServiceTypeName {
 
   pub(crate) fn dds_request_type(&self) -> String {
     slash_to_colons(
-      self.package_name().to_owned() + "/" +&self.prefix+ "/dds_/" + &self.type_name() + "_Request_",
+      self.package_name().to_owned()
+        + "/"
+        + &self.prefix
+        + "/dds_/"
+        + self.type_name()
+        + "_Request_",
     )
   }
 
   pub(crate) fn dds_response_type(&self) -> String {
     slash_to_colons(
-      self.package_name().to_owned() + "/" + &self.prefix + "/dds_/" + &self.type_name() + "_Response_",
+      self.package_name().to_owned()
+        + "/"
+        + &self.prefix
+        + "/dds_/"
+        + self.type_name()
+        + "_Response_",
     )
   }
 }
@@ -99,7 +107,7 @@ pub struct ActionTypeName(MessageTypeName);
 
 impl ActionTypeName {
   pub fn new(package_name: &str, type_name: &str) -> Self {
-    ActionTypeName( MessageTypeName::new(package_name, type_name) )
+    ActionTypeName(MessageTypeName::new(package_name, type_name))
   }
 
   pub fn package_name(&self) -> &str {
@@ -111,20 +119,23 @@ impl ActionTypeName {
   }
 
   pub(crate) fn dds_action_topic(&self, topic: &str) -> MessageTypeName {
-    MessageTypeName::new_prefix( self.package_name(), &(self.type_name().to_owned() + topic), "action".to_owned() )
-    //slash_to_colons(self.package_name().to_owned() + "/action/dds_/" + &self.type_name())
+    MessageTypeName::new_prefix(
+      self.package_name(),
+      &(self.type_name().to_owned() + topic),
+      "action".to_owned(),
+    )
+    //slash_to_colons(self.package_name().to_owned() + "/action/dds_/" +
+    // &self.type_name())
   }
 
   pub(crate) fn dds_action_service(&self, srv: &str) -> ServiceTypeName {
-    ServiceTypeName::new_prefix( self.package_name(), &(self.type_name().to_owned() + srv), "action".to_owned() )
+    ServiceTypeName::new_prefix(
+      self.package_name(),
+      &(self.type_name().to_owned() + srv),
+      "action".to_owned(),
+    )
   }
-
 }
 
-
 // -------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------
-
-
-
-

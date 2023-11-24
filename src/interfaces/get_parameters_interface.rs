@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{parameters, Message, };
+use crate::{parameters, Message};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetParametersRequest {

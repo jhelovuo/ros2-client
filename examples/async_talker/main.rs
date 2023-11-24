@@ -1,18 +1,14 @@
-use ros2_client::{Context, NodeOptions, DEFAULT_PUBLISHER_QOS, MessageTypeName};
+use ros2_client::{Context, MessageTypeName, NodeOptions, DEFAULT_PUBLISHER_QOS};
 use async_io::Timer;
 
 fn main() {
   // Here is a fixed path, so this example must be started from
   // RustDDS main directory
   log4rs::init_file("examples/async_talker/log4rs.yaml", Default::default()).unwrap();
-   
+
   let context = Context::new().unwrap();
   let mut node = context
-    .new_node(
-      "rustdds_talker",
-      "/rustdds",
-      NodeOptions::default(),
-    )
+    .new_node("rustdds_talker", "/rustdds", NodeOptions::default())
     .unwrap();
 
   let chatter_topic = node

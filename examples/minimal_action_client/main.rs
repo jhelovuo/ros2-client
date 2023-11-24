@@ -5,7 +5,7 @@ use log::{debug, error, info, warn};
 use futures::{pin_mut, FutureExt as StdFutureExt, StreamExt};
 use smol::future::FutureExt;
 use ros2_client::{
-  action, action_msgs, Context, Node, NodeOptions, ServiceMapping, ActionTypeName,
+  action, action_msgs, ActionTypeName, Context, Node, NodeOptions, ServiceMapping,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 

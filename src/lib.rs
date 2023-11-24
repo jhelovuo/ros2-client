@@ -82,9 +82,9 @@ pub(crate) mod node;
 #[doc(inline)]
 pub use context::*;
 #[doc(inline)]
-pub use message::{Message};
+pub use message::Message;
 #[doc(inline)]
-pub use names::{MessageTypeName, ServiceTypeName, ActionTypeName};
+pub use names::{ActionTypeName, MessageTypeName, ServiceTypeName};
 #[doc(inline)]
 pub use message_info::MessageInfo;
 #[doc(inline)]

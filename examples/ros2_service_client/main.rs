@@ -42,7 +42,7 @@ fn main() {
     .create_client::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMapping::Enhanced,
       "/add_two_ints",
-      &ServiceTypeName::new("example_interfaces","AddTwoInts"),
+      &ServiceTypeName::new("example_interfaces", "AddTwoInts"),
       service_qos.clone(),
       service_qos,
     )

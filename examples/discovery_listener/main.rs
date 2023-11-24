@@ -16,6 +16,6 @@ pub fn main() {
   });
 
   smol::spawn(node.spinner().spin()).detach();
-  
+
   smol::block_on(status_event_stream);
 }

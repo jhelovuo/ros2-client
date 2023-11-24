@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Message,};
-
+use crate::Message;
 
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, Deserialize)]

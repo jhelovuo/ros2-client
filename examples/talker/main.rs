@@ -1,7 +1,7 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::timer;
-use ros2_client::{Context, Node, NodeOptions, MessageTypeName};
+use ros2_client::{Context, MessageTypeName, Node, NodeOptions};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -27,7 +27,7 @@ fn main() {
   let chatter_topic = node
     .create_topic(
       "/topic",
-      MessageTypeName::new("std_msgs","String"),
+      MessageTypeName::new("std_msgs", "String"),
       &topic_qos,
     )
     .unwrap();

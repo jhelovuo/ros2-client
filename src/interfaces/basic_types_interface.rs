@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::Message;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BasicTypesRequest {
   pub bool_value: bool,

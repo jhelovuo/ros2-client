@@ -17,4 +17,3 @@ impl Message for u32 {}
 impl Message for u64 {}
 
 impl<T: Message> Message for Vec<T> {}
-

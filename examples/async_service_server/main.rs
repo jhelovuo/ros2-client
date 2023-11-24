@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
-use futures::{StreamExt};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping, ServiceTypeName};
 use rustdds::{
@@ -42,7 +42,7 @@ fn main() {
     .create_server::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMapping::Enhanced,
       "/add_two_ints",
-      &ServiceTypeName::new("example_interfaces","AddTwoInts"),
+      &ServiceTypeName::new("example_interfaces", "AddTwoInts"),
       service_qos.clone(),
       service_qos,
     )
@@ -68,7 +68,6 @@ fn main() {
   smol::block_on(server_stream.count());
   // .count() here just converts Stream to ordinary Future.
   // It would return the count of requestes processed, if the stream would end.
-
 } // main
 
 fn create_qos() -> QosPolicies {
