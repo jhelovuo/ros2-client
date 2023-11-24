@@ -1,19 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{parameters, Message, Service};
-
-pub struct GetParametersService {}
-
-impl Service for GetParametersService {
-  type Request = GetParametersRequest;
-  type Response = GetParametersResponse;
-  fn request_type_name(&self) -> &str {
-    "rcl_interfaces::srv::dds_::GetParameters_Request_"
-  }
-  fn response_type_name(&self) -> &str {
-    "rcl_interfaces::srv::dds_::GetParameters_Response_"
-  }
-}
+use crate::{parameters, Message, };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetParametersRequest {

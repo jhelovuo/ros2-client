@@ -7,6 +7,7 @@ use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
   service::CallServiceError, AService, Context, Message, Node, NodeOptions, ServiceMapping,
+  ServiceTypeName,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
@@ -56,8 +57,7 @@ fn main() {
     .create_client::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMapping::Enhanced,
       "/add_two_ints",
-      "example_interfaces::srv::dds_::AddTwoInts_Request_", // req type name
-      "example_interfaces::srv::dds_::AddTwoInts_Response_", // resp type name
+      &ServiceTypeName::new("example_interfaces","AddTwoInts"),
       service_qos.clone(),
       service_qos,
     )

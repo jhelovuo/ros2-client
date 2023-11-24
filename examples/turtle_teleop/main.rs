@@ -158,7 +158,7 @@ fn ros2_loop(
   let turtle_cmd_vel_topic = ros_node
     .create_topic(
       "/turtle1/cmd_vel",
-      String::from("geometry_msgs::msg::dds_::Twist_"),
+      MessageTypeName::new("geometry_msgs", "Twist"),
       &topic_qos,
     )
     .unwrap();
@@ -178,7 +178,7 @@ fn ros2_loop(
   let turtle_pose_topic = ros_node
     .create_topic(
       "/turtle1/pose",
-      String::from("turtlesim::msg::dds_::Pose_"),
+      MessageTypeName::new("turtlesim", "Pose"),
       &topic_qos,
     )
     .unwrap();
@@ -190,7 +190,7 @@ fn ros2_loop(
   let turtle2_cmd_vel_topic = ros_node
     .create_topic(
       "/turtle2/cmd_vel",
-      String::from("geometry_msgs::msg::dds_::Twist_"),
+      MessageTypeName::new("geometry_msgs", "Twist"),
       &topic_qos,
     )
     .unwrap();
@@ -236,13 +236,12 @@ fn ros2_loop(
   //
   // * create_client basic version is untested.
   // Service responses do not fully work yet.
-  let empty_srv_name = MessageTypeName::new("std_srvs", "Empty");
+  let empty_srv_type = ServiceTypeName::new("std_srvs", "Empty");
   let reset_client = ros_node
     .create_client::<AService<EmptyMessage, EmptyMessage>>(
       ServiceMapping::Enhanced,
       "/reset",
-      &empty_srv_name.dds_request_type(),
-      &empty_srv_name.dds_response_type(),
+      &empty_srv_type,
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -251,13 +250,12 @@ fn ros2_loop(
   // another client
 
   // from https://docs.ros2.org/foxy/api/turtlesim/srv/SetPen.html
-  let set_pen_srv_name = MessageTypeName::new("turtlesim", "SetPen");
+  let set_pen_srv_type = ServiceTypeName::new("turtlesim", "SetPen");
   let set_pen_client = ros_node
     .create_client::<AService<PenRequest, ()>>(
       ServiceMapping::Enhanced,
       "turtle1/set_pen",
-      &set_pen_srv_name.dds_request_type(),
-      &set_pen_srv_name.dds_response_type(),
+      &set_pen_srv_type,
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -284,13 +282,12 @@ fn ros2_loop(
 
   type SpawnService = AService<SpawnRequest, SpawnResponse>;
 
-  let spawn_srv_name = MessageTypeName::new("turtlesim", "Spawn");
+  let spawn_srv_type = ServiceTypeName::new("turtlesim", "Spawn");
   let spawn_client = ros_node
     .create_client::<SpawnService>(
       ServiceMapping::Enhanced,
       "spawn",
-      &spawn_srv_name.dds_request_type(),
-      &spawn_srv_name.dds_response_type(),
+      &spawn_srv_type,
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -307,13 +304,12 @@ fn ros2_loop(
 
   type KillService = AService<KillRequest, EmptyMessage>;
 
-  let kill_srv_name = MessageTypeName::new("turtlesim", "Kill");
+  let kill_srv_type = ServiceTypeName::new("turtlesim", "Kill");
   let kill_client = ros_node
     .create_client::<KillService>(
       ServiceMapping::Enhanced,
       "kill",
-      &kill_srv_name.dds_request_type(),
-      &kill_srv_name.dds_response_type(),
+      &kill_srv_type,
       service_qos.clone(),
       service_qos.clone(),
     )
@@ -363,7 +359,7 @@ fn ros2_loop(
     .create_action_client::<RotateAbsoluteAction>(
       ServiceMapping::Enhanced,
       "turtle1/rotate_absolute",
-      &MessageTypeName::new("turtlesim", "RotateAbsolute"),
+      &ActionTypeName::new("turtlesim", "RotateAbsolute"),
       rotate_action_qos,
     )
     .unwrap();

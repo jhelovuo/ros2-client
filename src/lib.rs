@@ -68,6 +68,7 @@ mod gid;
 pub mod log;
 pub mod message;
 pub mod message_info;
+pub mod names;
 pub mod parameters;
 #[doc(hidden)]
 pub mod pubsub;
@@ -81,7 +82,9 @@ pub(crate) mod node;
 #[doc(inline)]
 pub use context::*;
 #[doc(inline)]
-pub use message::{Message, MessageTypeName};
+pub use message::{Message};
+#[doc(inline)]
+pub use names::{MessageTypeName, ServiceTypeName, ActionTypeName};
 #[doc(inline)]
 pub use message_info::MessageInfo;
 #[doc(inline)]

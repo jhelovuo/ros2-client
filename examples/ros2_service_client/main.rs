@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde::{Deserialize, Serialize};
-use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping};
+use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping, ServiceTypeName};
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 const RESPONSE_TOKEN: Token = Token(7); // Just an arbitrary value
@@ -42,8 +42,7 @@ fn main() {
     .create_client::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMapping::Enhanced,
       "/add_two_ints",
-      "example_interfaces::srv::dds_::AddTwoInts_Request_", // req type name
-      "example_interfaces::srv::dds_::AddTwoInts_Response_", // resp type name
+      &ServiceTypeName::new("example_interfaces","AddTwoInts"),
       service_qos.clone(),
       service_qos,
     )

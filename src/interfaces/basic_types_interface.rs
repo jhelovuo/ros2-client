@@ -1,19 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Message, Service};
+use crate::Message;
 
-pub struct BasicTypesService {}
-
-impl Service for BasicTypesService {
-  type Request = BasicTypesRequest;
-  type Response = BasicTypesResponse;
-  fn request_type_name(&self) -> &str {
-    "test_msgs::srv::dds_::BasicTypes_Request_"
-  }
-  fn response_type_name(&self) -> &str {
-    "test_msgs::srv::dds_::BasicTypes_Response_"
-  }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BasicTypesRequest {

@@ -2,7 +2,7 @@
 use core::cmp::min;
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
-use ros2_client::{Context, Node, NodeOptions};
+use ros2_client::{Context, Node, NodeOptions, MessageTypeName};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -23,7 +23,7 @@ fn main() {
   let chatter_topic = node
     .create_topic(
       "/topic",
-      String::from("std_msgs::msg::dds_::String_"),
+      MessageTypeName::new("std_msgs","String"),
       &topic_qos,
     )
     .unwrap();

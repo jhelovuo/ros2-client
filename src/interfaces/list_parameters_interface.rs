@@ -1,19 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Message, Service};
+use crate::{Message,};
 
-pub struct ListParametersService {}
-
-impl Service for ListParametersService {
-  type Request = ListParametersRequest;
-  type Response = ListParametersResponse;
-  fn request_type_name(&self) -> &str {
-    "rcl_interfaces::srv::dds_::ListParameters_Request_"
-  }
-  fn response_type_name(&self) -> &str {
-    "rcl_interfaces::srv::dds_::ListParameters_Response_"
-  }
-}
 
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, Deserialize)]

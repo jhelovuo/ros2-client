@@ -2,8 +2,8 @@ use std::env;
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
-  interfaces::{ListParametersRequest, ListParametersService},
-  Context, Node, NodeOptions, Service, ServiceMapping,
+  interfaces::{ListParametersRequest, ListParametersResponse,},
+  Context, Node, NodeOptions, AService, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
 
@@ -22,14 +22,11 @@ fn main() {
 
   println!(">>> ros2_service node started");
 
-  let service_dummy = ListParametersService {};
-
   let client = node
-    .create_client::<ListParametersService>(
+    .create_client::<AService<ListParametersRequest, ListParametersResponse>>(
       ServiceMapping::Enhanced,
       &args[1],
-      service_dummy.request_type_name(),
-      service_dummy.response_type_name(),
+      &ServiceTypeName::new("rcl_interfaces","ListParameters"),
       service_qos.clone(),
       service_qos,
     )
