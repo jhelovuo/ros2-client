@@ -97,6 +97,10 @@ pub enum NodeEvent {
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
+// Spinner implements Node's background event loop.
+//
+// At the moment there are only Discovery (DDS and ROS 2 Graph) event processing,
+// but this would be extended to handle Parameters and other possible background tasks also.
 pub struct Spinner {
   ros_context: Context,
   stop_spin_receiver: async_channel::Receiver<()>,
@@ -108,6 +112,7 @@ pub struct Spinner {
   
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 }
+
 impl Spinner {
 
   pub async fn spin(self) -> CreateResult<()> {
@@ -294,7 +299,14 @@ impl Node {
   }
 
   /// Create a Spinner object to execute Node backround tasks.
+  ///
+  /// An async task should then be created to run the `.spin()` function of `Spinner`.
+  ///
+  /// E.g. `executor.spawn(node.spinner().spin())`
+  ///
+  /// The `.spin()` task runs until `Node` is dropped.
   pub fn spinner(&mut self) -> Spinner {
+    if self.stop_spin_sender.is_some() { panic!("Attempted to crate a second spinner."); }
     let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
     self.stop_spin_sender = Some(stop_spin_sender);
     

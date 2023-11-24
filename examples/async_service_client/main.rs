@@ -63,7 +63,11 @@ fn main() {
     )
     .unwrap();
 
-  //let spinner = node.spinner();
+  // Running node.spinner().spin() is similar to calling .spin() in the sense that 
+  // it runs background processes, such as graph event processing.
+  //
+  // However, in ros2-client Node does not call application back, but instead the
+  // ROS application is implemented using async code.
   smol::spawn(node.spinner().spin()).detach();
 
   debug!(">>> ros2_service client created");
