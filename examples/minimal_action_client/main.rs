@@ -5,7 +5,7 @@ use log::{debug, error, info, warn};
 use futures::{pin_mut, FutureExt as StdFutureExt, StreamExt};
 use smol::future::FutureExt;
 use ros2_client::{
-  action, action_msgs, ActionTypeName, Context, Node, NodeOptions, ServiceMapping,
+  action, action_msgs, ActionTypeName, Context, NodeOptions, ServiceMapping,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
@@ -56,7 +56,19 @@ fn main() {
   .expect("Error setting Ctrl-C handler");
   println!("Press Ctrl-C to quit.");
 
-  let mut node = create_node();
+  // ROS Context and Node
+  let context = Context::new().unwrap();
+
+  let mut node = context
+    .new_node(
+      "fibonacci_client",
+      "/rustdds",
+      NodeOptions::default(),
+    )
+    .unwrap();
+
+  smol::spawn(node.spinner().spin()).detach();
+
   let service_qos = create_qos();
 
   let fibonacci_action_qos = action::ActionClientQosPolicies {
@@ -175,6 +187,13 @@ fn main() {
     debug!("main loop done");
   };
 
+
+  // Debugging output:
+  //
+  // smol::spawn( node.status_receiver().for_each(|event| async move {
+  //   println!("{:?}", event);
+  // })).detach();
+
   // run it!
   smol::block_on(main_loop);
 }
@@ -189,15 +208,4 @@ fn create_qos() -> QosPolicies {
       .build()
   };
   service_qos
-}
-
-fn create_node() -> Node {
-  let context = Context::new().unwrap();
-  context
-    .new_node(
-      "fibonacci_client",
-      "/rustdds",
-      NodeOptions::new().enable_rosout(true),
-    )
-    .unwrap()
 }
