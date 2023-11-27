@@ -2,7 +2,7 @@
 use core::cmp::min;
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
-use ros2_client::{Context, MessageTypeName, Node, NodeOptions};
+use ros2_client::{Context, MessageTypeName, Node, NodeName, NodeOptions};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -88,8 +88,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_listener",
-      "/rustdds",
+      NodeName::new("/rustdds", "rustdds_listener").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

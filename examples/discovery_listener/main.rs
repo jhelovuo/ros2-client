@@ -1,13 +1,12 @@
 use futures::StreamExt;
-use ros2_client::{Context, NodeOptions};
+use ros2_client::{Context, NodeName, NodeOptions};
 
 pub fn main() {
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
-      "discovery_listener",
-      "/rustdds",
-      NodeOptions::new().enable_rosout(true),
+      NodeName::new("/rustdds", "discovery_listener").unwrap(),
+      NodeOptions::default(),
     )
     .unwrap();
 

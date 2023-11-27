@@ -9,8 +9,7 @@
 //!   let context = Context::new().unwrap();
 //!   let mut node = context
 //!     .new_node(
-//!       "rustdds_listener",
-//!       "/rustdds",
+//!       NodeName::new("/rustdds", "rustdds_listener").unwrap(),
 //!       NodeOptions::new().enable_rosout(true),
 //!     )
 //!     .unwrap();
@@ -18,7 +17,7 @@
 //!   let chatter_topic = node
 //!     .create_topic(
 //!       "/topic",
-//!       String::from("std_msgs::msg::dds_::String_"),
+//!       MessageTypeName::new("std_msgs", "String"),
 //!       &ros2_client::DEFAULT_SUBSCRIPTION_QOS,
 //!     )
 //!     .unwrap();
@@ -84,7 +83,7 @@ pub use context::*;
 #[doc(inline)]
 pub use message::Message;
 #[doc(inline)]
-pub use names::{ActionTypeName, MessageTypeName, ServiceTypeName};
+pub use names::{ActionTypeName, MessageTypeName, Name, NodeName, ServiceTypeName};
 #[doc(inline)]
 pub use message_info::MessageInfo;
 #[doc(inline)]
@@ -106,4 +105,6 @@ pub mod ros2 {
 
   pub use crate::log::LogLevel;
   // TODO: What to do about SecurityError (exists based on feature "security")
+  pub use crate::names::Name; // import Name as ros2::Name if there is clash
+                              // otherwise
 }

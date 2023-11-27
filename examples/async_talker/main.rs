@@ -1,4 +1,4 @@
-use ros2_client::{Context, MessageTypeName, NodeOptions, DEFAULT_PUBLISHER_QOS};
+use ros2_client::{Context, MessageTypeName, NodeName, NodeOptions, DEFAULT_PUBLISHER_QOS};
 use async_io::Timer;
 
 fn main() {
@@ -8,7 +8,10 @@ fn main() {
 
   let context = Context::new().unwrap();
   let mut node = context
-    .new_node("rustdds_talker", "/rustdds", NodeOptions::default())
+    .new_node(
+      NodeName::new("/rustdds", "talker").unwrap(),
+      NodeOptions::default(),
+    )
     .unwrap();
 
   let chatter_topic = node

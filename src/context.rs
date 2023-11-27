@@ -21,6 +21,7 @@ use crate::{
   builtin_topics,
   entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
+  names::NodeName,
   node::{Node, NodeOptions},
   pubsub::{Publisher, Subscription},
 };
@@ -157,8 +158,8 @@ impl Context {
   }
 
   /// Create a new ROS2 [`Node`]
-  pub fn new_node(&self, name: &str, namespace: &str, options: NodeOptions) -> CreateResult<Node> {
-    Node::new(name, namespace, options, self.clone())
+  pub fn new_node(&self, node_name: NodeName, options: NodeOptions) -> CreateResult<Node> {
+    Node::new(node_name, options, self.clone())
   }
 
   /// Query which DDS Domain Id we are using.
@@ -370,7 +371,7 @@ impl ContextInner {
 
     self
       .local_nodes
-      .insert(node_info.get_full_name(), node_info);
+      .insert(node_info.fully_qualified_name(), node_info);
     self.broadcast_node_infos();
   }
 

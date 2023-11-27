@@ -3,7 +3,7 @@ use std::env;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
   interfaces::{GetParametersRequest, GetParametersResponse},
-  AService, Context, Node, NodeOptions, ServiceMapping, ServiceTypeName,
+  AService, Context, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};
 
@@ -95,8 +95,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_client",
-      "/rustdds",
+      NodeName::new("/rustdds", "rustdds_client").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

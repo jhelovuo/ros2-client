@@ -1,7 +1,9 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde::{Deserialize, Serialize};
-use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping, ServiceTypeName};
+use ros2_client::{
+  AService, Context, Message, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
+};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -115,8 +117,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_server",
-      "/rustdds",
+      NodeName::new("/rustdds", "rustdds_server").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

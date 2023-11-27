@@ -6,8 +6,8 @@ use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt};
 use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
-  service::CallServiceError, AService, Context, Message, Node, NodeOptions, ServiceMapping,
-  ServiceTypeName,
+  service::CallServiceError, AService, Context, Message, Node, NodeName, NodeOptions,
+  ServiceMapping, ServiceTypeName,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
@@ -148,8 +148,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_client",
-      "/rustdds",
+      NodeName::new("/rustdds", "rustdds_client").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

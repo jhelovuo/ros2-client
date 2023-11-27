@@ -5,7 +5,7 @@ use log::{debug, error, info, warn};
 use futures::{pin_mut, FutureExt as StdFutureExt, StreamExt};
 use smol::future::FutureExt;
 use ros2_client::{
-  action, action_msgs, ActionTypeName, Context, NodeOptions, ServiceMapping,
+  action, action_msgs, ActionTypeName, Context, NodeName, NodeOptions, ServiceMapping,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
@@ -61,8 +61,7 @@ fn main() {
 
   let mut node = context
     .new_node(
-      "fibonacci_client",
-      "/rustdds",
+      NodeName::new("/rustdds", "fibonacci_client").unwrap(),
       NodeOptions::default(),
     )
     .unwrap();
@@ -186,7 +185,6 @@ fn main() {
     } // while
     debug!("main loop done");
   };
-
 
   // Debugging output:
   //

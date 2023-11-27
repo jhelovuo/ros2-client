@@ -1,7 +1,7 @@
 use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio_extras::timer;
-use ros2_client::{Context, MessageTypeName, Node, NodeOptions};
+use ros2_client::{Context, MessageTypeName, Node, NodeName, NodeOptions};
 use rustdds::{
   policy::{self, Deadline, Lifespan},
   Duration, QosPolicies, QosPolicyBuilder,
@@ -97,8 +97,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_talker",
-      "/rustdds",
+      NodeName::new("/rustdds", "talker").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

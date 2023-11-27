@@ -1,10 +1,10 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::{Mutex, Arc},
+  sync::{Arc, Mutex},
   //pin::pin,
 };
 
-use futures::{pin_mut, FutureExt, StreamExt, };
+use futures::{pin_mut, FutureExt, StreamExt};
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -99,8 +99,9 @@ pub enum NodeEvent {
 // ----------------------------------------------------------------------------------------------------
 // Spinner implements Node's background event loop.
 //
-// At the moment there are only Discovery (DDS and ROS 2 Graph) event processing,
-// but this would be extended to handle Parameters and other possible background tasks also.
+// At the moment there are only Discovery (DDS and ROS 2 Graph) event
+// processing, but this would be extended to handle Parameters and other
+// possible background tasks also.
 pub struct Spinner {
   ros_context: Context,
   stop_spin_receiver: async_channel::Receiver<()>,
@@ -109,20 +110,20 @@ pub struct Spinner {
   writers_to_remote_readers: Arc<Mutex<BTreeMap<GUID, BTreeSet<GUID>>>>,
   // Keep track of ros_discovery_info
   external_nodes: Arc<Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>>,
-  
+
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 }
 
 impl Spinner {
-
   pub async fn spin(self) -> CreateResult<()> {
     let dds_status_listener = self.ros_context.domain_participant().status_listener();
     let dds_status_stream = dds_status_listener.as_async_status_stream();
     pin_mut!(dds_status_stream);
 
     let ros_discovery_topic = self.ros_context.ros_discovery_topic();
-    let ros_discovery_reader = self.ros_context
-       .create_subscription::<ParticipantEntitiesInfo>(&ros_discovery_topic, None)?;
+    let ros_discovery_reader = self
+      .ros_context
+      .create_subscription::<ParticipantEntitiesInfo>(&ros_discovery_topic, None)?;
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     pin_mut!(ros_discovery_stream);
 
@@ -209,7 +210,6 @@ impl Spinner {
       sender_array.swap_remove(*c);
     }
   }
-
 } // impl Spinner
 
 // ----------------------------------------------------------------------------------------------------
@@ -223,9 +223,7 @@ impl Spinner {
 // TODO: We should notify ROS discovery when readers or writers are removed, but
 // now we do not do that.
 pub struct Node {
-  // node info
-  name: String,
-  namespace: String,
+  node_name: NodeName,
   options: NodeOptions,
 
   pub(crate) ros_context: Context,
@@ -256,8 +254,7 @@ pub struct Node {
 
 impl Node {
   pub(crate) fn new(
-    name: &str,
-    namespace: &str,
+    node_name: NodeName,
     options: NodeOptions,
     ros_context: Context,
   ) -> CreateResult<Node> {
@@ -281,8 +278,7 @@ impl Node {
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
 
     Ok(Node {
-      name: String::from(name),
-      namespace: String::from(namespace),
+      node_name,
       options,
       ros_context,
       readers: BTreeSet::new(),
@@ -300,16 +296,19 @@ impl Node {
 
   /// Create a Spinner object to execute Node backround tasks.
   ///
-  /// An async task should then be created to run the `.spin()` function of `Spinner`.
+  /// An async task should then be created to run the `.spin()` function of
+  /// `Spinner`.
   ///
   /// E.g. `executor.spawn(node.spinner().spin())`
   ///
   /// The `.spin()` task runs until `Node` is dropped.
   pub fn spinner(&mut self) -> Spinner {
-    if self.stop_spin_sender.is_some() { panic!("Attempted to crate a second spinner."); }
+    if self.stop_spin_sender.is_some() {
+      panic!("Attempted to crate a second spinner.");
+    }
     let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
     self.stop_spin_sender = Some(stop_spin_sender);
-    
+
     Spinner {
       ros_context: self.ros_context.clone(),
       stop_spin_receiver,
@@ -322,7 +321,7 @@ impl Node {
 
   // Generates ROS2 node info from added readers and writers.
   fn generate_node_info(&self) -> NodeEntitiesInfo {
-    let mut node_info = NodeEntitiesInfo::new(self.name.clone(), self.namespace.clone());
+    let mut node_info = NodeEntitiesInfo::new(self.node_name.clone());
 
     node_info.add_writer(Gid::from(self.parameter_events_writer.guid()));
     if let Some(row) = &self.rosout_writer {
@@ -350,18 +349,16 @@ impl Node {
     self.ros_context.update_node(self.generate_node_info());
   }
 
-  pub fn name(&self) -> &str {
-    &self.name
+  pub fn base_name(&self) -> &str {
+    self.node_name.base_name()
   }
 
   pub fn namespace(&self) -> &str {
-    &self.namespace
+    self.node_name.namespace()
   }
 
   pub fn fully_qualified_name(&self) -> String {
-    let mut nn = self.namespace.clone();
-    nn.push_str(&self.name);
-    nn
+    self.node_name.fully_qualified_name()
   }
 
   pub fn options(&self) -> &NodeOptions {
@@ -371,7 +368,6 @@ impl Node {
   pub fn domain_id(&self) -> u16 {
     self.ros_context.domain_id()
   }
-
 
   /// Get an async Receiver for discovery events.
   ///
@@ -385,7 +381,6 @@ impl Node {
       .push(status_event_sender);
     status_event_receiver
   }
-
 
   // reader waits for at least one writer to be present
   pub(crate) async fn wait_for_writer(&self, reader: GUID) {
@@ -540,7 +535,7 @@ impl Node {
     type_name: MessageTypeName,
     qos: &QosPolicies,
   ) -> CreateResult<Topic> {
-    let dds_name = Self::check_name_and_add_prefix("rt/", topic_name )?;
+    let dds_name = Self::check_name_and_add_prefix("rt/", topic_name)?;
     info!("Creating topic, DDS name: {}", dds_name);
     let topic = self.ros_context.domain_participant().create_topic(
       dds_name,
@@ -649,10 +644,8 @@ impl Node {
     // https://design.ros2.org/articles/topic_and_service_names.html
     // Where are the suffixes documented?
     // And why "Reply" and not "Response" ?
-    let rq_name =
-      Self::check_name_and_add_prefix("rq/", &(service_name.to_owned() + "Request"))?;
-    let rs_name =
-      Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() + "Reply"))?;
+    let rq_name = Self::check_name_and_add_prefix("rq/", &(service_name.to_owned() + "Request"))?;
+    let rs_name = Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() + "Reply"))?;
 
     let rq_topic = self.ros_context.domain_participant().create_topic(
       rq_name,
@@ -699,10 +692,8 @@ impl Node {
     S: Service + 'static,
     S::Request: Clone,
   {
-    let rq_name =
-      Self::check_name_and_add_prefix("rq/", &(service_name.to_owned() + "Request"))?;
-    let rs_name =
-      Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() + "Reply"))?;
+    let rq_name = Self::check_name_and_add_prefix("rq/", &(service_name.to_owned() + "Request"))?;
+    let rs_name = Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() + "Reply"))?;
 
     let rq_topic = self.ros_context.domain_participant().create_topic(
       rq_name,
@@ -880,7 +871,7 @@ impl Drop for Node {
         .try_send(())
         .unwrap_or_else(|e| error!("Cannot notify spin task to stop: {e:?}"));
     }
-      
+
     self
       .ros_context
       .remove_node(self.fully_qualified_name().as_str());
@@ -895,7 +886,7 @@ macro_rules! rosout {
         $node.rosout_raw(
             $crate::ros2::Timestamp::now(),
             $lvl,
-            $node.name(),
+            $node.base_name(),
             &std::format!($($arg)+), // msg
             std::file!(),
             "<unknown_func>", // is there a macro to get current function name? (Which may be undefined)

@@ -5,8 +5,7 @@ pub fn main() {
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
-      "rustdds_listener",
-      "/rustdds",
+      NodeName::new("/rustdds", "rustdds_listener").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap();

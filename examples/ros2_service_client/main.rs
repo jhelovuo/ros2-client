@@ -2,7 +2,9 @@ use std::time::{Duration, Instant};
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde::{Deserialize, Serialize};
-use ros2_client::{AService, Context, Message, Node, NodeOptions, ServiceMapping, ServiceTypeName};
+use ros2_client::{
+  AService, Context, Message, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
+};
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
 const RESPONSE_TOKEN: Token = Token(7); // Just an arbitrary value
@@ -114,8 +116,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "rustdds_client",
-      "/rustdds",
+      NodeName::new("/rustdds", "rustdds_client").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

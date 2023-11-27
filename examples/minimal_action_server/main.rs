@@ -5,7 +5,8 @@ use log::{debug, error, info, warn};
 use futures::{stream::StreamExt, FutureExt as StdFutureExt};
 use smol::future::FutureExt;
 use ros2_client::{
-  action, action::GoalEndStatus, ActionTypeName, Context, Node, NodeOptions, ServiceMapping,
+  action, action::GoalEndStatus, ActionTypeName, Context, Node, NodeName, NodeOptions,
+  ServiceMapping,
 };
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
 
@@ -184,8 +185,7 @@ fn create_node() -> Node {
   let context = Context::new().unwrap();
   context
     .new_node(
-      "minimal_action_server",
-      "/rustdds",
+      NodeName::new("/rustdds", "minimal_action_server").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap()

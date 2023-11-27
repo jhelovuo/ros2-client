@@ -1,6 +1,11 @@
+use std::convert::TryFrom;
+
 use serde::{Deserialize, Serialize};
 
-use crate::gid::Gid;
+use crate::{
+  gid::Gid,
+  names::{NameError, NodeName},
+};
 
 // For background, see
 // https://design.ros2.org/articles/Node_to_Participant_mapping.html
@@ -19,7 +24,6 @@ pub struct ParticipantEntitiesInfo {
   pub(crate) gid: Gid, // GUID of a DomainParticipant
   pub(crate) node_entities_info_seq: Vec<NodeEntitiesInfo>,
   // ^ ROS 2 Nodes implemented by the DomainParticipant.
-  // Field names are from .msg definition
 }
 
 impl ParticipantEntitiesInfo {
@@ -48,36 +52,33 @@ impl ParticipantEntitiesInfo {
 /// Consists of name and namespace definitions, and lists of
 /// Reader and Writer ids that belong to this Node.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "repr::NodeEntitiesInfo", into = "repr::NodeEntitiesInfo")]
 pub struct NodeEntitiesInfo {
-  node_namespace: String, // original .msg specifies .len() <= 256
-  node_name: String,      // original .msg specifies .len() <= 256
+  name: NodeName,
   reader_gid_seq: Vec<Gid>,
   writer_gid_seq: Vec<Gid>,
 }
 
 impl NodeEntitiesInfo {
-  pub fn new(name: String, namespace: String) -> NodeEntitiesInfo {
+  pub fn new(name: NodeName) -> NodeEntitiesInfo {
     NodeEntitiesInfo {
-      node_namespace: namespace,
-      node_name: name,
+      name,
       reader_gid_seq: Vec::new(),
       writer_gid_seq: Vec::new(),
     }
   }
 
   pub fn namespace(&self) -> &str {
-    &self.node_namespace
+    self.name.namespace()
   }
 
   pub fn name(&self) -> &str {
-    &self.node_name
+    self.name.base_name()
   }
 
   /// Full name of the node namespace + name eg. /some_node
-  pub fn get_full_name(&self) -> String {
-    let mut name = self.node_namespace.clone();
-    name.push_str(&self.node_name);
-    name
+  pub fn fully_qualified_name(&self) -> String {
+    self.name.fully_qualified_name()
   }
 
   pub fn add_writer(&mut self, gid: Gid) {
@@ -90,5 +91,44 @@ impl NodeEntitiesInfo {
     if !self.reader_gid_seq.contains(&gid) {
       self.reader_gid_seq.push(gid);
     }
+  }
+}
+
+impl TryFrom<repr::NodeEntitiesInfo> for NodeEntitiesInfo {
+  type Error = NameError;
+
+  fn try_from(r: repr::NodeEntitiesInfo) -> Result<NodeEntitiesInfo, NameError> {
+    let name = NodeName::new(&r.node_namespace, &r.node_name)?;
+    Ok(NodeEntitiesInfo {
+      name,
+      reader_gid_seq: r.reader_gid_seq,
+      writer_gid_seq: r.writer_gid_seq,
+    })
+  }
+}
+
+impl From<NodeEntitiesInfo> for repr::NodeEntitiesInfo {
+  fn from(n: NodeEntitiesInfo) -> repr::NodeEntitiesInfo {
+    repr::NodeEntitiesInfo {
+      node_namespace: n.name.namespace().to_owned(),
+      node_name: n.name.base_name().to_owned(),
+      reader_gid_seq: n.reader_gid_seq,
+      writer_gid_seq: n.writer_gid_seq,
+    }
+  }
+}
+
+pub(crate) mod repr {
+  use serde::{Deserialize, Serialize};
+
+  use crate::gid::Gid;
+
+  #[derive(Clone, Serialize, Deserialize)]
+  pub(crate) struct NodeEntitiesInfo {
+    // Field names are from .msg definition
+    pub node_namespace: String, // original .msg specifies .len() <= 256
+    pub node_name: String,      // original .msg specifies .len() <= 256
+    pub reader_gid_seq: Vec<Gid>,
+    pub writer_gid_seq: Vec<Gid>,
   }
 }

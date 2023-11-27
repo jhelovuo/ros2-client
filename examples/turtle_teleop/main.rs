@@ -149,8 +149,7 @@ fn ros2_loop(
 
   let mut ros_node = ros_context
     .new_node(
-      "turtle_teleop", // name
-      "/ros2_demo",    // namespace
+      NodeName::new("/ros2_demo", "turtle_teleop").unwrap(),
       NodeOptions::new().enable_rosout(true),
     )
     .unwrap();
