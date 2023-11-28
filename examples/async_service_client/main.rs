@@ -6,7 +6,7 @@ use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt};
 use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
-  service::CallServiceError, AService, Context, Message, Node, NodeName, NodeOptions,
+  service::CallServiceError, AService, Context, Message, Name, Node, NodeName, NodeOptions,
   ServiceMapping, ServiceTypeName,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
@@ -56,7 +56,7 @@ fn main() {
   let client = node
     .create_client::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMapping::Enhanced,
-      "/add_two_ints",
+      &Name::new("/", "add_two_ints").unwrap(),
       &ServiceTypeName::new("example_interfaces", "AddTwoInts"),
       service_qos.clone(),
       service_qos,

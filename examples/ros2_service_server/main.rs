@@ -2,7 +2,7 @@ use log::error;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde::{Deserialize, Serialize};
 use ros2_client::{
-  AService, Context, Message, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
+  AService, Context, Message, Name, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{
   policy::{self, Deadline, Lifespan},
@@ -42,7 +42,7 @@ fn main() {
   let server = node
     .create_server::<AService<AddTwoIntsRequest, AddTwoIntsResponse>>(
       ServiceMapping::Enhanced,
-      "/add_two_ints",
+      &Name::new("/", "add_two_ints").unwrap(),
       &ServiceTypeName::new("example_interfaces", "AddTwoInts"),
       service_qos.clone(),
       service_qos,

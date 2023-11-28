@@ -21,6 +21,7 @@ use futures::{
 use crate::{
   action_msgs, builtin_interfaces,
   message::Message,
+  names::Name,
   service::{request_id::RmwRequestId, AService, CallServiceError, Client, Server},
   unique_identifier_msgs, Publisher, Subscription,
 };
@@ -160,7 +161,7 @@ where
 
   pub(crate) my_status_subscription: Subscription<action_msgs::GoalStatusArray>,
 
-  pub(crate) my_action_name: String,
+  pub(crate) my_action_name: Name,
 }
 
 impl<A> ActionClient<A>
@@ -170,7 +171,7 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message,
 {
-  pub fn name(&self) -> &str {
+  pub fn name(&self) -> &Name {
     &self.my_action_name
   }
 
@@ -500,7 +501,7 @@ where
 
   pub(crate) my_status_publisher: Publisher<action_msgs::GoalStatusArray>,
 
-  pub(crate) my_action_name: String,
+  pub(crate) my_action_name: Name,
 }
 
 impl<A> ActionServer<A>
@@ -510,7 +511,7 @@ where
   A::ResultType: Message + Clone,
   A::FeedbackType: Message,
 {
-  pub fn name(&self) -> &str {
+  pub fn name(&self) -> &Name {
     &self.my_action_name
   }
 

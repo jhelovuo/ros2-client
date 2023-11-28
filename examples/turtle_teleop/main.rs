@@ -156,7 +156,7 @@ fn ros2_loop(
 
   let turtle_cmd_vel_topic = ros_node
     .create_topic(
-      "/turtle1/cmd_vel",
+      &Name::new("/turtle1", "cmd_vel").unwrap(),
       MessageTypeName::new("geometry_msgs", "Twist"),
       &topic_qos,
     )
@@ -176,7 +176,7 @@ fn ros2_loop(
 
   let turtle_pose_topic = ros_node
     .create_topic(
-      "/turtle1/pose",
+      &Name::new("/turtle1", "pose").unwrap(),
       MessageTypeName::new("turtlesim", "Pose"),
       &topic_qos,
     )
@@ -188,7 +188,7 @@ fn ros2_loop(
   // Prepare for controlling 2nd turtle
   let turtle2_cmd_vel_topic = ros_node
     .create_topic(
-      "/turtle2/cmd_vel",
+      &Name::new("/turtle2", "cmd_vel").unwrap(),
       MessageTypeName::new("geometry_msgs", "Twist"),
       &topic_qos,
     )
@@ -239,7 +239,7 @@ fn ros2_loop(
   let reset_client = ros_node
     .create_client::<AService<EmptyMessage, EmptyMessage>>(
       ServiceMapping::Enhanced,
-      "/reset",
+      &Name::new("/", "reset").unwrap(),
       &empty_srv_type,
       service_qos.clone(),
       service_qos.clone(),
@@ -253,7 +253,7 @@ fn ros2_loop(
   let set_pen_client = ros_node
     .create_client::<AService<PenRequest, ()>>(
       ServiceMapping::Enhanced,
-      "turtle1/set_pen",
+      &Name::new("/turtle1", "set_pen").unwrap(),
       &set_pen_srv_type,
       service_qos.clone(),
       service_qos.clone(),
@@ -285,7 +285,7 @@ fn ros2_loop(
   let spawn_client = ros_node
     .create_client::<SpawnService>(
       ServiceMapping::Enhanced,
-      "spawn",
+      &Name::new("/", "spawn").unwrap(),
       &spawn_srv_type,
       service_qos.clone(),
       service_qos.clone(),
@@ -307,7 +307,7 @@ fn ros2_loop(
   let kill_client = ros_node
     .create_client::<KillService>(
       ServiceMapping::Enhanced,
-      "kill",
+      &Name::new("/", "kill").unwrap(),
       &kill_srv_type,
       service_qos.clone(),
       service_qos.clone(),
@@ -357,7 +357,7 @@ fn ros2_loop(
   let mut rotate_action_client = ros_node
     .create_action_client::<RotateAbsoluteAction>(
       ServiceMapping::Enhanced,
-      "turtle1/rotate_absolute",
+      &Name::new("/turtle1", "rotate_absolute").unwrap(),
       &ActionTypeName::new("turtlesim", "RotateAbsolute"),
       rotate_action_qos,
     )

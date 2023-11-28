@@ -9,10 +9,7 @@ use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
-use rustdds::{
-  dds::{CreateError, CreateResult},
-  *,
-};
+use rustdds::{dds::CreateResult, *};
 
 use crate::{
   action::*,
@@ -531,11 +528,12 @@ impl Node {
   ///   {sub/foo nor /foo}
   pub fn create_topic(
     &self,
-    topic_name: &str,
+    topic_name: &Name,
     type_name: MessageTypeName,
     qos: &QosPolicies,
   ) -> CreateResult<Topic> {
-    let dds_name = Self::check_name_and_add_prefix("rt/", topic_name)?;
+    //let dds_name = Self::check_name_and_add_prefix("rt/", topic_name)?;
+    let dds_name = topic_name.to_dds_name("rt", &self.node_name, "");
     info!("Creating topic, DDS name: {}", dds_name);
     let topic = self.ros_context.domain_participant().create_topic(
       dds_name,
@@ -563,21 +561,6 @@ impl Node {
     let sub = self.ros_context.create_subscription(topic, qos)?;
     self.add_reader(sub.guid().into());
     Ok(sub)
-  }
-
-  fn check_name_and_add_prefix(prefix: &str, name: &str) -> CreateResult<String> {
-    if name.is_empty() {
-      return create_error_bad_parameter!("Topic name must not be empty.");
-    }
-    // TODO: Implement the rest of the ROS2 name rules.
-    // See https://design.ros2.org/articles/topic_and_service_names.html
-    // --> "ROS 2 Topic and Service Name Constraints"
-
-    // avoid double slash in name
-    let mut dds_topic_name = String::new();
-    dds_topic_name.push_str(prefix);
-    dds_topic_name.push_str(name.strip_prefix('/').unwrap_or(name));
-    Ok(dds_topic_name)
   }
 
   /// Creates ROS2 Publisher
@@ -631,7 +614,7 @@ impl Node {
   pub fn create_client<S>(
     &mut self,
     service_mapping: ServiceMapping,
-    service_name: &str,
+    service_name: &Name,
     service_type_name: &ServiceTypeName,
     request_qos: QosPolicies,
     response_qos: QosPolicies,
@@ -644,17 +627,17 @@ impl Node {
     // https://design.ros2.org/articles/topic_and_service_names.html
     // Where are the suffixes documented?
     // And why "Reply" and not "Response" ?
-    let rq_name = Self::check_name_and_add_prefix("rq/", &(service_name.to_owned() + "Request"))?;
-    let rs_name = Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() + "Reply"))?;
 
     let rq_topic = self.ros_context.domain_participant().create_topic(
-      rq_name,
+      service_name.to_dds_name("rq", &self.node_name, "Request"),
+      //rq_name,
       service_type_name.dds_request_type(),
       &request_qos,
       TopicKind::NoKey,
     )?;
     let rs_topic = self.ros_context.domain_participant().create_topic(
-      rs_name,
+      service_name.to_dds_name("rr", &self.node_name, "Reply"),
+      //rs_name,
       service_type_name.dds_response_type(),
       &response_qos,
       TopicKind::NoKey,
@@ -683,7 +666,7 @@ impl Node {
   pub fn create_server<S>(
     &mut self,
     service_mapping: ServiceMapping,
-    service_name: &str,
+    service_name: &Name,
     service_type_name: &ServiceTypeName,
     request_qos: QosPolicies,
     response_qos: QosPolicies,
@@ -692,17 +675,20 @@ impl Node {
     S: Service + 'static,
     S::Request: Clone,
   {
-    let rq_name = Self::check_name_and_add_prefix("rq/", &(service_name.to_owned() + "Request"))?;
-    let rs_name = Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() + "Reply"))?;
+    // let rq_name = Self::check_name_and_add_prefix("rq/",
+    // &(service_name.to_owned() + "Request"))?; let rs_name =
+    // Self::check_name_and_add_prefix("rr/", &(service_name.to_owned() +
+    // "Reply"))?;
 
     let rq_topic = self.ros_context.domain_participant().create_topic(
-      rq_name,
+      //rq_name,
+      service_name.to_dds_name("rq", &self.node_name, "Request"),
       service_type_name.dds_request_type(),
       &request_qos,
       TopicKind::NoKey,
     )?;
     let rs_topic = self.ros_context.domain_participant().create_topic(
-      rs_name,
+      service_name.to_dds_name("rr", &self.node_name, "Reply"),
       service_type_name.dds_response_type(),
       &response_qos,
       TopicKind::NoKey,
@@ -723,7 +709,7 @@ impl Node {
   pub fn create_action_client<A>(
     &mut self,
     service_mapping: ServiceMapping,
-    action_name: &str,
+    action_name: &Name,
     action_type_name: &ActionTypeName,
     action_qos: ActionClientQosPolicies,
   ) -> CreateResult<ActionClient<A>>
@@ -732,52 +718,56 @@ impl Node {
   {
     // action name is e.g. "/turtle1/rotate_absolute"
     // action type name is e.g. "turtlesim/action/RotateAbsolute"
+    let services_base_name = action_name.push("_action");
 
-    let goal_service_name = action_name.to_owned() + "/_action/send_goal";
+    //let goal_service_name = action_name.to_owned() + "/_action/send_goal";
     let goal_service_type = action_type_name.dds_action_service("_SendGoal");
     let my_goal_client = self.create_client(
       service_mapping,
-      &goal_service_name,
+      //&goal_service_name,
+      &services_base_name.push("send_goal"),
       &goal_service_type,
       action_qos.goal_service.clone(),
       action_qos.goal_service,
     )?;
 
-    let cancel_service_name = action_name.to_owned() + "/_action/cancel_goal";
+    //let cancel_service_name = action_name.to_owned() + "/_action/cancel_goal";
     let cancel_goal_type = ServiceTypeName::new("action_msgs", "CancelGoal");
     let my_cancel_client = self.create_client(
       service_mapping,
-      &cancel_service_name,
+      //&cancel_service_name,
+      &services_base_name.push("cancel_goal"),
       &cancel_goal_type,
       action_qos.cancel_service.clone(),
       action_qos.cancel_service,
     )?;
 
-    let result_service_name = action_name.to_owned() + "/_action/get_result";
+    //let result_service_name = action_name.to_owned() + "/_action/get_result";
     let result_service_type = action_type_name.dds_action_service("_GetResult");
     let my_result_client = self.create_client(
       service_mapping,
-      &result_service_name,
+      //&result_service_name,
+      &services_base_name.push("get_result"),
       &result_service_type,
       action_qos.result_service.clone(),
       action_qos.result_service,
     )?;
 
-    let feedback_topic_name = action_name.to_owned() + "/_action/feedback";
+    let action_topic_namespace = action_name.push("_action");
+
     let feedback_topic_type = action_type_name.dds_action_topic("_FeedbackMessage");
     let feedback_topic = self.create_topic(
-      &feedback_topic_name,
+      &action_topic_namespace.push("feedback"),
       feedback_topic_type,
       &action_qos.feedback_subscription,
     )?;
     let my_feedback_subscription =
       self.create_subscription(&feedback_topic, Some(action_qos.feedback_subscription))?;
 
-    let status_topic_name = action_name.to_owned() + "/_action/status";
-    let status_topic_type = MessageTypeName::new("action_msgs", "GoalStatusArray");
+    //let status_topic_type = ;
     let status_topic = self.create_topic(
-      &status_topic_name,
-      status_topic_type,
+      &action_topic_namespace.push("status"),
+      MessageTypeName::new("action_msgs", "GoalStatusArray"),
       &action_qos.status_subscription,
     )?;
     let my_status_subscription =
@@ -789,64 +779,69 @@ impl Node {
       my_result_client,
       my_feedback_subscription,
       my_status_subscription,
-      my_action_name: action_name.to_owned(),
+      my_action_name: action_name.clone(),
     })
   }
 
   pub fn create_action_server<A>(
     &mut self,
     service_mapping: ServiceMapping,
-    action_name: &str,
+    action_name: &Name,
     action_type_name: &ActionTypeName,
     action_qos: ActionServerQosPolicies,
   ) -> CreateResult<ActionServer<A>>
   where
     A: ActionTypes + 'static,
   {
-    let goal_service_name = action_name.to_owned() + "/_action/send_goal";
+    let services_base_name = action_name.push("_action");
+
+    //let goal_service_name = action_name.to_owned() + "/_action/send_goal";
     let goal_service_type = action_type_name.dds_action_service("_SendGoal");
     let my_goal_server = self.create_server(
       service_mapping,
-      &goal_service_name,
+      //&goal_service_name,
+      &services_base_name.push("send_goal"),
       &goal_service_type,
       action_qos.goal_service.clone(),
       action_qos.goal_service,
     )?;
 
-    let cancel_service_name = action_name.to_owned() + "/_action/cancel_goal";
+    //let cancel_service_name = action_name.to_owned() + "/_action/cancel_goal";
     let cancel_service_type = ServiceTypeName::new("action_msgs", "CancelGoal");
     let my_cancel_server = self.create_server(
       service_mapping,
-      &cancel_service_name,
+      //&cancel_service_name,
+      &services_base_name.push("cancel_goal"),
       &cancel_service_type,
       action_qos.cancel_service.clone(),
       action_qos.cancel_service,
     )?;
 
-    let result_service_name = action_name.to_owned() + "/_action/get_result";
+    //let result_service_name = action_name.to_owned() + "/_action/get_result";
     let result_service_type = action_type_name.dds_action_service("_GetResult");
     let my_result_server = self.create_server(
       service_mapping,
-      &result_service_name,
+      //&result_service_name,
+      &services_base_name.push("get_result"),
       &result_service_type,
       action_qos.result_service.clone(),
       action_qos.result_service,
     )?;
 
-    let feedback_topic_name = action_name.to_owned() + "/_action/feedback";
+    let action_topic_namespace = action_name.push("_action");
+
     let feedback_topic_type = action_type_name.dds_action_topic("_FeedbackMessage");
     let feedback_topic = self.create_topic(
-      &feedback_topic_name,
+      &action_topic_namespace.push("feedback"),
       feedback_topic_type,
       &action_qos.feedback_publisher,
     )?;
     let my_feedback_publisher =
       self.create_publisher(&feedback_topic, Some(action_qos.feedback_publisher))?;
 
-    let status_topic_name = action_name.to_owned() + "/_action/status";
     let status_topic_type = MessageTypeName::new("action_msgs", "GoalStatusArray");
     let status_topic = self.create_topic(
-      &status_topic_name,
+      &action_topic_namespace.push("status"),
       status_topic_type,
       &action_qos.status_publisher,
     )?;
@@ -859,7 +854,7 @@ impl Node {
       my_result_server,
       my_feedback_publisher,
       my_status_publisher,
-      my_action_name: action_name.to_owned(),
+      my_action_name: action_name.clone(),
     })
   }
 } // impl Node

@@ -1,4 +1,4 @@
-use ros2_client::{Context, MessageTypeName, NodeName, NodeOptions, DEFAULT_PUBLISHER_QOS};
+use ros2_client::{Context, MessageTypeName, Name, NodeName, NodeOptions, DEFAULT_PUBLISHER_QOS};
 use async_io::Timer;
 
 fn main() {
@@ -16,7 +16,7 @@ fn main() {
 
   let chatter_topic = node
     .create_topic(
-      "/topic",
+      &Name::new("/", "topic").unwrap(),
       MessageTypeName::new("std_msgs", "String"),
       &DEFAULT_PUBLISHER_QOS,
     )

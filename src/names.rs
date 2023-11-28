@@ -4,6 +4,8 @@
 //! * action types, e.g. `turtlesim/RotateAbsolute`
 //! *
 
+use std::fmt;
+
 // TODO:
 // Conform fully to https://design.ros2.org/articles/topic_and_service_names.html
 // and
@@ -83,8 +85,6 @@ pub enum NameError {
   BadSlash,
 }
 
-use std::fmt;
-
 impl fmt::Display for NameError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
@@ -100,7 +100,7 @@ impl fmt::Display for NameError {
 /// See [Names](https://wiki.ros.org/Names) for ROS 1.
 /// and [topic and Service name mapping to DDS](https://design.ros2.org/articles/topic_and_service_names.html)
 /// in ROS 2 documentation.
-#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Name {
   base_name: String, // The last part of the full name. Must not be empty.
   preceeding_tokens: Vec<String>, // without separating slashes
@@ -110,7 +110,18 @@ pub struct Name {
 // TODO: We do not (yet) support tilde-expansion or brace-substitutions.
 
 impl Name {
-  pub fn parse(namespace: &str, base_name: &str) -> Result<Name, NameError> {
+  /// Construct a new `Name` from namespace and base name.
+  ///
+  /// If the namespace begins with a slash (`/`) character, the Name will be
+  /// absolute, otherwise it will be relative.
+  /// The namespace may consist of several components, separated by slashes.
+  /// Tha namespace must not end in a slash, unless the namespace is just `"/"`.
+  ///
+  /// Do not put slashes in the `base_name`.
+  /// Base name is not allowed to be empty, but the namespace may be empty.
+  ///
+  /// Tilde or brace substitutions are not (yet) supported.
+  pub fn new(namespace: &str, base_name: &str) -> Result<Name, NameError> {
     // TODO: Implement all of the checks here
     let (namespace_rel, absolute) = if let Some(rel) = namespace.strip_prefix('/') {
       (rel, true)
@@ -131,12 +142,17 @@ impl Name {
       return Err(NameError::BadChar);
     }
 
-    let preceeding_tokens = namespace_rel
-      .split('/')
-      .map(str::to_owned)
-      .collect::<Vec<String>>();
-    // Starting slash, ending slash, or repeated slash all
-    // produce empty strings.
+    let preceeding_tokens = if namespace_rel.is_empty() {
+      // If the namespace is "" or "/", we want [] instead of [""]
+      Vec::new()
+    } else {
+      namespace_rel
+        .split('/')
+        .map(str::to_owned)
+        .collect::<Vec<String>>()
+      // Starting slash, ending slash, or repeated slash all
+      // produce empty strings.
+    };
 
     if preceeding_tokens.iter().any(String::is_empty) {
       return Err(NameError::BadSlash);
@@ -157,8 +173,63 @@ impl Name {
     })
   }
 
-  pub fn to_dds_name(&self) -> String {
-    todo!()
+  pub fn parse(full_name: &str) -> Result<Name, NameError> {
+    match full_name.split_once('/') {
+      None => Name::new("", full_name),
+      Some(("", "")) => Err(NameError::Empty),
+      Some((_, "")) => Err(NameError::BadSlash),
+      Some(("", base)) => Name::new("/", base),
+      Some((prefix, base)) => {
+        if prefix.ends_with('/') {
+          Err(NameError::BadSlash)
+        } else {
+          Name::new(prefix, base)
+        }
+      }
+    }
+  }
+
+  pub fn to_dds_name(&self, kind_prefix: &str, node: &NodeName, suffix: &str) -> String {
+    let mut result = kind_prefix.to_owned();
+    assert!(!result.ends_with('/')); // "rt"
+    if self.absolute {
+      // absolute name: do not add node namespace
+    } else {
+      // relative name: Prefix with Node namespace
+      result.push_str(node.namespace()); // "rt/node_ns"
+    }
+    result.push('/'); // "rt/node_ns/" or "rt/"
+    self.preceeding_tokens.iter().for_each(|tok| {
+      result.push_str(tok);
+      result.push('/');
+    });
+    // rt/node_ns/prec_tok1/
+    result.push_str(&self.base_name);
+    result.push_str(suffix);
+    result
+  }
+
+  pub(crate) fn push(&self, new_suffix: &str) -> Name {
+    //TODO: Check that we still satisfy naming rules
+    let mut preceeding_tokens = self.preceeding_tokens.clone();
+    preceeding_tokens.push(self.base_name.to_string());
+    Name {
+      base_name: new_suffix.to_string(),
+      preceeding_tokens,
+      absolute: self.absolute,
+    }
+  }
+}
+
+impl fmt::Display for Name {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    if self.absolute {
+      write!(f, "/")?;
+    }
+    for t in &self.preceeding_tokens {
+      write!(f, "{t}/")?;
+    }
+    write!(f, "{}", self.base_name)
   }
 }
 

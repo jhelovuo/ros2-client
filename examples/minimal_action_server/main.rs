@@ -5,7 +5,7 @@ use log::{debug, error, info, warn};
 use futures::{stream::StreamExt, FutureExt as StdFutureExt};
 use smol::future::FutureExt;
 use ros2_client::{
-  action, action::GoalEndStatus, ActionTypeName, Context, Node, NodeName, NodeOptions,
+  action, action::GoalEndStatus, ActionTypeName, Context, Name, Node, NodeName, NodeOptions,
   ServiceMapping,
 };
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
@@ -80,7 +80,7 @@ fn main() {
     node
       .create_action_server::<FibonacciAction>(
         ServiceMapping::Enhanced,
-        "fibonacci",
+        &Name::new("/", "fibonacci").unwrap(),
         &ActionTypeName::new("example_interfaces", "Fibonacci"),
         fibonacci_action_qos,
       )

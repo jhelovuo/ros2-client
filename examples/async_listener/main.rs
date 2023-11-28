@@ -12,7 +12,7 @@ pub fn main() {
 
   let chatter_topic = node
     .create_topic(
-      "/topic",
+      &Name::new("/", "topic").unwrap(),
       MessageTypeName::new("std_msgs", "String"),
       &ros2_client::DEFAULT_SUBSCRIPTION_QOS,
     )
