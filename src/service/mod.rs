@@ -1,3 +1,4 @@
+//! Implementation of ROS 2 [Services](https://docs.ros.org/en/rolling/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Services/Understanding-ROS2-Services.html)
 use std::marker::PhantomData;
 
 #[allow(unused_imports)]

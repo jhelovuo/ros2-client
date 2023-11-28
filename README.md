@@ -5,6 +5,32 @@ It does not link to [rcl](https://github.com/ros2/rcl),
 [rclcpp](https://docs.ros2.org/galactic/api/rclcpp/index.html), or any non-Rust DDS library. 
 [RustDDS](https://github.com/jhelovuo/RustDDS) is used for communication.
 
+The API is not identical to `rclcpp` or `rclpy`, because some parts would be very awkward in Rust. For example, there are no callbacks. Rust `async` mechanism is used instead. Alternatively, some of the functionality can be polled using the Metal I/O library.
+
+There is a `.spin()` call, but it is required only to have `ros2-client` execute some background tasks. You can spawn an async task to run it, and retain the flow of control in your code.
+
+Please see the included examples on how to use the various features.
+
+## Features Status
+
+* Topics, Publish and Subscribe ✅
+* QoS ✅
+* Serialization ✅ - via Serde
+* Services: Clients and Servers ✅ (async recommended)
+* Actions ✅ (async)
+* Discovery / ROS Graph update events ✅ (async)
+* `rosout` ✅
+* Parameters - not yet
+* Message generation: from `.msg` to `.rs`- experimental
+* ROS 2 Security - experimental
+
+
+## New in Version 0.6:
+
+* Reworked ROS 2 Discovery implementation. Now `Node` has `.status_receiver()`
+* Async `.spin()` call to run the Discovery mechanism.
+* `Client` has `.wait_for_service()`
+* New API for naming Nodes, Topics, Services, Actions, and data types for Topics, Actions, and Services. The new API is more structured to avoid possible confusion and errors from parsing strings.
 
 ## New in version 0.5:
 
@@ -63,10 +89,6 @@ Similar to above.
 Start server: `ros2 run examples_rclpy_minimal_service service`
 
 Run client: `cargo run --example=ros2_service_client`
-
-## Status
-
-This is a work-in-progress.
 
 ## Related Work
 

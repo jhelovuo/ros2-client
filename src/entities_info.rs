@@ -1,3 +1,8 @@
+//! Message types for ROS 2 Discovery
+//!
+//! For background, see
+//! [Node to Participant mapping](https://design.ros2.org/articles/Node_to_Participant_mapping.html)
+
 use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
@@ -7,18 +12,15 @@ use crate::{
   names::{NameError, NodeName},
 };
 
-// For background, see
-// https://design.ros2.org/articles/Node_to_Participant_mapping.html
-
 // Each time a Node adds/removes a Reader or Writer (Publisher / Subscrption in
 // ROS terms) is must publish a new ParticipantEntitiesInfo that describes its
 // current composition. This overwrites the previsous ParticipantEntitiesInfo.
 
-/// Information structure for other DomainParticipants in ROS2 network
+/// Information structure for other DomainParticipants in a ROS 2 network
 ///
 /// See [ParticipantEntitiesInfo](https://github.com/ros2/rmw_dds_common/blob/master/rmw_dds_common/msg/ParticipantEntitiesInfo.msg) in ROS2.
 ///
-/// Gives a list of ROS 2 nodes that are represented by a DDS DomainPArticipant
+/// Gives a list of ROS 2 nodes that are represented by a DDS DomainParticipant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticipantEntitiesInfo {
   pub(crate) gid: Gid, // GUID of a DomainParticipant

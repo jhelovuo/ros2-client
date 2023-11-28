@@ -61,6 +61,7 @@ pub mod unique_identifier_msgs;
 
 pub mod interfaces;
 
+/// ROS 2 Action machinery
 pub mod action;
 pub mod entities_info;
 mod gid;

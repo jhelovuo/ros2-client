@@ -62,6 +62,7 @@ struct SecurityConfig {
   private_key_password: String,
 }
 
+/// Builder for configuring a `Context`
 pub struct ContextOptions {
   domain_id: u16,
   #[cfg(feature = "security")]

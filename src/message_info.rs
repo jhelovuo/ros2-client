@@ -1,6 +1,6 @@
 use rustdds::{rpc::SampleIdentity, *};
 
-// This is just a thinly veiled RustDDS SampleInfo
+/// Message metadata
 #[derive(Debug, Clone)]
 pub struct MessageInfo {
   received_timestamp: Timestamp,

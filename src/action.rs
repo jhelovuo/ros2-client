@@ -26,7 +26,7 @@ use crate::{
   unique_identifier_msgs, Publisher, Subscription,
 };
 
-// A trait to define an Action type
+/// A trait to define an Action type
 pub trait ActionTypes {
   type GoalType: Message + Clone; // Used by client to set a goal for the server
   type ResultType: Message + Clone; // Used by server to report result when action ends
@@ -37,7 +37,8 @@ pub trait ActionTypes {
   fn feedback_type_name(&self) -> &str;
 }
 
-// This is used to construct an ActionType implementation.
+/// This is used to construct an ActionType implementation from pre-existing
+/// component types.
 pub struct Action<G, R, F> {
   g: PhantomData<G>,
   r: PhantomData<R>,
@@ -89,6 +90,8 @@ where
 }
 
 //TODO: Make fields private, add constructor and accessors.
+
+/// Collection of QoS policies requires for an Action client
 pub struct ActionClientQosPolicies {
   pub goal_service: QosPolicies,
   pub result_service: QosPolicies,
@@ -97,6 +100,7 @@ pub struct ActionClientQosPolicies {
   pub status_subscription: QosPolicies,
 }
 
+/// Collection of QoS policies requires for an Action server
 pub struct ActionServerQosPolicies {
   pub goal_service: QosPolicies,
   pub result_service: QosPolicies,

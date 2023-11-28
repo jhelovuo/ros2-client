@@ -1,3 +1,5 @@
+//! `rosout` logging data types
+
 use serde::{Deserialize, Serialize};
 use rustdds::*;
 

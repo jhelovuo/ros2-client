@@ -86,6 +86,7 @@ impl Default for NodeOptions {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+/// DDS or ROS 2 Discovery events.
 #[derive(Clone, Debug)]
 pub enum NodeEvent {
   DDS(DomainParticipantStatusEvent),
@@ -94,11 +95,11 @@ pub enum NodeEvent {
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
-// Spinner implements Node's background event loop.
-//
-// At the moment there are only Discovery (DDS and ROS 2 Graph) event
-// processing, but this would be extended to handle Parameters and other
-// possible background tasks also.
+/// Spinner implements Node's background event loop.
+///
+/// At the moment there are only Discovery (DDS and ROS 2 Graph) event
+/// processing, but this would be extended to handle Parameters and other
+/// possible background tasks also.
 pub struct Spinner {
   ros_context: Context,
   stop_spin_receiver: async_channel::Receiver<()>,
@@ -873,6 +874,24 @@ impl Drop for Node {
   }
 }
 
+/// Macro for writing to [rosout](https://wiki.ros.org/rosout) topic.
+///
+/// # Example
+///
+/// ```
+/// # use ros2_client::*;
+/// #
+/// # let context = Context::new().unwrap();
+/// # let mut node = context
+/// #     .new_node(
+/// #       NodeName::new("", "some_node").unwrap(),
+/// #       NodeOptions::new().enable_rosout(true),
+/// #     )
+/// #     .unwrap();
+/// let kind = "silly";
+///
+/// rosout!(node, ros2::LogLevel::Info, "A {} event was seen.", kind);
+/// ```
 #[macro_export]
 macro_rules! rosout {
     // rosout!(node, Level::Info, "a {} event", event.kind);

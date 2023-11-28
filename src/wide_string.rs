@@ -10,6 +10,9 @@ use serde::{
 };
 use widestring::Utf16String;
 
+/// UTF-16 strings, as required by the ROS type system.
+///
+/// We just wrap a pre-existing library to get proper Serialize and Deserialize.
 #[derive(Clone, Debug)]
 pub struct WString {
   inner: Utf16String,

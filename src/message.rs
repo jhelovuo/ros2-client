@@ -1,3 +1,4 @@
+//! Defines [`Message`] trait
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Trait to ensure Messages can be (de)serialized
