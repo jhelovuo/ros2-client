@@ -136,7 +136,7 @@ impl Name {
     if base_name
       .chars()
       .all(|c| c.is_ascii_alphanumeric() || c == '_')
-      && base_name.starts_with(|c: char| c.is_ascii_alphabetic())
+      && base_name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
     { /* ok */
     } else {
       return Err(NameError::BadChar);
@@ -174,7 +174,7 @@ impl Name {
   }
 
   pub fn parse(full_name: &str) -> Result<Name, NameError> {
-    match full_name.split_once('/') {
+    match full_name.rsplit_once('/') {
       None => Name::new("", full_name),
       Some(("", "")) => Err(NameError::Empty),
       Some((_, "")) => Err(NameError::BadSlash),
