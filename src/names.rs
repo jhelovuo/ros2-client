@@ -133,10 +133,14 @@ impl Name {
       return Err(NameError::Empty);
     }
 
+    let ok_start_char = |c: char| c.is_ascii_alphabetic() || c == '_';
+    let no_multi_underscore = |s: &str| !s.contains("__");
+
     if base_name
       .chars()
       .all(|c| c.is_ascii_alphanumeric() || c == '_')
-      && base_name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+      && base_name.starts_with(ok_start_char)
+      && no_multi_underscore(base_name)
     { /* ok */
     } else {
       return Err(NameError::BadChar);
@@ -158,10 +162,11 @@ impl Name {
       return Err(NameError::BadSlash);
     }
 
-    if preceeding_tokens
-      .iter()
-      .all(|tok| tok.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-    { /* ok */
+    if preceeding_tokens.iter().all(|tok| {
+      tok.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && tok.starts_with(ok_start_char)
+        && no_multi_underscore(tok)
+    }) { /* ok */
     } else {
       return Err(NameError::BadChar);
     }
@@ -173,14 +178,28 @@ impl Name {
     })
   }
 
+  /// Construct a new `Name` from slash-separated namespace and base name.
+  ///
+  /// e.g. `myspace/some_name`
   pub fn parse(full_name: &str) -> Result<Name, NameError> {
     match full_name.rsplit_once('/') {
+      // no slash, just a base name, so namespace is "".
       None => Name::new("", full_name),
+
+      // Just a single slash, i.e. empty namespace and empty base name.
+      // Not acceptable.
       Some(("", "")) => Err(NameError::Empty),
+
+      // Last character was slash => base name is empty => bad.
       Some((_, "")) => Err(NameError::BadSlash),
+
+      // Input was "/foobar", so name is absolute
       Some(("", base)) => Name::new("/", base),
+
+      // General case: <nonempty> "/" <base_name>
       Some((prefix, base)) => {
         if prefix.ends_with('/') {
+          // There was a double slash => Bad.
           Err(NameError::BadSlash)
         } else {
           Name::new(prefix, base)
@@ -218,6 +237,10 @@ impl Name {
       preceeding_tokens,
       absolute: self.absolute,
     }
+  }
+
+  pub fn is_absolute(&self) -> bool {
+    self.absolute
   }
 }
 
@@ -375,3 +398,46 @@ impl ActionTypeName {
 
 // -------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------
+
+#[test]
+fn test_name() {
+  assert!(Name::new("", "").is_err());
+  assert!(Name::new("", "/").is_err());
+  assert!(Name::new("a", "b").is_ok());
+  assert!(Name::new("a", "_b").is_ok());
+  assert!(Name::new("a", "b_b").is_ok()); // may contain [...] underscores (_), [...]
+  assert!(Name::new("a", "b__b").is_err()); // must not contain any number of repeated underscores (_)
+  assert!(Name::new("a2//a", "b").is_err()); // must not contain any number of
+                                               // repeated forward slashes (/)
+}
+
+#[test]
+fn test_name_parse() {
+  // https://design.ros2.org/articles/topic_and_service_names.html
+
+  assert!(Name::parse("").is_err()); // must not be empty
+  assert!(Name::parse("/").is_err()); // must not be empty
+  assert!(Name::parse("a/").is_err()); // must not be empty
+  assert!(Name::parse("a/b/").is_err());
+
+  assert!(Name::parse("2").is_err()); // must not start with a numeric character ([0-9])
+  assert!(Name::parse("2/a").is_err()); // must not start with a numeric character ([0-9])
+  assert!(Name::parse("a2/a").is_ok());
+  assert!(Name::parse("_a2/a").is_ok()); // may contain [...] underscores (_), [...]
+  assert!(Name::parse("some_name/a").is_ok()); // may contain [...] underscores (_), [...]
+  assert!(Name::parse("__a2/a").is_err()); // must not contain any number of repeated underscores (_)
+  assert!(Name::parse("a2//a").is_err()); // must not contain any number of repeated forward slashes (/)
+
+  assert_eq!(Name::parse("a/nn").unwrap(), Name::new("a", "nn").unwrap());
+  assert_eq!(
+    Name::parse("a/b/c/nn").unwrap(),
+    Name::new("a/b/c", "nn").unwrap()
+  );
+  assert_eq!(
+    Name::parse("/a/b/c/nn").unwrap(),
+    Name::new("/a/b/c", "nn").unwrap()
+  );
+
+  assert_eq!(Name::parse("a/nn").unwrap().is_absolute(), false);
+  assert_eq!(Name::parse("/a/nn").unwrap().is_absolute(), true);
+}
