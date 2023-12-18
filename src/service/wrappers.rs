@@ -334,12 +334,36 @@ impl<RW> ServiceDeserializerAdapter<RW> {
 
 impl<RW: Wrapper> no_key::DeserializerAdapter<RW> for ServiceDeserializerAdapter<RW> {
   type Error = ReadError;
+  type Deserialized = RW;
 
   fn supported_encodings() -> &'static [RepresentationIdentifier] {
     &Self::REPR_IDS
   }
 
-  fn from_bytes(input_bytes: &[u8], encoding: RepresentationIdentifier) -> ReadResult<RW> {
+  fn transform_deserialized(deserialized: Self::Deserialized) -> RW {
+    deserialized
+  }
+}
+
+impl<RW: Wrapper> no_key::DefaultDecoder<RW> for ServiceDeserializerAdapter<RW> {
+  type Decoder = WrapperDecoder;
+  const DECODER: Self::Decoder = WrapperDecoder;
+}
+
+#[derive(Clone)]
+pub struct WrapperDecoder;
+
+impl<RW> no_key::Decode<RW> for WrapperDecoder
+where
+  RW: Wrapper,
+{
+  type Error = ReadError;
+
+  fn decode_bytes(
+    self,
+    input_bytes: &[u8],
+    encoding: RepresentationIdentifier,
+  ) -> Result<RW, Self::Error> {
     Ok(RW::from_bytes_and_ri(input_bytes, encoding))
   }
 }
