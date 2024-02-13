@@ -263,6 +263,7 @@ impl fmt::Display for Name {
 /// Note that this is not for naming Topics, but data types of Topics.
 ///
 /// See [Names](https://wiki.ros.org/Names) Section 1.2 Package Resource Names.
+#[derive(Clone, Debug)]
 pub struct MessageTypeName {
   prefix: String, // typically "msg", but may be "action". What should this part be called?
   //TODO: String is strictly UTF-8, but ROS2 uses just byte strings that are recommended to be
@@ -310,6 +311,7 @@ fn slash_to_colons(s: String) -> String {
 }
 
 /// Similar to [`MessageTypeName`], but names a Service type.
+#[derive(Clone, Debug)]
 pub struct ServiceTypeName {
   prefix: String,
   msg: MessageTypeName,
@@ -362,6 +364,7 @@ impl ServiceTypeName {
 }
 
 /// Similar to [`MessageTypeName`], but names an Action type.
+#[derive(Clone, Debug)]
 pub struct ActionTypeName(MessageTypeName);
 
 impl ActionTypeName {
