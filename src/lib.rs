@@ -73,6 +73,7 @@ pub mod parameters;
 #[doc(hidden)]
 pub mod pubsub;
 pub mod service;
+pub mod steady_time;
 mod wide_string;
 
 #[doc(hidden)]
