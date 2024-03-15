@@ -1,3 +1,6 @@
+use std::convert::TryFrom;
+use core::ops::{Add,Sub};
+
 use serde::{Deserialize, Serialize};
 use log::error;
 
@@ -6,6 +9,9 @@ use crate::message::Message;
 // https://index.ros.org/p/builtin_interfaces/
 //
 // Defines message types Duration and Time .
+//
+// The name "builtin_interfaces" is not very descriptive, but that is how
+// it is in ROS.
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Time {
@@ -22,6 +28,9 @@ impl Time {
     nanosec: 1234567890,
   };
 
+  /// Returns the current time for the system clock.
+  ///
+  /// To use simulation-capable time, ask from `Node`.
   pub fn now() -> Self {
     match chrono::Utc::now().timestamp_nanos_opt() {
       None => {
@@ -32,17 +41,49 @@ impl Time {
         error!("Timestamp out of range (negative).");
         Time::ZERO // Since we have to return something
       }
-      Some(non_negative) => Self::from_nanos(non_negative as u64),
+      Some(non_negative) => Self::from_nanos(non_negative),
     }
   }
 
-  fn from_nanos(nanos_since_epoch: u64) -> Self {
+  pub fn from_nanos(nanos_since_epoch: i64) -> Self {
     Self {
       sec: (nanos_since_epoch / 1_000_000_000) as i32,
       nanosec: (nanos_since_epoch % 1_000_000_000) as u32,
     }
   }
+
+  pub fn to_nanos(&self) -> i64 {
+    (self.sec as i64) * 1_000_000_000 + (self.nanosec as i64)
+  }
 }
+ 
+
+impl Sub for Time {
+  type Output = Duration;
+
+  fn sub(self, other: Time) -> Duration {
+    let nano_diff = self.to_nanos() - other.to_nanos();
+    Duration::from_nanos(nano_diff)
+  }
+}
+
+impl Sub<Duration> for Time {
+    type Output = Time;
+
+    fn sub(self, other: Duration) -> Time {
+      Self::from_nanos( self.to_nanos() - other.to_nanos() )
+    }
+}
+
+impl Add<Duration> for Time {
+    type Output = Time;
+
+    fn add(self, other: Duration) -> Time {
+      Self::from_nanos( self.to_nanos() + other.to_nanos() )
+    }
+}
+
+
 
 // TODO: Implement constructors and conversions to/from usual Rust time formats
 // Note that this type does not specify a zero point in time.
@@ -76,6 +117,10 @@ pub struct Duration {
 impl Message for Duration {}
 
 impl Duration {
+  pub const fn zero() -> Self {
+    Self{ sec:0, nanosec:0 }
+  }
+
   pub const fn from_secs(sec: i32) -> Self {
     Self { sec, nanosec: 0 }
   }
@@ -148,11 +193,33 @@ impl Duration {
   }
 }
 
-// TODO: Implement the usual time arithmetic for Time and Duration, i.e.
-// Time - Time = Duration
-// Time + Duration = Time
-// Time - Duration = time
-// Duration + Duration = Duration
-// Duration - Duration = Duration
-// Implement a "zero" Duration value
-// Implement conversions to/from Rust's usual Duration types.
+impl Add for Duration {
+  type Output = Duration;
+  fn add(self,other: Duration) -> Duration {
+    Duration::from_nanos( self.to_nanos() + other.to_nanos() )
+  }
+}
+
+impl Sub for Duration {
+  type Output = Duration;
+  fn sub(self,other: Duration) -> Duration {
+    Duration::from_nanos( self.to_nanos() - other.to_nanos() )
+  }
+}
+
+
+impl TryFrom<std::time::Duration> for Duration {
+  type Error = <i64 as TryFrom<u64>>::Error;
+
+  fn try_from(value: std::time::Duration) -> Result<Self, Self::Error> {
+    Ok(Duration::from_nanos( i64::try_from(value.as_nanos())? ))
+  }
+}
+
+impl TryFrom<Duration> for std::time::Duration {
+  type Error = <u64 as TryFrom<i64>>::Error;
+
+  fn try_from(value: Duration) -> Result<std::time::Duration, Self::Error> {
+    Ok(std::time::Duration::from_nanos(  u64::try_from(value.to_nanos())? ))
+  }
+}
