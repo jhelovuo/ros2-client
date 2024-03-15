@@ -10,7 +10,7 @@ use rustdds::{
   *,
 };
 
-use crate::{message::Message, message_info::MessageInfo, node::Node, service::*};
+use crate::{message_info::MessageInfo, node::Node, service::*};
 
 /// Client end of a ROS2 Service
 pub struct Client<S>

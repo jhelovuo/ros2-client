@@ -6,6 +6,9 @@ use crate::message::Message;
 // https://index.ros.org/p/builtin_interfaces/
 //
 // Defines message types Duration and Time .
+//
+// The name "builtin_interfaces" is not very descriptive, but that is how
+// it is in ROS.
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Time {
@@ -22,7 +25,10 @@ impl Time {
     nanosec: 1234567890,
   };
 
-  pub fn now() -> Self {
+  /// Returns the current time for the system clock.
+  ///
+  /// To use simulation-capable time, ask from `Node`.
+  pub(crate) fn now() -> Self {
     match chrono::Utc::now().timestamp_nanos_opt() {
       None => {
         error!("Timestamp out of range.");
@@ -32,15 +38,19 @@ impl Time {
         error!("Timestamp out of range (negative).");
         Time::ZERO // Since we have to return something
       }
-      Some(non_negative) => Self::from_nanos(non_negative as u64),
+      Some(non_negative) => Self::from_nanos(non_negative),
     }
   }
 
-  fn from_nanos(nanos_since_epoch: u64) -> Self {
+  pub fn from_nanos(nanos_since_epoch: i64) -> Self {
     Self {
       sec: (nanos_since_epoch / 1_000_000_000) as i32,
       nanosec: (nanos_since_epoch % 1_000_000_000) as u32,
     }
+  }
+
+  pub fn to_nanos(&self) -> i64 {
+    (self.sec as i64) * 1_000_000_000 + (self.nanosec as i64)
   }
 }
 
@@ -76,6 +86,10 @@ pub struct Duration {
 impl Message for Duration {}
 
 impl Duration {
+  pub const fn zero() -> Self {
+    Self { sec: 0, nanosec: 0 }
+  }
+
   pub const fn from_secs(sec: i32) -> Self {
     Self { sec, nanosec: 0 }
   }
@@ -147,12 +161,3 @@ impl Duration {
     1_000_000_000 * s + ns
   }
 }
-
-// TODO: Implement the usual time arithmetic for Time and Duration, i.e.
-// Time - Time = Duration
-// Time + Duration = Time
-// Time - Duration = time
-// Duration + Duration = Duration
-// Duration - Duration = Duration
-// Implement a "zero" Duration value
-// Implement conversions to/from Rust's usual Duration types.
