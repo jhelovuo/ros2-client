@@ -1,7 +1,6 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::{Arc, Mutex},
-  //pin::pin,
+  sync::{Arc, Mutex, atomic, atomic::AtomicBool,},
 };
 
 use futures::{pin_mut, FutureExt, StreamExt};
@@ -13,6 +12,7 @@ use rustdds::{dds::CreateResult, *};
 
 use crate::{
   action::*,
+  builtin_interfaces::Time,
   context::Context,
   entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
@@ -110,6 +110,9 @@ pub struct Spinner {
   external_nodes: Arc<Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>>,
 
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
+
+  use_sim_time: Arc<AtomicBool>,
+  sim_time: Arc<Mutex<Time>>,
 }
 
 impl Spinner {
@@ -248,6 +251,9 @@ pub struct Node {
   rosout_writer: Option<Publisher<Log>>,
   rosout_reader: Option<Subscription<Log>>,
   parameter_events_writer: Publisher<raw::ParameterEvent>,
+
+  use_sim_time : Arc<AtomicBool>,
+  sim_time: Arc<Mutex<Time>>,
 }
 
 impl Node {
@@ -289,7 +295,17 @@ impl Node {
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
+      use_sim_time: Arc::new(AtomicBool::new(false)),
+      sim_time: Arc::new(Mutex::new(Time::ZERO)),
     })
+  }
+
+  pub fn time_now(&self) -> Time {
+    if self.use_sim_time.load(atomic::Ordering::Relaxed) {
+      self.sim_time.lock().unwrap().clone()
+    } else {
+      Time::now()
+    }
   }
 
   /// Create a Spinner object to execute Node backround tasks.
@@ -314,6 +330,8 @@ impl Node {
       writers_to_remote_readers: Arc::clone(&self.writers_to_remote_readers),
       external_nodes: Arc::clone(&self.external_nodes),
       status_event_senders: Arc::clone(&self.status_event_senders),
+      use_sim_time: Arc::clone(&self.use_sim_time),
+      sim_time: Arc::clone(&self.sim_time),
     }
   }
 
