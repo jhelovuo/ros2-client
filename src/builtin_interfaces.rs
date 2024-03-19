@@ -1,6 +1,3 @@
-use std::convert::TryFrom;
-use core::ops::{Add,Sub};
-
 use serde::{Deserialize, Serialize};
 use log::error;
 
@@ -31,7 +28,7 @@ impl Time {
   /// Returns the current time for the system clock.
   ///
   /// To use simulation-capable time, ask from `Node`.
-  pub fn now() -> Self {
+  pub(crate) fn now() -> Self {
     match chrono::Utc::now().timestamp_nanos_opt() {
       None => {
         error!("Timestamp out of range.");
@@ -57,32 +54,6 @@ impl Time {
   }
 }
  
-
-impl Sub for Time {
-  type Output = Duration;
-
-  fn sub(self, other: Time) -> Duration {
-    let nano_diff = self.to_nanos() - other.to_nanos();
-    Duration::from_nanos(nano_diff)
-  }
-}
-
-impl Sub<Duration> for Time {
-    type Output = Time;
-
-    fn sub(self, other: Duration) -> Time {
-      Self::from_nanos( self.to_nanos() - other.to_nanos() )
-    }
-}
-
-impl Add<Duration> for Time {
-    type Output = Time;
-
-    fn add(self, other: Duration) -> Time {
-      Self::from_nanos( self.to_nanos() + other.to_nanos() )
-    }
-}
-
 
 
 // TODO: Implement constructors and conversions to/from usual Rust time formats
@@ -193,33 +164,4 @@ impl Duration {
   }
 }
 
-impl Add for Duration {
-  type Output = Duration;
-  fn add(self,other: Duration) -> Duration {
-    Duration::from_nanos( self.to_nanos() + other.to_nanos() )
-  }
-}
 
-impl Sub for Duration {
-  type Output = Duration;
-  fn sub(self,other: Duration) -> Duration {
-    Duration::from_nanos( self.to_nanos() - other.to_nanos() )
-  }
-}
-
-
-impl TryFrom<std::time::Duration> for Duration {
-  type Error = <i64 as TryFrom<u64>>::Error;
-
-  fn try_from(value: std::time::Duration) -> Result<Self, Self::Error> {
-    Ok(Duration::from_nanos( i64::try_from(value.as_nanos())? ))
-  }
-}
-
-impl TryFrom<Duration> for std::time::Duration {
-  type Error = <u64 as TryFrom<i64>>::Error;
-
-  fn try_from(value: Duration) -> Result<std::time::Duration, Self::Error> {
-    Ok(std::time::Duration::from_nanos(  u64::try_from(value.to_nanos())? ))
-  }
-}

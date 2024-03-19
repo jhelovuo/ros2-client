@@ -12,7 +12,7 @@ use rustdds::{dds::CreateResult, *};
 
 use crate::{
   action::*,
-  builtin_interfaces::Time,
+  ros_time::ROSTime,
   context::Context,
   entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
@@ -112,7 +112,7 @@ pub struct Spinner {
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 
   use_sim_time: Arc<AtomicBool>,
-  sim_time: Arc<Mutex<Time>>,
+  sim_time: Arc<Mutex<ROSTime>>,
 }
 
 impl Spinner {
@@ -253,7 +253,7 @@ pub struct Node {
   parameter_events_writer: Publisher<raw::ParameterEvent>,
 
   use_sim_time : Arc<AtomicBool>,
-  sim_time: Arc<Mutex<Time>>,
+  sim_time: Arc<Mutex<ROSTime>>,
 }
 
 impl Node {
@@ -296,17 +296,25 @@ impl Node {
       rosout_reader,
       parameter_events_writer,
       use_sim_time: Arc::new(AtomicBool::new(false)),
-      sim_time: Arc::new(Mutex::new(Time::ZERO)),
+      sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
     })
   }
 
-  pub fn time_now(&self) -> Time {
+  /// Return the ROSTime
+  ///
+  /// It is either the system clock time 
+  pub fn time_now(&self) -> ROSTime {
     if self.use_sim_time.load(atomic::Ordering::Relaxed) {
       self.sim_time.lock().unwrap().clone()
     } else {
-      Time::now()
+      ROSTime::now()
     }
   }
+
+  pub fn time_now_not_simulated(&self) -> ROSTime {
+    ROSTime::now()
+  }
+
 
   /// Create a Spinner object to execute Node backround tasks.
   ///

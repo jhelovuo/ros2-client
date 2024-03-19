@@ -74,6 +74,7 @@ pub mod parameters;
 pub mod pubsub;
 pub mod service;
 pub mod steady_time;
+pub mod ros_time;
 mod wide_string;
 
 #[doc(hidden)]
@@ -98,6 +99,8 @@ pub use service::{AService, Client, Server, Service, ServiceMapping};
 pub use action::{Action, ActionTypes};
 #[doc(inline)]
 pub use wide_string::WString;
+#[doc(inline)]
+pub use ros_time::{ROSTime, SystemTime};
 
 /// Module for stuff we do not want to export from top level;
 pub mod ros2 {
