@@ -21,6 +21,7 @@ use crate::{
   names::*,
   parameters::*,
   pubsub::{Publisher, Subscription},
+  rcl_interfaces,
   service::{Client, Server, Service, ServiceMapping},
 };
 
@@ -93,6 +94,12 @@ pub enum NodeEvent {
   ROS(ParticipantEntitiesInfo),
 }
 
+
+struct ParameterServers {
+  get_parameters_server: Server<rcl_interfaces::GetParametersService>,
+}
+
+
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 /// Spinner implements Node's background event loop.
@@ -113,6 +120,9 @@ pub struct Spinner {
 
   use_sim_time: Arc<AtomicBool>,
   sim_time: Arc<Mutex<ROSTime>>,
+
+  
+  parameter_servers: Option<ParameterServers>,
 }
 
 impl Spinner {
@@ -216,6 +226,12 @@ impl Spinner {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+pub enum ParameterError {
+  AlreadyDeclared,
+  InvalidName,
+}
+
+
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
 /// parameter events topics internally.
 ///
@@ -244,12 +260,14 @@ pub struct Node {
   external_nodes: Arc<Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>>,
   stop_spin_sender: Option<async_channel::Sender<()>>,
 
-  // Channels to report discovery events
+  // Channels to report discovery events to
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
   rosout_reader: Option<Subscription<Log>>,
+  
+  // Parameter Topics and Services
   parameter_events_writer: Publisher<raw::ParameterEvent>,
 
   use_sim_time : Arc<AtomicBool>,
@@ -340,6 +358,7 @@ impl Node {
       status_event_senders: Arc::clone(&self.status_event_senders),
       use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
+      parameter_servers: None,
     }
   }
 
@@ -392,6 +411,49 @@ impl Node {
   pub fn domain_id(&self) -> u16 {
     self.ros_context.domain_id()
   }
+
+  // ///////////////////////////////////////////////
+  // Paramteters
+
+  /// Declare and initialize a paramter.
+  ///
+  /// The Parameter is initialized to the value configured at run time, or if there
+  /// is no such configuration, the default value given as argument.
+  ///
+  /// The resulting parameter value is returned.
+  pub fn declare_parameter(&self, name: &str, default: ParameterValue) 
+    -> Result<&ParameterValue, ParameterError>
+  {
+    todo!()
+  }
+
+  pub fn undeclare_paramter(&self, name: &str) {
+    todo!()
+  }
+
+  /// Does the paramter exist?
+  pub fn has_parameter(&self, name: &str) -> bool {
+    todo!()
+  }
+
+  /// Sets a paramter value. Parameter must be decalred before setting.
+  pub fn set_parameter(&self, name: &str, value: ParameterValue) 
+    -> Result<(),String> 
+  {
+    todo!()
+  }
+
+  /// Gets the value of a paramter, or None is there is no such Parameter.
+  pub fn get_parameter(&self, name: &str) -> Option<&ParameterValue> {
+    todo!()
+  }
+
+  pub fn list_parameters<'a,'b>(&'a self, prefixes: impl Iterator<Item=&'b str>) 
+    -> Box<dyn Iterator<Item=&'a str>> {
+    todo!()
+  }
+
+  // ///////////////////////////////////////////////////
 
   /// Get an async Receiver for discovery events.
   ///

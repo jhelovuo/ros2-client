@@ -1,3 +1,7 @@
+
+
+
+
 /// Rust-like representation of ROS2 Parameter
 pub struct Parameter {
   pub name: String,
@@ -165,5 +169,12 @@ pub(crate) mod raw {
     pub const INTEGER_ARRAY: u8 = 7;
     pub const DOUBLE_ARRAY: u8 = 8;
     pub const STRING_ARRAY: u8 = 9;
+  }
+
+  /// https://github.com/ros2/rcl_interfaces/blob/rolling/rcl_interfaces/msg/SetParametersResult.msg
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub struct SetParametersResult {
+    pub successful: bool,
+    pub reason: String,
   }
 }

@@ -74,6 +74,7 @@ pub mod parameters;
 pub mod pubsub;
 pub mod service;
 pub mod steady_time;
+mod rcl_interfaces;
 pub mod ros_time;
 mod wide_string;
 
