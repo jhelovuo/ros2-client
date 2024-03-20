@@ -97,6 +97,8 @@ pub enum NodeEvent {
 
 struct ParameterServers {
   get_parameters_server: Server<rcl_interfaces::GetParametersService>,
+  list_parameters_server: Server<rcl_interfaces::ListParametersService>,
+  set_parameters_server: Server<rcl_interfaces::SetParametersService>,
 }
 
 
@@ -342,14 +344,58 @@ impl Node {
   /// E.g. `executor.spawn(node.spinner().spin())`
   ///
   /// The `.spin()` task runs until `Node` is dropped.
-  pub fn spinner(&mut self) -> Spinner {
+  pub fn spinner(&mut self) -> CreateResult<Spinner> {
     if self.stop_spin_sender.is_some() {
       panic!("Attempted to crate a second spinner.");
     }
     let (stop_spin_sender, stop_spin_receiver) = async_channel::bounded(1);
     self.stop_spin_sender = Some(stop_spin_sender);
 
-    Spinner {
+    //TODO: Check QoS policies against ROS 2 specs or some refernce.
+    let service_qos = QosPolicyBuilder::new()
+      .reliability(policy::Reliability::Reliable {
+        max_blocking_time: Duration::from_millis(100),
+      })
+      .history(policy::History::KeepLast { depth: 1 })
+      .build();
+
+    let node_name = self.node_name.fully_qualified_name();
+
+    let parameter_servers = 
+      if self.options.start_parameter_services {
+        let service_mapping = ServiceMapping::Enhanced; //TODO: parameterize
+        let get_parameters_server = self.create_server(
+          service_mapping,
+          &Name::new(&node_name, "get_parameters").unwrap(),
+          &ServiceTypeName::new("rcl_interfaces", "GetParameters"),
+          service_qos.clone(),
+          service_qos.clone(),
+        )?;
+        let set_parameters_server = self.create_server(
+          service_mapping,
+          &Name::new(&node_name, "set_parameters").unwrap(),
+          &ServiceTypeName::new("rcl_interfaces", "SetParameters"),
+          service_qos.clone(),
+          service_qos.clone(),
+        )?;
+        let list_parameters_server = self.create_server(
+          service_mapping,
+          &Name::new(&node_name, "list_parameters").unwrap(),
+          &ServiceTypeName::new("rcl_interfaces", "ListParameters"),
+          service_qos.clone(),
+          service_qos.clone(),
+        )?;
+
+        Some( ParameterServers {
+          get_parameters_server,
+          list_parameters_server,
+          set_parameters_server,
+        } )
+      } else { 
+        None // No parameter services
+      };
+
+    Ok(Spinner {
       ros_context: self.ros_context.clone(),
       stop_spin_receiver,
       readers_to_remote_writers: Arc::clone(&self.readers_to_remote_writers),
@@ -359,7 +405,7 @@ impl Node {
       use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
       parameter_servers: None,
-    }
+    })
   }
 
   // Generates ROS2 node info from added readers and writers.
@@ -415,7 +461,7 @@ impl Node {
   // ///////////////////////////////////////////////
   // Paramteters
 
-  /// Declare and initialize a paramter.
+  /// Declare and initialize a parameter.
   ///
   /// The Parameter is initialized to the value configured at run time, or if there
   /// is no such configuration, the default value given as argument.
@@ -427,23 +473,23 @@ impl Node {
     todo!()
   }
 
-  pub fn undeclare_paramter(&self, name: &str) {
+  pub fn undeclare_parameter(&self, name: &str) {
     todo!()
   }
 
-  /// Does the paramter exist?
+  /// Does the parameter exist?
   pub fn has_parameter(&self, name: &str) -> bool {
     todo!()
   }
 
-  /// Sets a paramter value. Parameter must be decalred before setting.
+  /// Sets a parameter value. Parameter must be decalred before setting.
   pub fn set_parameter(&self, name: &str, value: ParameterValue) 
     -> Result<(),String> 
   {
     todo!()
   }
 
-  /// Gets the value of a paramter, or None is there is no such Parameter.
+  /// Gets the value of a parameter, or None is there is no such Parameter.
   pub fn get_parameter(&self, name: &str) -> Option<&ParameterValue> {
     todo!()
   }

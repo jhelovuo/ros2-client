@@ -3,15 +3,15 @@ use serde::{Deserialize, Serialize};
 use crate::{Message, service::AService, parameters};
 
 
-pub type ListParamtersService = AService<ListParametersRequest,ListParametersResponse>;
+pub type ListParametersService = AService<ListParametersRequest,ListParametersResponse>;
 
 pub type GetParametersService = AService<GetParametersRequest, GetParametersResponse>;
 
 pub type SetParametersService = AService<SetParametersRequest, SetParametersResponse>;
 
-// type DescribeParamtersService = (); // TODO
-// type GetParamterTypesService = (); // TODO
-// type SetPAramtersAtomicallyService = (); // TODO
+// type DescribeParametersService = (); // TODO
+// type GetParameterTypesService = (); // TODO
+// type SetParametersAtomicallyService = (); // TODO
 
 
 #[allow(non_snake_case)]
