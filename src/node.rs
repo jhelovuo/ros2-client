@@ -1,9 +1,10 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
   sync::{Arc, Mutex, atomic, atomic::AtomicBool,},
+  pin::Pin,
 };
 
-use futures::{pin_mut, FutureExt, StreamExt};
+use futures::{pin_mut, FutureExt, StreamExt, stream, Stream};
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -125,6 +126,17 @@ pub struct Spinner {
 
   
   parameter_servers: Option<ParameterServers>,
+  parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
+}
+
+async fn next_if_some<S>(s: &mut Option<S>) -> Option<S::Item>
+where
+    S: Stream + Unpin
+{
+    match s.as_mut() {
+        Some(stream) => stream.next().await,
+        None => std::future::pending().await,
+    }
 }
 
 impl Spinner {
@@ -140,10 +152,19 @@ impl Spinner {
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     pin_mut!(ros_discovery_stream);
 
+    let mut get_parameter_stream = 
+      self.parameter_servers.as_ref().unwrap() // TODO: How to get rid of this unwrap??
+        .get_parameters_server.receive_request_stream();
+    pin_mut!(get_parameter_stream);
+
     loop {
       futures::select! {
         _ = self.stop_spin_receiver.recv().fuse() => {
           break;
+        }
+
+        get_parameter_request =  get_parameter_stream.select_next_some().fuse() => {
+          todo!()
         }
 
         participant_info_update = ros_discovery_stream.select_next_some() => {
@@ -272,6 +293,10 @@ pub struct Node {
   // Parameter Topics and Services
   parameter_events_writer: Publisher<raw::ParameterEvent>,
 
+  // Parameter store
+  parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
+
+  // simulated ROSTime
   use_sim_time : Arc<AtomicBool>,
   sim_time: Arc<Mutex<ROSTime>>,
 }
@@ -315,6 +340,7 @@ impl Node {
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
+      parameters: Arc::new(Mutex::new(BTreeMap::new())),
       use_sim_time: Arc::new(AtomicBool::new(false)),
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
     })
@@ -404,7 +430,8 @@ impl Node {
       status_event_senders: Arc::clone(&self.status_event_senders),
       use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
-      parameter_servers: None,
+      parameter_servers,
+      parameters: Arc::clone( &self.parameters ),
     })
   }
 
