@@ -140,7 +140,7 @@ where
 }
 
 impl Spinner {
-  pub async fn spin(self) -> CreateResult<()> {
+  pub async fn spin(mut self) -> CreateResult<()> {
     let dds_status_listener = self.ros_context.domain_participant().status_listener();
     let dds_status_stream = dds_status_listener.as_async_status_stream();
     pin_mut!(dds_status_stream);
@@ -152,10 +152,14 @@ impl Spinner {
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     pin_mut!(ros_discovery_stream);
 
-    let mut get_parameter_stream = 
-      self.parameter_servers.as_ref().unwrap() // TODO: How to get rid of this unwrap??
-        .get_parameters_server.receive_request_stream();
-    pin_mut!(get_parameter_stream);
+    // borrow checker:
+    // We must move the servers to this scope so that we can keep refs to
+    // them over the rest of the function. 
+    let get_parameters_server_opt = self.parameter_servers.take()
+      .map(|ParameterServers{get_parameters_server,..}| get_parameters_server );
+    let mut get_parameter_stream_opt = 
+      get_parameters_server_opt.as_ref().map(|s| s.receive_request_stream());
+    //pin_mut!(get_parameter_stream_opt);
 
     loop {
       futures::select! {
@@ -163,8 +167,19 @@ impl Spinner {
           break;
         }
 
-        get_parameter_request =  get_parameter_stream.select_next_some().fuse() => {
+        get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
           todo!()
+          // let (req_id, req) = get_parameter_request;
+          // let values = {
+          //   let param_db = self.parameters.lock().unwrap();
+          //   get_parameter_request.names.iter()
+          //     .map(|name| param_db.get(&name)
+          //       .unwrap_or(ParameterValue::Notset))
+          //     .map(raw::ParameterValue::from)
+          //     .collect();
+          // };
+          // get_parameters_server_opt.unwrap()
+          //   .async_send_response(req_id, GetParametersResponse{ values })
         }
 
         participant_info_update = ros_discovery_stream.select_next_some() => {

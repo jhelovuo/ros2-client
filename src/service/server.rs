@@ -131,7 +131,7 @@ where
   pub fn receive_request_stream(
     &self,
   ) -> impl Stream<Item = ReadResult<(RmwRequestId, S::Request)>> + FusedStream + '_ {
-    Box::pin(self.request_receiver.as_async_stream()).then(
+    Box::pin(self.request_receiver.as_async_stream().then(
       move |dcc_r| async move {
         match dcc_r {
           Err(e) => Err(e),
@@ -142,7 +142,7 @@ where
           }
         } // match
       }, // async
-    )
+    ))
   }
 
   /// Asynchronous response sending
