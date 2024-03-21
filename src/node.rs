@@ -1,7 +1,7 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
   sync::{Arc, Mutex, atomic, atomic::AtomicBool,},
-  pin::Pin,
+  //pin::Pin,
 };
 
 use futures::{pin_mut, FutureExt, StreamExt, stream, Stream};
@@ -168,18 +168,20 @@ impl Spinner {
         }
 
         get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
-          todo!()
-          // let (req_id, req) = get_parameter_request;
-          // let values = {
-          //   let param_db = self.parameters.lock().unwrap();
-          //   get_parameter_request.names.iter()
-          //     .map(|name| param_db.get(&name)
-          //       .unwrap_or(ParameterValue::Notset))
-          //     .map(raw::ParameterValue::from)
-          //     .collect();
-          // };
-          // get_parameters_server_opt.unwrap()
-          //   .async_send_response(req_id, GetParametersResponse{ values })
+          let (req_id, req) = get_parameter_request.unwrap().unwrap(); // ???
+          let values = {
+            let param_db = self.parameters.lock().unwrap();
+            req.names.iter()
+              .map(|name| param_db.get(name.as_str())
+                .unwrap_or(&ParameterValue::NotSet))
+              .cloned()
+              .map( raw::ParameterValue::from)
+              .collect()
+          };
+          get_parameters_server_opt.as_ref().unwrap() // safe?
+            .async_send_response(req_id, rcl_interfaces::GetParametersResponse{ values })
+            .await
+            .unwrap_or_else(|e| warn!("GetParameter response error {e:?}"));
         }
 
         participant_info_update = ros_discovery_stream.select_next_some() => {

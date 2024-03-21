@@ -10,6 +10,7 @@ pub struct Parameter {
 
 /// Rust-like representation of ROS2
 /// [ParameterValue](https://github.com/ros2/rcl_interfaces/blob/master/rcl_interfaces/msg/ParameterValue.msg)
+#[derive(Debug, Clone)]
 pub enum ParameterValue {
   NotSet,
   Boolean(bool),
@@ -55,6 +56,15 @@ impl From<raw::Parameter> for Parameter {
 
 impl From<Parameter> for raw::Parameter {
   fn from(p: Parameter) -> raw::Parameter {
+    raw::Parameter {
+      name: p.name,
+      value: p.value.into(),
+    }
+  }
+}
+
+impl From<ParameterValue> for raw::ParameterValue {
+  fn from(p: ParameterValue) -> raw::ParameterValue {
     let mut value = raw::ParameterValue {
       ptype: raw::ParameterType::NOT_SET,
       boolean_value: false,
@@ -67,7 +77,7 @@ impl From<Parameter> for raw::Parameter {
       double_array: Vec::new(),
       string_array: Vec::new(),
     };
-    match p.value {
+    match p {
       ParameterValue::NotSet => (), // already there
       ParameterValue::Boolean(b) => {
         value.ptype = raw::ParameterType::BOOL;
@@ -106,12 +116,9 @@ impl From<Parameter> for raw::Parameter {
         value.string_array = a;
       }
     }
-
-    raw::Parameter {
-      name: p.name,
-      value,
-    }
+    value
   }
+
 }
 
 // This submodule contains raw, ROS2 -compatible Parameters.
