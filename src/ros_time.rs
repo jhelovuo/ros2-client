@@ -62,6 +62,19 @@ impl ROSTime {
   }
 }
 
+impl From<chrono::DateTime<Utc>> for ROSTime {
+  fn from(chrono_time: chrono::DateTime<Utc>) -> ROSTime {
+    ROSTime{ chrono_time }
+  }
+}
+
+impl From<ROSTime> for chrono::DateTime<Utc> {
+  fn from(rt: ROSTime) -> chrono::DateTime<Utc> {
+    rt.chrono_time
+  }
+}
+
+
 impl Sub for ROSTime {
   type Output = ROSDuration;
 
@@ -151,3 +164,5 @@ impl Sub for ROSDuration {
 pub struct SystemTime {
   ros_time: ROSTime,
 }
+
+//TODO: implementation missing
