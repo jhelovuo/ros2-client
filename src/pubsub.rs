@@ -3,7 +3,7 @@ use std::io;
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 use futures::{
   pin_mut,
-  stream::{FusedStream, Stream, StreamExt},
+  stream::{FusedStream, StreamExt},
 };
 use rustdds::{
   dds::{ReadError, ReadResult, WriteResult},
@@ -124,9 +124,7 @@ impl<M: 'static + DeserializeOwned> Subscription<M> {
   }
 
   // Returns an async Stream of messages with MessageInfo metadata
-  pub fn async_stream(
-    &self,
-  ) -> impl Stream<Item = ReadResult<(M, MessageInfo)>> + FusedStream + '_ {
+  pub fn async_stream(&self) -> impl FusedStream<Item = ReadResult<(M, MessageInfo)>> + '_ {
     self
       .datareader
       .as_async_stream()

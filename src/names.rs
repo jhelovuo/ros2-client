@@ -411,7 +411,7 @@ fn test_name() {
   assert!(Name::new("a", "b_b").is_ok()); // may contain [...] underscores (_), [...]
   assert!(Name::new("a", "b__b").is_err()); // must not contain any number of repeated underscores (_)
   assert!(Name::new("a2//a", "b").is_err()); // must not contain any number of
-                                               // repeated forward slashes (/)
+                                             // repeated forward slashes (/)
 }
 
 #[test]

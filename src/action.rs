@@ -14,7 +14,7 @@ use builtin_interfaces::Time;
 use log::{debug, error, info, warn};
 use futures::{
   pin_mut,
-  stream::{FusedStream, Stream, StreamExt},
+  stream::{FusedStream, StreamExt},
   Future,
 };
 
@@ -398,7 +398,7 @@ where
   pub fn feedback_stream(
     &self,
     goal_id: GoalId,
-  ) -> impl Stream<Item = ReadResult<A::FeedbackType>> + FusedStream + '_
+  ) -> impl FusedStream<Item = ReadResult<A::FeedbackType>> + '_
   where
     <A as ActionTypes>::FeedbackType: 'static,
   {
@@ -439,7 +439,7 @@ where
   /// Action server send updates containing status of all goals, hence an array.
   pub fn all_statuses_stream(
     &self,
-  ) -> impl Stream<Item = ReadResult<action_msgs::GoalStatusArray>> + FusedStream + '_ {
+  ) -> impl FusedStream<Item = ReadResult<action_msgs::GoalStatusArray>> + '_ {
     self
       .my_status_subscription
       .async_stream()
@@ -449,7 +449,7 @@ where
   pub fn status_stream(
     &self,
     goal_id: GoalId,
-  ) -> impl Stream<Item = ReadResult<action_msgs::GoalStatus>> + FusedStream + '_ {
+  ) -> impl FusedStream<Item = ReadResult<action_msgs::GoalStatus>> + '_ {
     self
       .all_statuses_stream()
       .filter_map(move |result| async move {

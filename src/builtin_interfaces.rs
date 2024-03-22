@@ -53,8 +53,6 @@ impl Time {
     (self.sec as i64) * 1_000_000_000 + (self.nanosec as i64)
   }
 }
- 
-
 
 // TODO: Implement constructors and conversions to/from usual Rust time formats
 // Note that this type does not specify a zero point in time.
@@ -89,7 +87,7 @@ impl Message for Duration {}
 
 impl Duration {
   pub const fn zero() -> Self {
-    Self{ sec:0, nanosec:0 }
+    Self { sec: 0, nanosec: 0 }
   }
 
   pub const fn from_secs(sec: i32) -> Self {
@@ -163,5 +161,3 @@ impl Duration {
     1_000_000_000 * s + ns
   }
 }
-
-

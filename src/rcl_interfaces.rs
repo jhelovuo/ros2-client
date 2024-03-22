@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Message, service::AService, parameters};
+use crate::{parameters, service::AService, Message};
 
-
-pub type ListParametersService = AService<ListParametersRequest,ListParametersResponse>;
+pub type ListParametersService = AService<ListParametersRequest, ListParametersResponse>;
 
 pub type GetParametersService = AService<GetParametersRequest, GetParametersResponse>;
 
@@ -13,13 +12,11 @@ pub type SetParametersService = AService<SetParametersRequest, SetParametersResp
 // type GetParameterTypesService = (); // TODO
 // type SetParametersAtomicallyService = (); // TODO
 
-
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListParametersRequest {
-  pub DEPTH_RECURSIVE: u64,
   pub prefixes: Vec<String>,
-  pub depth: u64,
+  pub depth: u64, //
 }
 impl Message for ListParametersRequest {}
 
@@ -36,8 +33,6 @@ pub struct ListParametersResponse {
 }
 impl Message for ListParametersResponse {}
 
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetParametersRequest {
   pub names: Vec<String>,
@@ -49,8 +44,6 @@ pub struct GetParametersResponse {
   pub values: Vec<parameters::raw::ParameterValue>,
 }
 impl Message for GetParametersResponse {}
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetParametersRequest {

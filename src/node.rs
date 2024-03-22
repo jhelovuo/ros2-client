@@ -1,10 +1,10 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::{Arc, Mutex, atomic, atomic::AtomicBool,},
+  sync::{atomic, atomic::AtomicBool, Arc, Mutex},
   //pin::Pin,
 };
 
-use futures::{pin_mut, FutureExt, StreamExt, stream, Stream, stream::FusedStream};
+use futures::{pin_mut, stream::FusedStream, FutureExt, Stream, StreamExt};
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -13,7 +13,6 @@ use rustdds::{dds::CreateResult, *};
 
 use crate::{
   action::*,
-  ros_time::ROSTime,
   context::Context,
   entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
@@ -23,6 +22,7 @@ use crate::{
   parameters::*,
   pubsub::{Publisher, Subscription},
   rcl_interfaces,
+  ros_time::ROSTime,
   service::{Client, Server, Service, ServiceMapping},
 };
 
@@ -95,13 +95,11 @@ pub enum NodeEvent {
   ROS(ParticipantEntitiesInfo),
 }
 
-
 struct ParameterServers {
   get_parameters_server: Server<rcl_interfaces::GetParametersService>,
   list_parameters_server: Server<rcl_interfaces::ListParametersService>,
   set_parameters_server: Server<rcl_interfaces::SetParametersService>,
 }
-
 
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
@@ -124,23 +122,22 @@ pub struct Spinner {
   use_sim_time: Arc<AtomicBool>,
   sim_time: Arc<Mutex<ROSTime>>,
 
-  
   parameter_servers: Option<ParameterServers>,
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
 }
 
 async fn next_if_some<S>(s: &mut Option<S>) -> S::Item
 where
-    S: Stream + Unpin + FusedStream
+  S: Stream + Unpin + FusedStream,
 {
-    match s.as_mut() {
-        Some(stream) => stream.select_next_some().await,
-        None => std::future::pending().await,
-    }
+  match s.as_mut() {
+    Some(stream) => stream.select_next_some().await,
+    None => std::future::pending().await,
+  }
 }
 
 impl Spinner {
-  pub async fn spin(mut self) -> CreateResult<()> {
+  pub async fn spin(self) -> CreateResult<()> {
     let dds_status_listener = self.ros_context.domain_participant().status_listener();
     let dds_status_stream = dds_status_listener.as_async_status_stream();
     pin_mut!(dds_status_stream);
@@ -153,13 +150,19 @@ impl Spinner {
     pin_mut!(ros_discovery_stream);
 
     // These are Option< impl Stream<_>>
-    let mut get_parameter_stream_opt = 
-      self.parameter_servers.as_ref().map(|s| s.get_parameters_server.receive_request_stream());
-    let mut set_parameter_stream_opt = 
-      self.parameter_servers.as_ref().map(|s| s.set_parameters_server.receive_request_stream());
-    let mut list_parameter_stream_opt = 
-      self.parameter_servers.as_ref().map(|s| s.list_parameters_server.receive_request_stream());
-    
+    let mut get_parameter_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.get_parameters_server.receive_request_stream());
+    let mut set_parameter_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.set_parameters_server.receive_request_stream());
+    let mut list_parameter_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.list_parameters_server.receive_request_stream());
+
     loop {
       futures::select! {
         _ = self.stop_spin_receiver.recv().fuse() => {
@@ -224,8 +227,8 @@ impl Spinner {
               // What should we put into `prefixes` ?
               let names = {
                 let param_db = self.parameters.lock().unwrap();
-                param_db.iter()
-                  .filter_map(|(name,param)| 
+                param_db.keys()
+                  .filter_map(|name|
                     if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
                       Some(name.clone())
                     } else { None }
@@ -330,7 +333,6 @@ pub enum ParameterError {
   InvalidName,
 }
 
-
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
 /// parameter events topics internally.
 ///
@@ -365,7 +367,7 @@ pub struct Node {
   // builtin writers and readers
   rosout_writer: Option<Publisher<Log>>,
   rosout_reader: Option<Subscription<Log>>,
-  
+
   // Parameter Topics and Services
   parameter_events_writer: Publisher<raw::ParameterEvent>,
 
@@ -373,7 +375,7 @@ pub struct Node {
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
 
   // simulated ROSTime
-  use_sim_time : Arc<AtomicBool>,
+  use_sim_time: Arc<AtomicBool>,
   sim_time: Arc<Mutex<ROSTime>>,
 }
 
@@ -424,10 +426,10 @@ impl Node {
 
   /// Return the ROSTime
   ///
-  /// It is either the system clock time 
+  /// It is either the system clock time
   pub fn time_now(&self) -> ROSTime {
     if self.use_sim_time.load(atomic::Ordering::Relaxed) {
-      self.sim_time.lock().unwrap().clone()
+      *self.sim_time.lock().unwrap()
     } else {
       ROSTime::now()
     }
@@ -436,7 +438,6 @@ impl Node {
   pub fn time_now_not_simulated(&self) -> ROSTime {
     ROSTime::now()
   }
-
 
   /// Create a Spinner object to execute Node backround tasks.
   ///
@@ -463,39 +464,38 @@ impl Node {
 
     let node_name = self.node_name.fully_qualified_name();
 
-    let parameter_servers = 
-      if self.options.start_parameter_services {
-        let service_mapping = ServiceMapping::Enhanced; //TODO: parameterize
-        let get_parameters_server = self.create_server(
-          service_mapping,
-          &Name::new(&node_name, "get_parameters").unwrap(),
-          &ServiceTypeName::new("rcl_interfaces", "GetParameters"),
-          service_qos.clone(),
-          service_qos.clone(),
-        )?;
-        let set_parameters_server = self.create_server(
-          service_mapping,
-          &Name::new(&node_name, "set_parameters").unwrap(),
-          &ServiceTypeName::new("rcl_interfaces", "SetParameters"),
-          service_qos.clone(),
-          service_qos.clone(),
-        )?;
-        let list_parameters_server = self.create_server(
-          service_mapping,
-          &Name::new(&node_name, "list_parameters").unwrap(),
-          &ServiceTypeName::new("rcl_interfaces", "ListParameters"),
-          service_qos.clone(),
-          service_qos.clone(),
-        )?;
+    let parameter_servers = if self.options.start_parameter_services {
+      let service_mapping = ServiceMapping::Enhanced; //TODO: parameterize
+      let get_parameters_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "get_parameters").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "GetParameters"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
+      let set_parameters_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "set_parameters").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "SetParameters"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
+      let list_parameters_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "list_parameters").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "ListParameters"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
 
-        Some( ParameterServers {
-          get_parameters_server,
-          list_parameters_server,
-          set_parameters_server,
-        } )
-      } else { 
-        None // No parameter services
-      };
+      Some(ParameterServers {
+        get_parameters_server,
+        list_parameters_server,
+        set_parameters_server,
+      })
+    } else {
+      None // No parameter services
+    };
 
     Ok(Spinner {
       ros_context: self.ros_context.clone(),
@@ -507,7 +507,7 @@ impl Node {
       use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
       parameter_servers,
-      parameters: Arc::clone( &self.parameters ),
+      parameters: Arc::clone(&self.parameters),
     })
   }
 
@@ -566,39 +566,48 @@ impl Node {
 
   /// Declare and initialize a parameter.
   ///
-  /// The Parameter is initialized to the value configured at run time, or if there
-  /// is no such configuration, the default value given as argument.
+  /// The Parameter is initialized to the value configured at run time, or if
+  /// there is no such configuration, the default value given as argument.
   ///
   /// The resulting parameter value is returned.
-  pub fn declare_parameter(&self, name: &str, default: ParameterValue) 
-    -> Result<&ParameterValue, ParameterError>
-  {
-    todo!()
+  pub fn declare_parameter<'a>(
+    &self,
+    name: &str,
+    default: &'a ParameterValue,
+  ) -> Result<&'a ParameterValue, ParameterError> {
+    let mut param_db = self.parameters.lock().unwrap();
+    if param_db.contains_key(name) {
+      Err(ParameterError::AlreadyDeclared)
+    } else {
+      // TODO: Where do we get the non-default value?
+      param_db.insert(name.to_owned(), default.clone());
+      Ok(default)
+    }
   }
 
-  pub fn undeclare_parameter(&self, name: &str) {
+  pub fn undeclare_parameter(&self, _name: &str) {
     todo!()
   }
 
   /// Does the parameter exist?
-  pub fn has_parameter(&self, name: &str) -> bool {
+  pub fn has_parameter(&self, _name: &str) -> bool {
     todo!()
   }
 
   /// Sets a parameter value. Parameter must be decalred before setting.
-  pub fn set_parameter(&self, name: &str, value: ParameterValue) 
-    -> Result<(),String> 
-  {
+  pub fn set_parameter(&self, _name: &str, _value: ParameterValue) -> Result<(), String> {
     todo!()
   }
 
   /// Gets the value of a parameter, or None is there is no such Parameter.
-  pub fn get_parameter(&self, name: &str) -> Option<&ParameterValue> {
+  pub fn get_parameter(&self, _name: &str) -> Option<&ParameterValue> {
     todo!()
   }
 
-  pub fn list_parameters<'a,'b>(&'a self, prefixes: impl Iterator<Item=&'b str>) 
-    -> Box<dyn Iterator<Item=&'a str>> {
+  pub fn list_parameters<'a, 'b>(
+    &'a self,
+    _prefixes: impl Iterator<Item = &'b str>,
+  ) -> Box<dyn Iterator<Item = &'a str>> {
     todo!()
   }
 

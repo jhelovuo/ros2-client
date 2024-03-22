@@ -1,7 +1,3 @@
-
-
-
-
 /// Rust-like representation of ROS2 Parameter
 pub struct Parameter {
   pub name: String,
@@ -118,7 +114,6 @@ impl From<ParameterValue> for raw::ParameterValue {
     }
     value
   }
-
 }
 
 // This submodule contains raw, ROS2 -compatible Parameters.
