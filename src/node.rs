@@ -4,7 +4,7 @@ use std::{
   //pin::Pin,
 };
 
-use futures::{pin_mut, FutureExt, StreamExt, stream, Stream};
+use futures::{pin_mut, FutureExt, StreamExt, stream, Stream, stream::FusedStream};
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -129,12 +129,12 @@ pub struct Spinner {
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
 }
 
-async fn next_if_some<S>(s: &mut Option<S>) -> Option<S::Item>
+async fn next_if_some<S>(s: &mut Option<S>) -> S::Item
 where
-    S: Stream + Unpin
+    S: Stream + Unpin + FusedStream
 {
     match s.as_mut() {
-        Some(stream) => stream.next().await,
+        Some(stream) => stream.select_next_some().await,
         None => std::future::pending().await,
     }
 }
@@ -165,23 +165,51 @@ impl Spinner {
         }
 
         get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
-          let (req_id, req) = get_parameter_request.unwrap().unwrap(); // ???
-          let values = {
-            let param_db = self.parameters.lock().unwrap();
-            req.names.iter()
-              .map(|name| param_db.get(name.as_str())
-                .unwrap_or(&ParameterValue::NotSet))
-              .cloned()
-              .map( raw::ParameterValue::from)
-              .collect()
-          };
-          self.parameter_servers.as_ref().unwrap().get_parameters_server
-          //get_parameters_server_opt.as_ref().unwrap() // safe?
-            .async_send_response(req_id, rcl_interfaces::GetParametersResponse{ values })
-            .await
-            .unwrap_or_else(|e| warn!("GetParameter response error {e:?}"));
+          match get_parameter_request {
+            Ok( (req_id, req) ) => {
+              let values = {
+                let param_db = self.parameters.lock().unwrap();
+                req.names.iter()
+                  .map(|name| param_db.get(name.as_str())
+                    .unwrap_or(&ParameterValue::NotSet))
+                  .cloned()
+                  .map( raw::ParameterValue::from)
+                  .collect()
+              };
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().get_parameters_server
+                .async_send_response(req_id, rcl_interfaces::GetParametersResponse{ values })
+                .await
+                .unwrap_or_else(|e| warn!("GetParameter response error {e:?}"));
+            }
+            Err(e) => warn!("GetParameter request error {e:?}"),
+          }
         }
 
+        set_parameter_request = next_if_some(&mut set_parameter_stream_opt).fuse() => {
+          match set_parameter_request {
+            Ok( (req_id, req) ) => {
+              let results = {
+                let mut param_db = self.parameters.lock().unwrap();
+                req.parameter.iter()
+                  .cloned()
+                  .map( Parameter::from ) // convert from "raw::Parameter"
+                  .map( |p| {
+                    param_db.insert( p.name , p.value );
+                    // TODO: Implement callback to check on parameter setting
+                    raw::SetParametersResult{ successful: true, reason: "".to_string() }
+                  })
+                  .collect()
+              };
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().set_parameters_server
+                .async_send_response(req_id, rcl_interfaces::SetParametersResponse{ results })
+                .await
+                .unwrap_or_else(|e| warn!("SetParameters response error {e:?}"));
+            }
+            Err(e) => warn!("SetParameters request error {e:?}"),
+          }
+        }
         participant_info_update = ros_discovery_stream.select_next_some() => {
           //println!("{:?}", participant_info_update);
           match participant_info_update {
