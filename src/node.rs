@@ -157,6 +157,8 @@ impl Spinner {
       self.parameter_servers.as_ref().map(|s| s.get_parameters_server.receive_request_stream());
     let mut set_parameter_stream_opt = 
       self.parameter_servers.as_ref().map(|s| s.set_parameters_server.receive_request_stream());
+    let mut list_parameter_stream_opt = 
+      self.parameter_servers.as_ref().map(|s| s.list_parameters_server.receive_request_stream());
     
     loop {
       futures::select! {
@@ -195,6 +197,9 @@ impl Spinner {
                   .cloned()
                   .map( Parameter::from ) // convert from "raw::Parameter"
                   .map( |p| {
+                    // TODO: Observe option allow_undeclared_parameters: if this is false,
+                    // then we shoudl reject any set attempts to kunknown parameters
+                    // TODO: Should we reject any update that attempts to change the type of parameter?
                     param_db.insert( p.name , p.value );
                     // TODO: Implement callback to check on parameter setting
                     raw::SetParametersResult{ successful: true, reason: "".to_string() }
@@ -210,6 +215,34 @@ impl Spinner {
             Err(e) => warn!("SetParameters request error {e:?}"),
           }
         }
+
+        list_parameter_request = next_if_some(&mut list_parameter_stream_opt).fuse() => {
+          match list_parameter_request {
+            Ok( (req_id, req) ) => {
+              let prefixes = req.prefixes;
+              // TODO: We only generate the "names" part of the ListParametersResponse
+              // What should we put into `prefixes` ?
+              let names = {
+                let param_db = self.parameters.lock().unwrap();
+                param_db.iter()
+                  .filter_map(|(name,param)| 
+                    if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+                      Some(name.clone())
+                    } else { None }
+                  )
+                  .collect()
+              };
+              let result = rcl_interfaces::ListParametersResult{ names, prefixes: vec![] };
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().list_parameters_server
+                .async_send_response(req_id, rcl_interfaces::ListParametersResponse{ result })
+                .await
+                .unwrap_or_else(|e| warn!("ListParameter response error {e:?}"));
+            }
+            Err(e) => warn!("ListParameter request error {e:?}"),
+          }
+        }
+
         participant_info_update = ros_discovery_stream.select_next_some() => {
           //println!("{:?}", participant_info_update);
           match participant_info_update {
