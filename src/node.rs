@@ -1,7 +1,6 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::{atomic, atomic::AtomicBool, Arc, Mutex},
-  //pin::Pin,
+  sync::{ Arc, Mutex},
 };
 
 use futures::{pin_mut, stream::FusedStream, FutureExt, Stream, StreamExt};
@@ -13,7 +12,8 @@ use rustdds::{dds::CreateResult, *};
 
 use crate::{
   action::*,
-  context::Context,
+  builtin_interfaces,
+  context::{Context, DEFAULT_SUBSCRIPTION_QOS},
   entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
   log as ros_log,
@@ -119,8 +119,9 @@ pub struct Spinner {
 
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 
-  use_sim_time: Arc<AtomicBool>,
+  //use_sim_time: Arc<AtomicBool>,
   sim_time: Arc<Mutex<ROSTime>>,
+  clock_topic: Topic,
 
   parameter_servers: Option<ParameterServers>,
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
@@ -149,6 +150,12 @@ impl Spinner {
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     pin_mut!(ros_discovery_stream);
 
+    let ros_clock_reader = self
+      .ros_context
+      .create_subscription::<builtin_interfaces::Time>(&self.clock_topic, None)?;
+    let ros_clock_stream = ros_clock_reader.async_stream();
+    pin_mut!(ros_clock_stream);
+
     // These are Option< impl Stream<_>>
     let mut get_parameter_stream_opt = self
       .parameter_servers
@@ -168,6 +175,18 @@ impl Spinner {
         _ = self.stop_spin_receiver.recv().fuse() => {
           break;
         }
+
+        clock_msg = ros_clock_stream.select_next_some() => {
+          match clock_msg {
+            Ok((time,_msg_info)) => {
+              // Simulated time is updated internally unconditionally.
+              // The logic in Node decides if it is used.
+              *self.sim_time.lock().unwrap() = time.into();
+            }
+            Err(e) => warn!("Simulated clock receive error {e:?}")
+          }
+        }
+
 
         get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
           match get_parameter_request {
@@ -375,7 +394,7 @@ pub struct Node {
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
 
   // simulated ROSTime
-  use_sim_time: Arc<AtomicBool>,
+  use_sim_time: bool,
   sim_time: Arc<Mutex<ROSTime>>,
 }
 
@@ -419,7 +438,7 @@ impl Node {
       rosout_reader,
       parameter_events_writer,
       parameters: Arc::new(Mutex::new(BTreeMap::new())),
-      use_sim_time: Arc::new(AtomicBool::new(false)),
+      use_sim_time: false,
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
     })
   }
@@ -428,7 +447,7 @@ impl Node {
   ///
   /// It is either the system clock time
   pub fn time_now(&self) -> ROSTime {
-    if self.use_sim_time.load(atomic::Ordering::Relaxed) {
+    if self.use_sim_time {
       *self.sim_time.lock().unwrap()
     } else {
       ROSTime::now()
@@ -497,6 +516,12 @@ impl Node {
       None // No parameter services
     };
 
+    let clock_topic = self
+      .create_topic(
+        &Name::new("","clock").unwrap(), 
+        MessageTypeName::new("builtin_interfaces","Time"), 
+        &DEFAULT_SUBSCRIPTION_QOS)?;
+
     Ok(Spinner {
       ros_context: self.ros_context.clone(),
       stop_spin_receiver,
@@ -504,8 +529,8 @@ impl Node {
       writers_to_remote_readers: Arc::clone(&self.writers_to_remote_readers),
       external_nodes: Arc::clone(&self.external_nodes),
       status_event_senders: Arc::clone(&self.status_event_senders),
-      use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
+      clock_topic,
       parameter_servers,
       parameters: Arc::clone(&self.parameters),
     })
@@ -779,18 +804,8 @@ impl Node {
     type_name: MessageTypeName,
     qos: &QosPolicies,
   ) -> CreateResult<Topic> {
-    //let dds_name = Self::check_name_and_add_prefix("rt/", topic_name)?;
     let dds_name = topic_name.to_dds_name("rt", &self.node_name, "");
-    info!("Creating topic, DDS name: {}", dds_name);
-    let topic = self.ros_context.domain_participant().create_topic(
-      dds_name,
-      type_name.dds_msg_type(),
-      qos,
-      TopicKind::NoKey,
-    )?;
-    // ROS2 does not use WithKey topics, so always NoKey
-    info!("Created topic");
-    Ok(topic)
+    self.ros_context.create_topic(dds_name, type_name, qos)
   }
 
   /// Creates ROS2 Subscriber

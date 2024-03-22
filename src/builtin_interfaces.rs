@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use log::error;
 
-use crate::message::Message;
+use crate::{
+  message::Message,
+  ros_time::ROSTime,
+};
 
 // https://index.ros.org/p/builtin_interfaces/
 //
@@ -51,6 +54,23 @@ impl Time {
 
   pub fn to_nanos(&self) -> i64 {
     (self.sec as i64) * 1_000_000_000 + (self.nanosec as i64)
+  }
+}
+
+
+// NOTE:
+// This may panic, if the source ROSTime is unreasonably far in the past or future.
+// If this is not ok, then TryFrom should be implemented and used.
+impl From<ROSTime> for Time {
+  fn from(rt: ROSTime) -> Time {
+    Time::from_nanos( rt.to_nanos().unwrap() )
+  }
+}
+
+
+impl From<Time> for ROSTime {
+  fn from(t: Time) -> ROSTime {
+    ROSTime::from_nanos( t.to_nanos() )
   }
 }
 

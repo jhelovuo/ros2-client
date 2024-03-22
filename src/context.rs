@@ -21,7 +21,7 @@ use crate::{
   builtin_topics,
   entities_info::{NodeEntitiesInfo, ParticipantEntitiesInfo},
   gid::Gid,
-  names::NodeName,
+  names::*,
   node::{Node, NodeOptions},
   pubsub::{Publisher, Subscription},
 };
@@ -210,6 +210,24 @@ impl Context {
   // }
 
   // -----------------------------------------------------------------------
+
+  pub fn create_topic(
+    &self,
+    topic_dds_name: String,
+    type_name: MessageTypeName,
+    qos: &QosPolicies,
+  ) -> CreateResult<Topic> {
+    info!("Creating topic, DDS name: {}", topic_dds_name);
+    let topic = self.domain_participant().create_topic(
+      topic_dds_name,
+      type_name.dds_msg_type(),
+      qos,
+      TopicKind::NoKey,
+    )?;
+    // ROS2 does not use WithKey topics, so always NoKey
+    info!("Created topic");
+    Ok(topic)
+  }
 
   pub(crate) fn create_publisher<M>(
     &self,
