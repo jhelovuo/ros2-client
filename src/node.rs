@@ -152,15 +152,12 @@ impl Spinner {
     let ros_discovery_stream = ros_discovery_reader.async_stream();
     pin_mut!(ros_discovery_stream);
 
-    // borrow checker:
-    // We must move the servers to this scope so that we can keep refs to
-    // them over the rest of the function. 
-    let get_parameters_server_opt = self.parameter_servers.take()
-      .map(|ParameterServers{get_parameters_server,..}| get_parameters_server );
+    // These are Option< impl Stream<_>>
     let mut get_parameter_stream_opt = 
-      get_parameters_server_opt.as_ref().map(|s| s.receive_request_stream());
-    //pin_mut!(get_parameter_stream_opt);
-
+      self.parameter_servers.as_ref().map(|s| s.get_parameters_server.receive_request_stream());
+    let mut set_parameter_stream_opt = 
+      self.parameter_servers.as_ref().map(|s| s.set_parameters_server.receive_request_stream());
+    
     loop {
       futures::select! {
         _ = self.stop_spin_receiver.recv().fuse() => {
@@ -178,7 +175,8 @@ impl Spinner {
               .map( raw::ParameterValue::from)
               .collect()
           };
-          get_parameters_server_opt.as_ref().unwrap() // safe?
+          self.parameter_servers.as_ref().unwrap().get_parameters_server
+          //get_parameters_server_opt.as_ref().unwrap() // safe?
             .async_send_response(req_id, rcl_interfaces::GetParametersResponse{ values })
             .await
             .unwrap_or_else(|e| warn!("GetParameter response error {e:?}"));
