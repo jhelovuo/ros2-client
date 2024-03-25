@@ -23,6 +23,7 @@ use crate::{
   gid::Gid,
   names::*,
   node::{Node, NodeOptions},
+  NodeCreateError,
   pubsub::{Publisher, Subscription},
 };
 
@@ -159,7 +160,7 @@ impl Context {
   }
 
   /// Create a new ROS2 [`Node`]
-  pub fn new_node(&self, node_name: NodeName, options: NodeOptions) -> CreateResult<Node> {
+  pub fn new_node(&self, node_name: NodeName, options: NodeOptions) -> Result<Node, NodeCreateError> {
     Node::new(node_name, options, self.clone())
   }
 

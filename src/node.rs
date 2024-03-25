@@ -1,6 +1,6 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::{ Arc, Mutex},
+  sync::{ Arc, Mutex, atomic::{AtomicBool, Ordering}},
 };
 
 use futures::{pin_mut, stream::FusedStream, FutureExt, Stream, StreamExt};
@@ -8,7 +8,7 @@ use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
-use rustdds::{dds::CreateResult, *};
+use rustdds::{dds::CreateError, dds::CreateResult, *};
 
 use crate::{
   action::*,
@@ -37,10 +37,8 @@ pub struct NodeOptions {
   enable_rosout: bool, // use rosout topic for logging?
   enable_rosout_reading: bool,
   start_parameter_services: bool,
-  #[allow(dead_code)]
-  parameter_overrides: Vec<Parameter>,
+  declared_parameters: Vec<Parameter>,
   allow_undeclared_parameters: bool,
-  automatically_declare_parameters_from_overrides: bool,
   // The NodeOptions struct does not contain
   // node_name, context, or namespace, because
   // they ae always needed and have no reasonable default.
@@ -57,9 +55,8 @@ impl NodeOptions {
       enable_rosout: true,
       enable_rosout_reading: false,
       start_parameter_services: true,
-      parameter_overrides: Vec::new(),
+      declared_parameters: Vec::new(),
       allow_undeclared_parameters: false,
-      automatically_declare_parameters_from_overrides: false,
     }
   }
   pub fn enable_rosout(self, enable_rosout: bool) -> NodeOptions {
@@ -75,6 +72,13 @@ impl NodeOptions {
       ..self
     }
   }
+
+  pub fn declare_parameter(mut self, new_parameter: Parameter) -> NodeOptions {
+    self.declared_parameters.push(new_parameter);
+    // TODO: check for duplicate parameter names
+    self
+  }
+
 }
 
 impl Default for NodeOptions {
@@ -94,6 +98,7 @@ pub enum NodeEvent {
 
 struct ParameterServers {
   get_parameters_server: Server<rcl_interfaces::GetParametersService>,
+  get_parameter_types_server: Server<rcl_interfaces::GetParameterTypesService>,
   list_parameters_server: Server<rcl_interfaces::ListParametersService>,
   set_parameters_server: Server<rcl_interfaces::SetParametersService>,
 }
@@ -158,6 +163,10 @@ impl Spinner {
       .parameter_servers
       .as_ref()
       .map(|s| s.get_parameters_server.receive_request_stream());
+    let mut get_parameter_types_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.get_parameter_types_server.receive_request_stream());
     let mut set_parameter_stream_opt = self
       .parameter_servers
       .as_ref()
@@ -188,6 +197,7 @@ impl Spinner {
         get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
           match get_parameter_request {
             Ok( (req_id, req) ) => {
+              warn!("Get parameter request");
               let values = {
                 let param_db = self.parameters.lock().unwrap();
                 req.names.iter()
@@ -207,9 +217,33 @@ impl Spinner {
           }
         }
 
+        get_parameter_types_request = next_if_some(&mut get_parameter_types_stream_opt).fuse() => {
+          match get_parameter_types_request {
+            Ok( (req_id, req) ) => {
+              warn!("Get parameter types request");
+              let values = {
+                let param_db = self.parameters.lock().unwrap();
+                req.names.iter()
+                  .map(|name| param_db.get(name.as_str())
+                    .unwrap_or(&ParameterValue::NotSet))
+                  .map( ParameterValue::to_parameter_type_enum )
+                  .collect()
+              };
+              warn!("Get parameter types response: {values:?}");
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().get_parameter_types_server
+                .async_send_response(req_id, rcl_interfaces::GetParameterTypesResponse{ values })
+                .await
+                .unwrap_or_else(|e| warn!("GetParameterTypes response error {e:?}"));
+            }
+            Err(e) => warn!("GetParameterTypes request error {e:?}"),
+          }
+        }
+
         set_parameter_request = next_if_some(&mut set_parameter_stream_opt).fuse() => {
           match set_parameter_request {
             Ok( (req_id, req) ) => {
+              warn!("Set parameter request");
               let results = {
                 let mut param_db = self.parameters.lock().unwrap();
                 req.parameter.iter()
@@ -238,6 +272,7 @@ impl Spinner {
         list_parameter_request = next_if_some(&mut list_parameter_stream_opt).fuse() => {
           match list_parameter_request {
             Ok( (req_id, req) ) => {
+              warn!("List parameters request");
               let prefixes = req.prefixes;
               // TODO: We only generate the "names" part of the ListParametersResponse
               // What should we put into `prefixes` ?
@@ -245,7 +280,9 @@ impl Spinner {
                 let param_db = self.parameters.lock().unwrap();
                 param_db.keys()
                   .filter_map(|name|
-                    if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+                    if prefixes.is_empty() ||
+                      prefixes.iter().any(|prefix| name.starts_with(prefix)) 
+                    {
                       Some(name.clone())
                     } else { None }
                   )
@@ -253,6 +290,7 @@ impl Spinner {
               };
               let result = rcl_interfaces::ListParametersResult{ names, prefixes: vec![] };
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              warn!("List parameters response: {result:?}");
               self.parameter_servers.as_ref().unwrap().list_parameters_server
                 .async_send_response(req_id, rcl_interfaces::ListParametersResponse{ result })
                 .await
@@ -344,6 +382,19 @@ impl Spinner {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
+pub enum NodeCreateError {
+  DDS(CreateError),
+  BadParameter(String),
+}
+
+impl From<CreateError> for NodeCreateError {
+  fn from(c: CreateError) -> NodeCreateError {
+    NodeCreateError::DDS(c)
+  }
+}
+
+
 pub enum ParameterError {
   AlreadyDeclared,
   InvalidName,
@@ -391,16 +442,16 @@ pub struct Node {
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
 
   // simulated ROSTime
-  use_sim_time: bool,
+  use_sim_time: AtomicBool,
   sim_time: Arc<Mutex<ROSTime>>,
 }
 
 impl Node {
   pub(crate) fn new(
     node_name: NodeName,
-    options: NodeOptions,
+    mut options: NodeOptions,
     ros_context: Context,
-  ) -> CreateResult<Node> {
+  ) -> Result<Node, NodeCreateError> {
     let paramtopic = ros_context.get_parameter_events_topic();
     let rosout_topic = ros_context.get_rosout_topic();
 
@@ -420,7 +471,18 @@ impl Node {
 
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
 
-    Ok(Node {
+    // TODO: If there are duplicates, the later one will overwrite the earlier, but
+    // there is no warning or error.
+    options.declared_parameters.push( Parameter {
+      name: "use_sim_time".to_string(), 
+      value:ParameterValue::Boolean(false)
+    });
+    let parameters = options.declared_parameters.iter()
+      .cloned()
+      .map(|Parameter{name,value}| (name,value))
+      .collect::<BTreeMap<String, ParameterValue>>();
+
+    let node = Node {
       node_name,
       options,
       ros_context,
@@ -434,17 +496,28 @@ impl Node {
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
-      parameters: Arc::new(Mutex::new(BTreeMap::new())),
-      use_sim_time: false,
+      parameters: Arc::new(Mutex::new(parameters)),
+      use_sim_time: AtomicBool::new(false),
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
-    })
+    };
+
+    // returns `Err` if some parameter does not validate.
+    node.parameters.lock().unwrap().iter()
+      .try_for_each(|(name,value)| {
+        node.validate_parameter_on_set(name, value)?;
+        node.execute_parameter_set_actions(name,value)?;
+        Ok(())
+      })
+      .map_err(move |s| NodeCreateError::BadParameter(s)) ?;
+
+    Ok(node)
   }
 
   /// Return the ROSTime
   ///
   /// It is either the system clock time
   pub fn time_now(&self) -> ROSTime {
-    if self.use_sim_time {
+    if self.use_sim_time.load(Ordering::SeqCst) {
       *self.sim_time.lock().unwrap()
     } else {
       ROSTime::now()
@@ -489,6 +562,13 @@ impl Node {
         service_qos.clone(),
         service_qos.clone(),
       )?;
+      let get_parameter_types_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "get_parameter_types").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "GetParameterTypes"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
       let set_parameters_server = self.create_server(
         service_mapping,
         &Name::new(&node_name, "set_parameters").unwrap(),
@@ -506,6 +586,7 @@ impl Node {
 
       Some(ParameterServers {
         get_parameters_server,
+        get_parameter_types_server,
         list_parameters_server,
         set_parameters_server,
       })
@@ -515,7 +596,7 @@ impl Node {
 
     let clock_topic = self
       .create_topic(
-        &Name::new("","clock").unwrap(), 
+        &Name::new("/","clock").unwrap(), 
         MessageTypeName::new("builtin_interfaces","Time"), 
         &DEFAULT_SUBSCRIPTION_QOS)?;
 
@@ -584,54 +665,80 @@ impl Node {
   }
 
   // ///////////////////////////////////////////////
-  // Paramteters
-
-  /// Declare and initialize a parameter.
-  ///
-  /// The Parameter is initialized to the value configured at run time, or if
-  /// there is no such configuration, the default value given as argument.
-  ///
-  /// The resulting parameter value is returned.
-  pub fn declare_parameter<'a>(
-    &self,
-    name: &str,
-    default: &'a ParameterValue,
-  ) -> Result<&'a ParameterValue, ParameterError> {
-    let mut param_db = self.parameters.lock().unwrap();
-    if param_db.contains_key(name) {
-      Err(ParameterError::AlreadyDeclared)
-    } else {
-      // TODO: Where do we get the non-default value?
-      param_db.insert(name.to_owned(), default.clone());
-      Ok(default)
-    }
-  }
+  // Parameters
 
   pub fn undeclare_parameter(&self, _name: &str) {
     todo!()
   }
 
   /// Does the parameter exist?
-  pub fn has_parameter(&self, _name: &str) -> bool {
-    todo!()
+  pub fn has_parameter(&self, name: &str) -> bool {
+    self.parameters.lock().unwrap().contains_key(name)
   }
 
-  /// Sets a parameter value. Parameter must be decalred before setting.
-  pub fn set_parameter(&self, _name: &str, _value: ParameterValue) -> Result<(), String> {
-    todo!()
+  /// Sets a parameter value. Parameter must be declared before setting.
+  pub fn set_parameter(&self, name: &str, value: ParameterValue) -> Result<(), String> {
+    if self.options.allow_undeclared_parameters || 
+      self.parameters.lock().unwrap().contains_key(name) 
+    {
+      self.validate_parameter_on_set(name,&value)?;
+      self.execute_parameter_set_actions(name,&value)?;
+      self.parameters.lock().unwrap().insert(name.to_owned(), value); 
+      Ok(())
+    } else {
+      Err("Setting undeclared parameter '".to_owned() + name + "' is not allowed.")
+    }
   }
 
   /// Gets the value of a parameter, or None is there is no such Parameter.
-  pub fn get_parameter(&self, _name: &str) -> Option<&ParameterValue> {
-    todo!()
+  pub fn get_parameter(&self, name: &str) -> Option<ParameterValue> {
+    self.parameters.lock().unwrap()
+      .get(name)
+      .map(|p| p.to_owned() )
   }
 
-  pub fn list_parameters<'a, 'b>(
-    &'a self,
-    _prefixes: impl Iterator<Item = &'b str>,
-  ) -> Box<dyn Iterator<Item = &'a str>> {
-    todo!()
+  pub fn list_parameters(&self) -> Vec<String> {
+    self.parameters.lock().unwrap()
+      .keys()
+      .map(move |k| k.to_owned())
+      .collect::<Vec<_>>()
   }
+
+  fn validate_parameter_on_set(&self, name: &str, value: &ParameterValue) -> Result<(),String> {
+    match name {
+      "use_sim_time" => {
+        match value {
+          ParameterValue::Boolean(_) => Ok(()),
+          _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
+        }
+      }
+      _ => {
+        // TODO: 
+        // invoke app-installed checkers
+        Ok(())
+      }
+    }
+  }
+
+  fn execute_parameter_set_actions(&self, name: &str, value: &ParameterValue) -> Result<(),String> {
+    match name {
+      "use_sim_time" => {
+        match value {
+          ParameterValue::Boolean(s) => {
+            self.use_sim_time.store(*s, Ordering::SeqCst);
+            Ok(())
+          }
+          _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
+        }
+      }
+      _ => {
+        // TODO: invoke app-installed actions
+        Ok(())
+      }
+    }
+
+  }
+
 
   // ///////////////////////////////////////////////////
 

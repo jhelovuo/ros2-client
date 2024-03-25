@@ -4,6 +4,7 @@
 //! [Node to Participant mapping](https://design.ros2.org/articles/Node_to_Participant_mapping.html)
 
 use std::convert::TryFrom;
+use log::error;
 
 use serde::{Deserialize, Serialize};
 
@@ -100,7 +101,11 @@ impl TryFrom<repr::NodeEntitiesInfo> for NodeEntitiesInfo {
   type Error = NameError;
 
   fn try_from(r: repr::NodeEntitiesInfo) -> Result<NodeEntitiesInfo, NameError> {
-    let name = NodeName::new(&r.node_namespace, &r.node_name)?;
+    let name = NodeName::new(&r.node_namespace, &r.node_name)
+      .map_err(|e| {
+        error!("Offending node name:  namespace={:?} name={:?}", r.node_namespace, r.node_name); 
+        e
+      })?;
     Ok(NodeEntitiesInfo {
       name,
       reader_gid_seq: r.reader_gid_seq,

@@ -6,6 +6,8 @@ pub type ListParametersService = AService<ListParametersRequest, ListParametersR
 
 pub type GetParametersService = AService<GetParametersRequest, GetParametersResponse>;
 
+pub type GetParameterTypesService = AService<GetParameterTypesRequest, GetParameterTypesResponse>;
+
 pub type SetParametersService = AService<SetParametersRequest, SetParametersResponse>;
 
 // type DescribeParametersService = (); // TODO
@@ -33,6 +35,8 @@ pub struct ListParametersResponse {
 }
 impl Message for ListParametersResponse {}
 
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetParametersRequest {
   pub names: Vec<String>,
@@ -44,6 +48,21 @@ pub struct GetParametersResponse {
   pub values: Vec<parameters::raw::ParameterValue>,
 }
 impl Message for GetParametersResponse {}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetParameterTypesRequest {
+  pub names: Vec<String>,
+}
+impl Message for GetParameterTypesRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetParameterTypesResponse {
+  pub values: Vec<u8>,
+}
+impl Message for GetParameterTypesResponse {}
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetParametersRequest {

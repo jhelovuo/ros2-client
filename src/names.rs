@@ -22,17 +22,15 @@ impl NodeName {
   pub fn new(namespace: &str, base_name: &str) -> Result<NodeName, NameError> {
     match base_name.chars().next() {
       None => return Err(NameError::Empty),
-      Some(c) if c.is_ascii_alphabetic() => { /*ok*/ }
-      Some(_other) => return Err(NameError::BadChar),
+      Some(c) if c.is_ascii_alphabetic() || c=='_' => { /*ok*/ }
+      Some(other) => return Err(NameError::BadChar(other)),
     }
 
-    if base_name
+    if let Some(bad) = base_name
       .chars()
-      .all(|c| c.is_ascii_alphanumeric() || c == '_')
+      .find(|c| !(c.is_ascii_alphanumeric() || *c == '_'))
     {
-      /* ok */
-    } else {
-      return Err(NameError::BadChar);
+      return Err(NameError::BadChar(bad));
     }
 
     match namespace.chars().next() {
@@ -40,21 +38,20 @@ impl NodeName {
       Some(c) if c.is_ascii_alphabetic() || c == '/' => { /*ok*/ }
       // Character '~' is not accepted, because we do not know what that would mean in a Node's
       // name.
-      Some(_other) => return Err(NameError::BadChar),
+      Some(other) => return Err(NameError::BadChar(other)),
     }
 
     // TODO: Should we require first char to be exactly '/' ?
     // Otherwise, what would be the absolute node name?
-    if namespace
+    if let Some(bad) = namespace
       .chars()
-      .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '/')
+      .find(|c| !(c.is_ascii_alphanumeric() || *c == '_' || *c == '/'))
     {
-      /* ok */
-    } else {
-      return Err(NameError::BadChar);
+      return Err(NameError::BadChar(bad));
     }
-    if namespace.ends_with('/') {
-      return Err(NameError::BadSlash);
+
+    if namespace.ends_with('/') && namespace != "/" {
+      return Err(NameError::BadSlash(namespace.to_owned(), base_name.to_owned()) );
     }
 
     Ok(NodeName {
@@ -81,16 +78,17 @@ impl NodeName {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameError {
   Empty,
-  BadChar,
-  BadSlash,
+  BadChar(char),
+  BadSlash(String, String),
 }
 
 impl fmt::Display for NameError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
       NameError::Empty => write!(f, "Base name must not be empty"),
-      NameError::BadChar => write!(f, "Bad chracters in Name"),
-      NameError::BadSlash => write!(f, "Invalid placement of seprator slashes"),
+      NameError::BadChar(c) => write!(f, "Bad chracters in Name: {c:?}"),
+      NameError::BadSlash(ns,n) => 
+        write!(f, "Invalid placement of seprator slashes. namespace={ns}  name={n}"),
     }
   }
 }
@@ -136,14 +134,17 @@ impl Name {
     let ok_start_char = |c: char| c.is_ascii_alphabetic() || c == '_';
     let no_multi_underscore = |s: &str| !s.contains("__");
 
-    if base_name
+    if let Some(bad) = base_name
       .chars()
-      .all(|c| c.is_ascii_alphanumeric() || c == '_')
-      && base_name.starts_with(ok_start_char)
-      && no_multi_underscore(base_name)
-    { /* ok */
+      .find(|c| !(c.is_ascii_alphanumeric() || *c == '_'))
+    { 
+      return Err(NameError::BadChar(bad));
+    } else if ! base_name.starts_with(ok_start_char) {
+      return Err(NameError::BadChar(base_name.chars().next().unwrap_or('?')))
+    } else if ! no_multi_underscore(base_name) {
+      return Err(NameError::BadChar('_'))
     } else {
-      return Err(NameError::BadChar);
+      // ok
     }
 
     let preceeding_tokens = if namespace_rel.is_empty() {
@@ -159,7 +160,7 @@ impl Name {
     };
 
     if preceeding_tokens.iter().any(String::is_empty) {
-      return Err(NameError::BadSlash);
+      return Err(NameError::BadSlash(namespace_rel.to_owned(),base_name.to_owned()));
     }
 
     if preceeding_tokens.iter().all(|tok| {
@@ -168,7 +169,7 @@ impl Name {
         && no_multi_underscore(tok)
     }) { /* ok */
     } else {
-      return Err(NameError::BadChar);
+      return Err(NameError::BadChar('?')); //TODO. Find which char is bad.
     }
 
     Ok(Name {
@@ -191,7 +192,7 @@ impl Name {
       Some(("", "")) => Err(NameError::Empty),
 
       // Last character was slash => base name is empty => bad.
-      Some((_, "")) => Err(NameError::BadSlash),
+      Some((bad, "")) => Err(NameError::BadSlash(bad.to_owned(),"".to_owned())),
 
       // Input was "/foobar", so name is absolute
       Some(("", base)) => Name::new("/", base),
@@ -200,7 +201,7 @@ impl Name {
       Some((prefix, base)) => {
         if prefix.ends_with('/') {
           // There was a double slash => Bad.
-          Err(NameError::BadSlash)
+          Err(NameError::BadSlash(prefix.to_owned(), base.to_owned()))
         } else {
           Name::new(prefix, base)
         }

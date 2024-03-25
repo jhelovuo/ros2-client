@@ -93,6 +93,8 @@ pub use message_info::MessageInfo;
 #[doc(inline)]
 pub use node::*;
 #[doc(inline)]
+pub use parameters::{Parameter, ParameterValue};
+#[doc(inline)]
 pub use pubsub::*;
 #[doc(inline)]
 pub use service::{AService, Client, Server, Service, ServiceMapping};
