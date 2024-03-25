@@ -36,13 +36,10 @@ pub struct NodeOptions {
   use_global_arguments: bool, // process-wide command line args
   enable_rosout: bool, // use rosout topic for logging?
   enable_rosout_reading: bool,
-  #[allow(dead_code)]
   start_parameter_services: bool,
   #[allow(dead_code)]
   parameter_overrides: Vec<Parameter>,
-  #[allow(dead_code)]
   allow_undeclared_parameters: bool,
-  #[allow(dead_code)]
   automatically_declare_parameters_from_overrides: bool,
   // The NodeOptions struct does not contain
   // node_name, context, or namespace, because
