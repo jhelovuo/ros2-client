@@ -15,6 +15,8 @@ pub fn main() {
 
   smol::spawn(node.spinner().unwrap().spin()).detach();
 
+  node.set_parameter("use_sim_time", ParameterValue::Boolean(true)).unwrap();
+
   smol::block_on(async move {
     loop {
       smol::Timer::after(Duration::from_secs(1)).await;

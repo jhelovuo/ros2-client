@@ -1,6 +1,6 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
-  sync::{ Arc, Mutex},
+  sync::{ Arc, Mutex, atomic::{AtomicBool, Ordering}},
 };
 
 use futures::{pin_mut, stream::FusedStream, FutureExt, Stream, StreamExt};
@@ -8,7 +8,7 @@ use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{de::DeserializeOwned, Serialize};
-use rustdds::{dds::CreateResult, *};
+use rustdds::{dds::CreateError, dds::CreateResult, *};
 
 use crate::{
   action::*,
@@ -348,6 +348,19 @@ impl Spinner {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
+pub enum NodeCreateError {
+  DDS(CreateError),
+  BadParameter(String),
+}
+
+impl From<CreateError> for NodeCreateError {
+  fn from(c: CreateError) -> NodeCreateError {
+    NodeCreateError::DDS(c)
+  }
+}
+
+
 pub enum ParameterError {
   AlreadyDeclared,
   InvalidName,
@@ -395,16 +408,16 @@ pub struct Node {
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
 
   // simulated ROSTime
-  use_sim_time: bool,
+  use_sim_time: AtomicBool,
   sim_time: Arc<Mutex<ROSTime>>,
 }
 
 impl Node {
   pub(crate) fn new(
     node_name: NodeName,
-    options: NodeOptions,
+    mut options: NodeOptions,
     ros_context: Context,
-  ) -> CreateResult<Node> {
+  ) -> Result<Node, NodeCreateError> {
     let paramtopic = ros_context.get_parameter_events_topic();
     let rosout_topic = ros_context.get_rosout_topic();
 
@@ -426,12 +439,16 @@ impl Node {
 
     // TODO: If there are duplicates, the later one will overwrite the earlier, but
     // there is no warning or error.
+    options.declared_parameters.push( Parameter {
+      name: "use_sim_time".to_string(), 
+      value:ParameterValue::Boolean(false)
+    });
     let parameters = options.declared_parameters.iter()
       .cloned()
       .map(|Parameter{name,value}| (name,value))
       .collect::<BTreeMap<String, ParameterValue>>();
 
-    Ok(Node {
+    let node = Node {
       node_name,
       options,
       ros_context,
@@ -446,16 +463,27 @@ impl Node {
       rosout_reader,
       parameter_events_writer,
       parameters: Arc::new(Mutex::new(parameters)),
-      use_sim_time: false,
+      use_sim_time: AtomicBool::new(false),
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
-    })
+    };
+
+    // returns `Err` if some parameter does not validate.
+    node.parameters.lock().unwrap().iter()
+      .try_for_each(|(name,value)| {
+        node.validate_parameter_on_set(name, value)?;
+        node.execute_parameter_set_actions(name,value)?;
+        Ok(())
+      })
+      .map_err(move |s| NodeCreateError::BadParameter(s)) ?;
+
+    Ok(node)
   }
 
   /// Return the ROSTime
   ///
   /// It is either the system clock time
   pub fn time_now(&self) -> ROSTime {
-    if self.use_sim_time {
+    if self.use_sim_time.load(Ordering::SeqCst) {
       *self.sim_time.lock().unwrap()
     } else {
       ROSTime::now()
@@ -611,13 +639,13 @@ impl Node {
     if self.options.allow_undeclared_parameters || 
       self.parameters.lock().unwrap().contains_key(name) 
     {
+      self.validate_parameter_on_set(name,&value)?;
+      self.execute_parameter_set_actions(name,&value)?;
       self.parameters.lock().unwrap().insert(name.to_owned(), value); 
       Ok(())
     } else {
       Err("Setting undeclared parameter '".to_owned() + name + "' is not allowed.")
     }
-
-    
   }
 
   /// Gets the value of a parameter, or None is there is no such Parameter.
@@ -633,6 +661,42 @@ impl Node {
       .map(move |k| k.to_owned())
       .collect::<Vec<_>>()
   }
+
+  fn validate_parameter_on_set(&self, name: &str, value: &ParameterValue) -> Result<(),String> {
+    match name {
+      "use_sim_time" => {
+        match value {
+          ParameterValue::Boolean(_) => Ok(()),
+          _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
+        }
+      }
+      _ => {
+        // TODO: 
+        // invoke app-installed checkers
+        Ok(())
+      }
+    }
+  }
+
+  fn execute_parameter_set_actions(&self, name: &str, value: &ParameterValue) -> Result<(),String> {
+    match name {
+      "use_sim_time" => {
+        match value {
+          ParameterValue::Boolean(s) => {
+            self.use_sim_time.store(*s, Ordering::SeqCst);
+            Ok(())
+          }
+          _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
+        }
+      }
+      _ => {
+        // TODO: invoke app-installed actions
+        Ok(())
+      }
+    }
+
+  }
+
 
   // ///////////////////////////////////////////////////
 
