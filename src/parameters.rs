@@ -1,4 +1,5 @@
 /// Rust-like representation of ROS2 Parameter
+#[derive(Debug, Clone)]
 pub struct Parameter {
   pub name: String,
   pub value: ParameterValue,

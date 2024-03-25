@@ -37,10 +37,8 @@ pub struct NodeOptions {
   enable_rosout: bool, // use rosout topic for logging?
   enable_rosout_reading: bool,
   start_parameter_services: bool,
-  #[allow(dead_code)]
-  parameter_overrides: Vec<Parameter>,
+  declared_parameters: Vec<Parameter>,
   allow_undeclared_parameters: bool,
-  automatically_declare_parameters_from_overrides: bool,
   // The NodeOptions struct does not contain
   // node_name, context, or namespace, because
   // they ae always needed and have no reasonable default.
@@ -57,9 +55,8 @@ impl NodeOptions {
       enable_rosout: true,
       enable_rosout_reading: false,
       start_parameter_services: true,
-      parameter_overrides: Vec::new(),
+      declared_parameters: Vec::new(),
       allow_undeclared_parameters: false,
-      automatically_declare_parameters_from_overrides: false,
     }
   }
   pub fn enable_rosout(self, enable_rosout: bool) -> NodeOptions {
@@ -75,6 +72,13 @@ impl NodeOptions {
       ..self
     }
   }
+
+  pub fn declare_parameter(mut self, new_parameter: Parameter) -> NodeOptions {
+    self.declared_parameters.push(new_parameter);
+    // TODO: check for duplicate parameter names
+    self
+  }
+
 }
 
 impl Default for NodeOptions {
@@ -420,6 +424,13 @@ impl Node {
 
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
 
+    // TODO: If there are duplicates, the later one will overwrite the earlier, but
+    // there is no warning or error.
+    let parameters = options.declared_parameters.iter()
+      .cloned()
+      .map(|Parameter{name,value}| (name,value))
+      .collect::<BTreeMap<String, ParameterValue>>();
+
     Ok(Node {
       node_name,
       options,
@@ -434,7 +445,7 @@ impl Node {
       rosout_writer,
       rosout_reader,
       parameter_events_writer,
-      parameters: Arc::new(Mutex::new(BTreeMap::new())),
+      parameters: Arc::new(Mutex::new(parameters)),
       use_sim_time: false,
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
     })
@@ -584,53 +595,43 @@ impl Node {
   }
 
   // ///////////////////////////////////////////////
-  // Paramteters
-
-  /// Declare and initialize a parameter.
-  ///
-  /// The Parameter is initialized to the value configured at run time, or if
-  /// there is no such configuration, the default value given as argument.
-  ///
-  /// The resulting parameter value is returned.
-  pub fn declare_parameter<'a>(
-    &self,
-    name: &str,
-    default: &'a ParameterValue,
-  ) -> Result<&'a ParameterValue, ParameterError> {
-    let mut param_db = self.parameters.lock().unwrap();
-    if param_db.contains_key(name) {
-      Err(ParameterError::AlreadyDeclared)
-    } else {
-      // TODO: Where do we get the non-default value?
-      param_db.insert(name.to_owned(), default.clone());
-      Ok(default)
-    }
-  }
+  // Parameters
 
   pub fn undeclare_parameter(&self, _name: &str) {
     todo!()
   }
 
   /// Does the parameter exist?
-  pub fn has_parameter(&self, _name: &str) -> bool {
-    todo!()
+  pub fn has_parameter(&self, name: &str) -> bool {
+    self.parameters.lock().unwrap().contains_key(name)
   }
 
-  /// Sets a parameter value. Parameter must be decalred before setting.
-  pub fn set_parameter(&self, _name: &str, _value: ParameterValue) -> Result<(), String> {
-    todo!()
+  /// Sets a parameter value. Parameter must be declared before setting.
+  pub fn set_parameter(&self, name: &str, value: ParameterValue) -> Result<(), String> {
+    if self.options.allow_undeclared_parameters || 
+      self.parameters.lock().unwrap().contains_key(name) 
+    {
+      self.parameters.lock().unwrap().insert(name.to_owned(), value); 
+      Ok(())
+    } else {
+      Err("Setting undeclared parameter '".to_owned() + name + "' is not allowed.")
+    }
+
+    
   }
 
   /// Gets the value of a parameter, or None is there is no such Parameter.
-  pub fn get_parameter(&self, _name: &str) -> Option<&ParameterValue> {
-    todo!()
+  pub fn get_parameter(&self, name: &str) -> Option<ParameterValue> {
+    self.parameters.lock().unwrap()
+      .get(name)
+      .map(|p| p.to_owned() )
   }
 
-  pub fn list_parameters<'a, 'b>(
-    &'a self,
-    _prefixes: impl Iterator<Item = &'b str>,
-  ) -> Box<dyn Iterator<Item = &'a str>> {
-    todo!()
+  pub fn list_parameters(&self) -> Vec<String> {
+    self.parameters.lock().unwrap()
+      .keys()
+      .map(move |k| k.to_owned())
+      .collect::<Vec<_>>()
   }
 
   // ///////////////////////////////////////////////////
