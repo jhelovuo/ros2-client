@@ -98,6 +98,7 @@ pub enum NodeEvent {
 
 struct ParameterServers {
   get_parameters_server: Server<rcl_interfaces::GetParametersService>,
+  get_parameter_types_server: Server<rcl_interfaces::GetParameterTypesService>,
   list_parameters_server: Server<rcl_interfaces::ListParametersService>,
   set_parameters_server: Server<rcl_interfaces::SetParametersService>,
 }
@@ -162,6 +163,10 @@ impl Spinner {
       .parameter_servers
       .as_ref()
       .map(|s| s.get_parameters_server.receive_request_stream());
+    let mut get_parameter_types_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.get_parameter_types_server.receive_request_stream());
     let mut set_parameter_stream_opt = self
       .parameter_servers
       .as_ref()
@@ -192,6 +197,7 @@ impl Spinner {
         get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
           match get_parameter_request {
             Ok( (req_id, req) ) => {
+              warn!("Get parameter request");
               let values = {
                 let param_db = self.parameters.lock().unwrap();
                 req.names.iter()
@@ -211,9 +217,33 @@ impl Spinner {
           }
         }
 
+        get_parameter_types_request = next_if_some(&mut get_parameter_types_stream_opt).fuse() => {
+          match get_parameter_types_request {
+            Ok( (req_id, req) ) => {
+              warn!("Get parameter types request");
+              let values = {
+                let param_db = self.parameters.lock().unwrap();
+                req.names.iter()
+                  .map(|name| param_db.get(name.as_str())
+                    .unwrap_or(&ParameterValue::NotSet))
+                  .map( ParameterValue::to_parameter_type_enum )
+                  .collect()
+              };
+              warn!("Get parameter types response: {values:?}");
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().get_parameter_types_server
+                .async_send_response(req_id, rcl_interfaces::GetParameterTypesResponse{ values })
+                .await
+                .unwrap_or_else(|e| warn!("GetParameterTypes response error {e:?}"));
+            }
+            Err(e) => warn!("GetParameterTypes request error {e:?}"),
+          }
+        }
+
         set_parameter_request = next_if_some(&mut set_parameter_stream_opt).fuse() => {
           match set_parameter_request {
             Ok( (req_id, req) ) => {
+              warn!("Set parameter request");
               let results = {
                 let mut param_db = self.parameters.lock().unwrap();
                 req.parameter.iter()
@@ -242,6 +272,7 @@ impl Spinner {
         list_parameter_request = next_if_some(&mut list_parameter_stream_opt).fuse() => {
           match list_parameter_request {
             Ok( (req_id, req) ) => {
+              warn!("List parameters request");
               let prefixes = req.prefixes;
               // TODO: We only generate the "names" part of the ListParametersResponse
               // What should we put into `prefixes` ?
@@ -249,7 +280,9 @@ impl Spinner {
                 let param_db = self.parameters.lock().unwrap();
                 param_db.keys()
                   .filter_map(|name|
-                    if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+                    if prefixes.is_empty() ||
+                      prefixes.iter().any(|prefix| name.starts_with(prefix)) 
+                    {
                       Some(name.clone())
                     } else { None }
                   )
@@ -257,6 +290,7 @@ impl Spinner {
               };
               let result = rcl_interfaces::ListParametersResult{ names, prefixes: vec![] };
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              warn!("List parameters response: {result:?}");
               self.parameter_servers.as_ref().unwrap().list_parameters_server
                 .async_send_response(req_id, rcl_interfaces::ListParametersResponse{ result })
                 .await
@@ -528,6 +562,13 @@ impl Node {
         service_qos.clone(),
         service_qos.clone(),
       )?;
+      let get_parameter_types_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "get_parameter_types").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "GetParameterTypes"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
       let set_parameters_server = self.create_server(
         service_mapping,
         &Name::new(&node_name, "set_parameters").unwrap(),
@@ -545,6 +586,7 @@ impl Node {
 
       Some(ParameterServers {
         get_parameters_server,
+        get_parameter_types_server,
         list_parameters_server,
         set_parameters_server,
       })
@@ -554,7 +596,7 @@ impl Node {
 
     let clock_topic = self
       .create_topic(
-        &Name::new("","clock").unwrap(), 
+        &Name::new("/","clock").unwrap(), 
         MessageTypeName::new("builtin_interfaces","Time"), 
         &DEFAULT_SUBSCRIPTION_QOS)?;
 

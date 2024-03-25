@@ -6,17 +6,24 @@ use chrono::{DateTime, Utc};
 use ros2_client::*;
 
 pub fn main() {
+  log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
-      NodeName::new("", "time_braodcaster").unwrap(),
-      NodeOptions::new().enable_rosout(true),
+      NodeName::new("/time_example", "time_broadcaster").unwrap(),
+      NodeOptions::new()
+        .enable_rosout(true)
+        .declare_parameter(Parameter{
+          name: "my_param".to_owned(), 
+          value: ParameterValue::String("foo".to_owned())
+        }),
     )
     .unwrap();
 
   let clock_publisher = node.create_publisher::<builtin_interfaces::Time>( 
     &node.create_topic(
-      &Name::new("","clock").unwrap(), 
+      &Name::new("/","clock").unwrap(), 
       MessageTypeName::new("builtin_interfaces","Time"),
       &DEFAULT_PUBLISHER_QOS  
     ).unwrap(), 

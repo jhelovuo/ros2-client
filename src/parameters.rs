@@ -21,6 +21,24 @@ pub enum ParameterValue {
   StringArray(Vec<String>),
 }
 
+impl ParameterValue {
+  // https://github.com/ros2/rcl_interfaces/blob/rolling/rcl_interfaces/msg/ParameterType.msg
+  pub fn to_parameter_type_enum(p: &ParameterValue) -> u8 {
+    match p {
+      ParameterValue::NotSet => 0, 
+      ParameterValue::Boolean(_) => 1,
+      ParameterValue::Integer(_) => 2,
+      ParameterValue::Double(_d) => 3,
+      ParameterValue::String(_s) => 4,
+      ParameterValue::ByteArray(_a) => 5,
+      ParameterValue::BooleanArray(_a) => 6,
+      ParameterValue::IntegerArray(_a) => 7,
+      ParameterValue::DoubleArray(_a) => 8,
+      ParameterValue::StringArray(_a) => 9,
+    }
+  }
+}
+
 impl From<raw::Parameter> for Parameter {
   fn from(rp: raw::Parameter) -> Self {
     let pv = match rp.value.ptype {
