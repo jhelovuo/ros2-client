@@ -10,7 +10,7 @@ pub fn main() {
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
-      NodeName::new("/time_example", "time_reporter").unwrap(),
+      NodeName::new("", "time_reporter").unwrap(),
       NodeOptions::new()
         .enable_rosout(true),
     )

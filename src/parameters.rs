@@ -41,18 +41,27 @@ impl ParameterValue {
 
 impl From<raw::Parameter> for Parameter {
   fn from(rp: raw::Parameter) -> Self {
-    let pv = match rp.value.ptype {
-      raw::ParameterType::NOT_SET => ParameterValue::NotSet,
-      raw::ParameterType::BOOL => ParameterValue::Boolean(rp.value.boolean_value),
-      raw::ParameterType::INTEGER => ParameterValue::Integer(rp.value.int_value),
-      raw::ParameterType::DOUBLE => ParameterValue::Double(rp.value.double_value),
-      raw::ParameterType::STRING => ParameterValue::String(rp.value.string_value),
+    Parameter {
+      name: rp.name,
+      value: rp.value.into(),
+    }
+  }
+}
 
-      raw::ParameterType::BYTE_ARRAY => ParameterValue::ByteArray(rp.value.byte_array),
-      raw::ParameterType::BOOL_ARRAY => ParameterValue::BooleanArray(rp.value.bool_array),
-      raw::ParameterType::INTEGER_ARRAY => ParameterValue::IntegerArray(rp.value.int_array),
-      raw::ParameterType::DOUBLE_ARRAY => ParameterValue::DoubleArray(rp.value.double_array),
-      raw::ParameterType::STRING_ARRAY => ParameterValue::StringArray(rp.value.string_array),
+impl From<raw::ParameterValue> for ParameterValue {
+  fn from(rpv: raw::ParameterValue) -> ParameterValue {
+    match rpv.ptype {
+      raw::ParameterType::NOT_SET => ParameterValue::NotSet,
+      raw::ParameterType::BOOL => ParameterValue::Boolean(rpv.boolean_value),
+      raw::ParameterType::INTEGER => ParameterValue::Integer(rpv.int_value),
+      raw::ParameterType::DOUBLE => ParameterValue::Double(rpv.double_value),
+      raw::ParameterType::STRING => ParameterValue::String(rpv.string_value),
+
+      raw::ParameterType::BYTE_ARRAY => ParameterValue::ByteArray(rpv.byte_array),
+      raw::ParameterType::BOOL_ARRAY => ParameterValue::BooleanArray(rpv.bool_array),
+      raw::ParameterType::INTEGER_ARRAY => ParameterValue::IntegerArray(rpv.int_array),
+      raw::ParameterType::DOUBLE_ARRAY => ParameterValue::DoubleArray(rpv.double_array),
+      raw::ParameterType::STRING_ARRAY => ParameterValue::StringArray(rpv.string_array),
 
       _ =>
       // This may be an unspecified case.
@@ -60,11 +69,6 @@ impl From<raw::Parameter> for Parameter {
       {
         ParameterValue::NotSet
       }
-    };
-
-    Parameter {
-      name: rp.name,
-      value: pv,
     }
   }
 }
@@ -137,7 +141,7 @@ impl From<ParameterValue> for raw::ParameterValue {
 
 // This submodule contains raw, ROS2 -compatible Parameters.
 //
-pub(crate) mod raw {
+pub mod raw {
   use rustdds::*;
   use serde::{Deserialize, Serialize};
 

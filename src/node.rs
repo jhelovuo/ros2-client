@@ -73,8 +73,8 @@ impl NodeOptions {
     }
   }
 
-  pub fn declare_parameter(mut self, new_parameter: Parameter) -> NodeOptions {
-    self.declared_parameters.push(new_parameter);
+  pub fn declare_parameter(mut self, name: &str, value: ParameterValue) -> NodeOptions {
+    self.declared_parameters.push(Parameter{ name: name.to_owned(), value } );
     // TODO: check for duplicate parameter names
     self
   }
@@ -197,7 +197,7 @@ impl Spinner {
         get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
           match get_parameter_request {
             Ok( (req_id, req) ) => {
-              warn!("Get parameter request");
+              info!("Get parameter request {req:?}");
               let values = {
                 let param_db = self.parameters.lock().unwrap();
                 req.names.iter()
@@ -207,6 +207,8 @@ impl Spinner {
                   .map( raw::ParameterValue::from)
                   .collect()
               };
+              info!("Get parameters response: {values:?}");
+
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
               self.parameter_servers.as_ref().unwrap().get_parameters_server
                 .async_send_response(req_id, rcl_interfaces::GetParametersResponse{ values })
@@ -229,7 +231,7 @@ impl Spinner {
                   .map( ParameterValue::to_parameter_type_enum )
                   .collect()
               };
-              warn!("Get parameter types response: {values:?}");
+              info!("Get parameter types response: {values:?}");
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
               self.parameter_servers.as_ref().unwrap().get_parameter_types_server
                 .async_send_response(req_id, rcl_interfaces::GetParameterTypesResponse{ values })
@@ -243,7 +245,7 @@ impl Spinner {
         set_parameter_request = next_if_some(&mut set_parameter_stream_opt).fuse() => {
           match set_parameter_request {
             Ok( (req_id, req) ) => {
-              warn!("Set parameter request");
+              info!("Set parameter request {req:?}");
               let results = {
                 let mut param_db = self.parameters.lock().unwrap();
                 req.parameter.iter()
@@ -259,6 +261,7 @@ impl Spinner {
                   })
                   .collect()
               };
+              info!("Set parameters response: {results:?}");
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
               self.parameter_servers.as_ref().unwrap().set_parameters_server
                 .async_send_response(req_id, rcl_interfaces::SetParametersResponse{ results })
@@ -272,7 +275,7 @@ impl Spinner {
         list_parameter_request = next_if_some(&mut list_parameter_stream_opt).fuse() => {
           match list_parameter_request {
             Ok( (req_id, req) ) => {
-              warn!("List parameters request");
+              info!("List parameters request");
               let prefixes = req.prefixes;
               // TODO: We only generate the "names" part of the ListParametersResponse
               // What should we put into `prefixes` ?
@@ -290,7 +293,7 @@ impl Spinner {
               };
               let result = rcl_interfaces::ListParametersResult{ names, prefixes: vec![] };
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
-              warn!("List parameters response: {result:?}");
+              info!("List parameters response: {result:?}");
               self.parameter_servers.as_ref().unwrap().list_parameters_server
                 .async_send_response(req_id, rcl_interfaces::ListParametersResponse{ result })
                 .await
@@ -508,7 +511,7 @@ impl Node {
         node.execute_parameter_set_actions(name,value)?;
         Ok(())
       })
-      .map_err(move |s| NodeCreateError::BadParameter(s)) ?;
+      .map_err(NodeCreateError::BadParameter) ?;
 
     Ok(node)
   }

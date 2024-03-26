@@ -2,7 +2,6 @@ use std::time::Duration;
 use std::convert::TryInto;
 use chrono::{DateTime, Utc};
 
-//use futures::StreamExt;
 use ros2_client::*;
 
 pub fn main() {
@@ -11,15 +10,18 @@ pub fn main() {
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
-      NodeName::new("/time_example", "time_broadcaster").unwrap(),
+      NodeName::new("", "time_broadcaster").unwrap(),
       NodeOptions::new()
         .enable_rosout(true)
-        .declare_parameter(Parameter{
-          name: "my_param".to_owned(), 
-          value: ParameterValue::String("foo".to_owned())
-        }),
+        .declare_parameter("my_param", ParameterValue::String("foo".to_owned()))
     )
     .unwrap();
+
+  // "my_param" can be changed using
+  // ros2 service call /time_broadcaster/set_parameters rcl_interfaces/srv/SetParameters '{parameters: [{name: "my_param", value: {type: 4, string_value: "bar"}}]}'
+  //
+  // read back:
+  // ros2 service call /time_broadcaster/get_parameters rcl_interfaces/srv/GetParameters '{names: ['my_param']}'
 
   let clock_publisher = node.create_publisher::<builtin_interfaces::Time>( 
     &node.create_topic(
@@ -36,7 +38,7 @@ pub fn main() {
   // Tiacks below are equal in length.
   // This also defines how often simulated clock is updated.
   let sim_time_tick = Duration::from_millis(1000);
-  let real_time_tick = Duration::from_millis(250);
+  let real_time_tick = Duration::from_millis(2000);
 
   let mut sim_time = node.time_now();
 

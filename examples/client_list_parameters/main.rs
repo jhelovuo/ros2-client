@@ -55,8 +55,6 @@ fn main() {
     client.wait_for_service(&node).await;
     println!(">>> Connected to ListParameters server.");
 
-    smol::Timer::after(Duration::from_secs(1)).await;
-
     match client.async_send_request(request).await {
       Ok(req_id) => {
         println!(">>> request sent {req_id:?}");
