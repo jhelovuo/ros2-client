@@ -73,8 +73,8 @@ impl NodeOptions {
     }
   }
 
-  pub fn declare_parameter(mut self, new_parameter: Parameter) -> NodeOptions {
-    self.declared_parameters.push(new_parameter);
+  pub fn declare_parameter(mut self, name: &str, value: ParameterValue) -> NodeOptions {
+    self.declared_parameters.push(Parameter{ name: name.to_owned(), value } );
     // TODO: check for duplicate parameter names
     self
   }

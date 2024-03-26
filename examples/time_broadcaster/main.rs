@@ -14,10 +14,7 @@ pub fn main() {
       NodeName::new("/time_example", "time_broadcaster").unwrap(),
       NodeOptions::new()
         .enable_rosout(true)
-        .declare_parameter(Parameter{
-          name: "my_param".to_owned(), 
-          value: ParameterValue::String("foo".to_owned())
-        }),
+        .declare_parameter("my_param", ParameterValue::String("foo".to_owned()))
     )
     .unwrap();
 
