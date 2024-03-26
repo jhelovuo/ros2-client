@@ -66,7 +66,7 @@ fn main() {
     )
     .unwrap();
 
-  smol::spawn(node.spinner().spin()).detach();
+  smol::spawn(node.spinner().unwrap().spin()).detach();
 
   let service_qos = create_qos();
 

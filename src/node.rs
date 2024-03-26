@@ -614,6 +614,13 @@ impl Node {
     })
   }
 
+  /// A heuristic to detect if a spinner has been created.
+  /// But this does still not guarantee that it is running, i.e.
+  /// an async excutor is runnning spinner.spin(), but this is the best we can do.
+  pub fn have_spinner(&self) -> bool {
+    self.stop_spin_sender.is_some()
+  }
+
   // Generates ROS2 node info from added readers and writers.
   fn generate_node_info(&self) -> NodeEntitiesInfo {
     let mut node_info = NodeEntitiesInfo::new(self.node_name.clone());
@@ -746,13 +753,17 @@ impl Node {
   ///
   /// There must be an async task executing `spin` to get any data.
   pub fn status_receiver(&self) -> Receiver<NodeEvent> {
-    let (status_event_sender, status_event_receiver) = async_channel::bounded(8);
-    self
-      .status_event_senders
-      .lock()
-      .unwrap()
-      .push(status_event_sender);
-    status_event_receiver
+    if self.have_spinner() {
+      let (status_event_sender, status_event_receiver) = async_channel::bounded(8);
+      self
+        .status_event_senders
+        .lock()
+        .unwrap()
+        .push(status_event_sender);
+      status_event_receiver
+    } else {
+      panic!("status_receiver() cannot set up a receiver, because no Spinner is running.")
+    }
   }
 
   // reader waits for at least one writer to be present
@@ -769,15 +780,18 @@ impl Node {
       .map(|writers| !writers.is_empty()) // there is someone matched
       .unwrap_or(false); // we do not even know the reader
 
-    if !already_present {
+    if already_present {
+      info!("wait_for_writer: Already have matched a writer.");
+    } else {
       loop {
         // waiting loop
+        debug!("wait_for_writer: Waiting for a writer.");
         if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched {
-          local_reader,
-          ..
+          local_reader, remote_writer
         }) = status_receiver.select_next_some().await
         {
           if local_reader == reader {
+            info!("wait_for_writer: Matched remote writer {remote_writer:?}");
             break; // we got a match
           }
         }
@@ -797,14 +811,18 @@ impl Node {
       .map(|readers| !readers.is_empty()) // there is someone matched
       .unwrap_or(false); // we do not even know who is asking
 
-    if !already_present {
+    if already_present {
+      info!("wait_for_reader: Already have matched a reader.");
+    } else {
       loop {
+      debug!("wait_for_reader: Waiting for a reader.");
         if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched {
           local_writer,
-          ..
+          remote_reader
         }) = status_receiver.select_next_some().await
         {
           if local_writer == writer {
+            info!("wait_for_reader: Matched remote reader {remote_reader:?}.");
             break; // we got a match
           }
         }
