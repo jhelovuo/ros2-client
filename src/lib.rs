@@ -72,7 +72,7 @@ pub mod names;
 pub mod parameters;
 #[doc(hidden)]
 pub mod pubsub;
-mod rcl_interfaces;
+pub mod rcl_interfaces;
 pub mod ros_time;
 pub mod service;
 pub mod steady_time;

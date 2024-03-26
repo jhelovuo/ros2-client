@@ -14,7 +14,7 @@ pub fn main() {
     println!("{:?}", event);
   });
 
-  smol::spawn(node.spinner().spin()).detach();
+  smol::spawn(node.spinner().unwrap().spin()).detach();
 
   smol::block_on(status_event_stream);
 }

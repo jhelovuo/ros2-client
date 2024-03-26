@@ -2,7 +2,7 @@ use std::env;
 
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use ros2_client::{
-  interfaces::{GetParametersRequest, GetParametersResponse},
+  rcl_interfaces::{GetParametersRequest, GetParametersResponse},
   AService, Context, Name, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{policy, Duration, QosPolicies, QosPolicyBuilder};

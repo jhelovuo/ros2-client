@@ -68,7 +68,7 @@ fn main() {
   //
   // However, in ros2-client Node does not call application back, but instead the
   // ROS application is implemented using async code.
-  smol::spawn(node.spinner().spin()).detach();
+  smol::spawn(node.spinner().unwrap().spin()).detach();
 
   debug!(">>> ros2_service client created");
 

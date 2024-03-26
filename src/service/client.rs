@@ -211,6 +211,8 @@ where
   /// This does not distinguish between diagnostinc tools and actual servers.
   /// It is enough that someone has subscribed the Requests, and someone is
   /// a publisher for Responses.
+  ///
+  /// May panic, if the Node does not havea background Spinner running.
   pub async fn wait_for_service(&self, my_node: &Node) {
     join!(
       my_node.wait_for_reader(self.request_sender.guid()),
