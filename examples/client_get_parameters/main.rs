@@ -61,10 +61,11 @@ fn main() {
         println!(">>> request sent {req_id:?}");
         match client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
                .or(async {
-                    smol::Timer::after(Duration::from_secs(15)).await;
+                    smol::Timer::after(Duration::from_secs(5)).await;
                     println!(">>> Response timeout!!");
                     Err(WriteError::WouldBlock { data: () }.into() )
-                  }).await
+                  })
+               .await
         {
           Ok(response) => {
             println!("<<< response parameters: {:?}", 
@@ -78,7 +79,6 @@ fn main() {
       }
       Err(e) => println!(">>> request sending error {e:?}"),
     }
-
   });
 }
 
