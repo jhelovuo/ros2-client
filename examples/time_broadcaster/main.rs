@@ -14,6 +14,22 @@ pub fn main() {
       NodeOptions::new()
         .enable_rosout(true)
         .declare_parameter("my_param", ParameterValue::String("foo".to_owned()))
+
+        // example parameter validator function
+        .parameter_validator( Box::new(|name,value| {
+          match name {
+            "my_param" => match value {
+              ParameterValue::String(s) if s.len() == 3 => Ok(()),
+              _ => Err("my_param must be a string of 3 chars".to_string()),
+            },
+            _ => Ok(()),
+          }
+        } ))
+        // parameter set handler.
+        .parameter_set_action( Box::new(|name,value| {
+          println!("Setting {}={:?}", name, value);
+          Ok(())
+        }))
     )
     .unwrap();
 

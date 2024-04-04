@@ -26,8 +26,15 @@ use crate::{
   service::{Client, Server, Service, ServiceMapping},
 };
 
+type ParameterFunc = dyn Fn(&str,&ParameterValue) -> SetParametersResult + Send;
+
+
 /// Configuration of [Node]
 /// This is a builder-like struct.
+///
+/// The NodeOptions struct does not contain
+/// node_name, context, or namespace, because
+/// they ae always needed and have no reasonable default.
 #[must_use]
 pub struct NodeOptions {
   #[allow(dead_code)]
@@ -39,9 +46,8 @@ pub struct NodeOptions {
   start_parameter_services: bool,
   declared_parameters: Vec<Parameter>,
   allow_undeclared_parameters: bool,
-  // The NodeOptions struct does not contain
-  // node_name, context, or namespace, because
-  // they ae always needed and have no reasonable default.
+  parameter_validator: Option<Box<ParameterFunc>>,
+  parameter_set_action: Option<Box<ParameterFunc>>,
 }
 
 impl NodeOptions {
@@ -57,6 +63,8 @@ impl NodeOptions {
       start_parameter_services: true,
       declared_parameters: Vec::new(),
       allow_undeclared_parameters: false,
+      parameter_validator: None,
+      parameter_set_action: None,
     }
   }
   pub fn enable_rosout(self, enable_rosout: bool) -> NodeOptions {
@@ -79,6 +87,15 @@ impl NodeOptions {
     self
   }
 
+  pub fn parameter_validator(mut self, validator: Box<ParameterFunc>) -> NodeOptions {
+    self.parameter_validator = Some(validator);
+    self
+  }
+
+  pub fn parameter_set_action(mut self, action: Box<ParameterFunc>) -> NodeOptions {
+    self.parameter_set_action = Some(action);
+    self
+  }
 }
 
 impl Default for NodeOptions {
@@ -121,12 +138,15 @@ pub struct Spinner {
 
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 
-  //use_sim_time: Arc<AtomicBool>,
-  sim_time: Arc<Mutex<ROSTime>>,
+  use_sim_time: Arc<AtomicBool>,
+  sim_time: Arc<Mutex<ROSTime>>, 
   clock_topic: Topic,
+  allow_undeclared_parameters: bool,
 
   parameter_servers: Option<ParameterServers>,
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
+  parameter_validator: Option<Arc<Mutex<Box<ParameterFunc>>>>,
+  parameter_set_action: Option<Arc<Mutex<Box<ParameterFunc>>>>,
 }
 
 async fn next_if_some<S>(s: &mut Option<S>) -> S::Item
@@ -246,21 +266,25 @@ impl Spinner {
           match set_parameter_request {
             Ok( (req_id, req) ) => {
               info!("Set parameter request {req:?}");
-              let results = {
-                let mut param_db = self.parameters.lock().unwrap();
+              let results = 
                 req.parameter.iter()
                   .cloned()
                   .map( Parameter::from ) // convert from "raw::Parameter"
-                  .map( |p| {
-                    // TODO: Observe option allow_undeclared_parameters: if this is false,
-                    // then we shoudl reject any set attempts to kunknown parameters
-                    // TODO: Should we reject any update that attempts to change the type of parameter?
-                    param_db.insert( p.name , p.value );
-                    // TODO: Implement callback to check on parameter setting
-                    raw::SetParametersResult{ successful: true, reason: "".to_string() }
-                  })
-                  .collect()
-              };
+                  .map( |Parameter{name, value} | 
+                    {
+                      if self.allow_undeclared_parameters || 
+                        self.parameters.lock().unwrap().contains_key(&name) 
+                      {
+                        self.validate_parameter_on_set(&name,&value)?;
+                        self.execute_parameter_set_actions(&name,&value)?; 
+                        self.parameters.lock().unwrap().insert(name, value); 
+                        Ok(())
+                      } else {
+                        Err("Setting undeclared parameter '".to_owned() + &name + "' is not allowed.")
+                      }
+                    })
+                  .map(|r| r.into()) // to "raw" Result for serialization
+                  .collect();
               info!("Set parameters response: {results:?}");
               // .unwrap() below should be safe, as we would not be here if the Server did not exist
               self.parameter_servers.as_ref().unwrap().set_parameters_server
@@ -380,6 +404,49 @@ impl Spinner {
       sender_array.swap_remove(*c);
     }
   }
+
+  // Keep this function in sync with the same function in Node.
+  fn validate_parameter_on_set(&self, name: &str, value: &ParameterValue) -> SetParametersResult {
+    match name {
+      // built-in parameter check
+      "use_sim_time" => {
+        match value {
+          ParameterValue::Boolean(_) => Ok(()),
+          _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
+        }
+      }
+      // application-defined parameters
+      _ => {
+        match self.parameter_validator {
+          Some(ref v) => v.lock().unwrap()(name, value), // ask the validator to judge
+          None => Ok(()), // no validator defined, always accept
+        }
+      }
+    }
+  }
+
+  // Keep this function in sync with the same function in Node.
+  fn execute_parameter_set_actions(&self, name: &str, value: &ParameterValue) -> SetParametersResult {
+    match name {
+      "use_sim_time" => {
+        match value {
+          ParameterValue::Boolean(s) => {
+            self.use_sim_time.store(*s, Ordering::SeqCst);
+            Ok(())
+          }
+          _ => Err("Parameter 'use_sim_time' must be Boolean.".to_owned())
+        }
+      }
+      _ => {
+        match self.parameter_set_action {
+          Some(ref v) => v.lock().unwrap()(name, value), // execute custom action
+          None => Ok(()), // no action defined, always accept
+        }
+      }
+    }
+  }
+
+
 } // impl Spinner
 
 // ----------------------------------------------------------------------------------------------------
@@ -443,9 +510,12 @@ pub struct Node {
 
   // Parameter store
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
+  // allow_undeclared_parameters: bool, // this is inside "options"
+  parameter_validator: Option<Arc<Mutex<Box<ParameterFunc>>>>,
+  parameter_set_action: Option<Arc<Mutex<Box<ParameterFunc>>>>,
 
   // simulated ROSTime
-  use_sim_time: AtomicBool,
+  use_sim_time: Arc<AtomicBool>,
   sim_time: Arc<Mutex<ROSTime>>,
 }
 
@@ -485,6 +555,13 @@ impl Node {
       .map(|Parameter{name,value}| (name,value))
       .collect::<BTreeMap<String, ParameterValue>>();
 
+    let parameter_validator = options.parameter_validator
+      .take()
+      .map(|b| Arc::new(Mutex::new(b)) );
+    let parameter_set_action = options.parameter_set_action
+      .take()
+      .map(|b| Arc::new(Mutex::new(b)) );
+
     let node = Node {
       node_name,
       options,
@@ -500,7 +577,9 @@ impl Node {
       rosout_reader,
       parameter_events_writer,
       parameters: Arc::new(Mutex::new(parameters)),
-      use_sim_time: AtomicBool::new(false),
+      parameter_validator,
+      parameter_set_action,
+      use_sim_time: Arc::new(AtomicBool::new(false)),
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
     };
 
@@ -610,10 +689,14 @@ impl Node {
       writers_to_remote_readers: Arc::clone(&self.writers_to_remote_readers),
       external_nodes: Arc::clone(&self.external_nodes),
       status_event_senders: Arc::clone(&self.status_event_senders),
+      use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
       clock_topic,
       parameter_servers,
       parameters: Arc::clone(&self.parameters),
+      allow_undeclared_parameters: self.options.allow_undeclared_parameters,
+      parameter_validator: self.parameter_validator.as_ref().map(Arc::clone),
+      parameter_set_action: self.parameter_set_action.as_ref().map(Arc::clone),
     })
   }
 
@@ -700,6 +783,10 @@ impl Node {
     }
   }
 
+  pub fn allow_undeclared_parameters(&self) -> bool {
+    self.options.allow_undeclared_parameters
+  }
+
   /// Gets the value of a parameter, or None is there is no such Parameter.
   pub fn get_parameter(&self, name: &str) -> Option<ParameterValue> {
     self.parameters.lock().unwrap()
@@ -714,23 +801,28 @@ impl Node {
       .collect::<Vec<_>>()
   }
 
-  fn validate_parameter_on_set(&self, name: &str, value: &ParameterValue) -> Result<(),String> {
+  // Keep this function in sync with the same function in Spinner.
+  fn validate_parameter_on_set(&self, name: &str, value: &ParameterValue) -> SetParametersResult {
     match name {
+      // built-in parameter check
       "use_sim_time" => {
         match value {
           ParameterValue::Boolean(_) => Ok(()),
           _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
         }
       }
+      // application-defined parameters
       _ => {
-        // TODO: 
-        // invoke app-installed checkers
-        Ok(())
+        match self.parameter_validator {
+          Some(ref v) => v.lock().unwrap()(name, value), // ask the validator to judge
+          None => Ok(()), // no validator defined, always accept
+        }
       }
     }
   }
 
-  fn execute_parameter_set_actions(&self, name: &str, value: &ParameterValue) -> Result<(),String> {
+  // Keep this function in sync with the same function in Spinner.
+  fn execute_parameter_set_actions(&self, name: &str, value: &ParameterValue) -> SetParametersResult {
     match name {
       "use_sim_time" => {
         match value {
@@ -738,12 +830,14 @@ impl Node {
             self.use_sim_time.store(*s, Ordering::SeqCst);
             Ok(())
           }
-          _ => Err("Parameter'use_sim_time' must be Boolean.".to_owned())
+          _ => Err("Parameter 'use_sim_time' must be Boolean.".to_owned())
         }
       }
       _ => {
-        // TODO: invoke app-installed actions
-        Ok(())
+        match self.parameter_set_action {
+          Some(ref v) => v.lock().unwrap()(name, value), // execute custom action
+          None => Ok(()), // no action defined, always accept
+        }
       }
     }
 

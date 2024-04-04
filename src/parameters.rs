@@ -137,10 +137,26 @@ impl From<ParameterValue> for raw::ParameterValue {
     }
     value
   }
+} // impl From
+
+// more Rust-like version of SetParamtersResult
+pub type SetParametersResult = Result<(),String>;
+
+impl From<SetParametersResult> for raw::SetParametersResult {
+  fn from(s: SetParametersResult) -> raw::SetParametersResult {
+    match s {
+      Ok(_) => 
+        raw::SetParametersResult { successful: true, reason: "".to_string() },
+      Err(reason) =>
+        raw::SetParametersResult { successful: false, reason },
+    }
+  }
 }
 
+
+
 // This submodule contains raw, ROS2 -compatible Parameters.
-//
+// These are for sending over the wire.
 pub mod raw {
   use rustdds::*;
   use serde::{Deserialize, Serialize};
