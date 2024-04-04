@@ -17,13 +17,21 @@ Please see the included examples on how to use the various features.
 * QoS ✅
 * Serialization ✅ - via Serde
 * Services: Clients and Servers ✅ (async recommended)
-* Actions ✅ (async)
+* Actions ✅ (async required)
 * Discovery / ROS Graph update events ✅ (async)
-* `rosout` ✅
-* Parameters - not yet
+* `rosout` logging ✅
+* Parameters ✅
+    * Parameter Services (remote Parameter manipulation) ✅
+* Time support
+    * ROS Time ✅
+    * Simulated time support ✅
+    * Steady time ✅
 * Message generation: from `.msg` to `.rs`- experimental
 * ROS 2 Security - experimental
 
+## New in Version 0.7:
+* Parameter support, incl. Paramater services
+* Time support
 
 ## New in Version 0.6:
 
