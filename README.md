@@ -30,6 +30,7 @@ Please see the included examples on how to use the various features.
 * ROS 2 Security - experimental
 
 ## New in Version 0.7:
+* `NodeName` namespace is no longer allowed to be the empty string, because it confuses ROS 2 tools. Minimum namespace is "/".
 * Parameter support, incl. Paramater services
 * Time support
 
