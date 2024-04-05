@@ -147,9 +147,11 @@ pub struct Spinner {
   allow_undeclared_parameters: bool,
 
   parameter_servers: Option<ParameterServers>,
+  parameter_events_writer: Arc<Publisher<raw::ParameterEvent>>,
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
   parameter_validator: Option<Arc<Mutex<Box<ParameterFunc>>>>,
   parameter_set_action: Option<Arc<Mutex<Box<ParameterFunc>>>>,
+  fully_qualified_node_name: String,
 }
 
 async fn next_if_some<S>(s: &mut Option<S>) -> S::Item
@@ -281,19 +283,7 @@ impl Spinner {
                 req.parameter.iter()
                   .cloned()
                   .map( Parameter::from ) // convert from "raw::Parameter"
-                  .map( |Parameter{name, value} | 
-                    {
-                      if self.allow_undeclared_parameters || 
-                        self.parameters.lock().unwrap().contains_key(&name) 
-                      {
-                        self.validate_parameter_on_set(&name,&value)?;
-                        self.execute_parameter_set_actions(&name,&value)?; 
-                        self.parameters.lock().unwrap().insert(name, value); 
-                        Ok(())
-                      } else {
-                        Err("Setting undeclared parameter '".to_owned() + &name + "' is not allowed.")
-                      }
-                    })
+                  .map( |Parameter{name, value}| self.set_parameter(&name,value))
                   .map(|r| r.into()) // to "raw" Result for serialization
                   .collect();
               info!("Set parameters response: {results:?}");
@@ -511,6 +501,38 @@ impl Spinner {
     }
   }
 
+  /// Sets a parameter value. Parameter must be declared before setting.
+  pub fn set_parameter(&self, name: &str, value: ParameterValue) -> Result<(), String> {
+    let already_set = self.parameters.lock().unwrap().contains_key(name);
+    if self.allow_undeclared_parameters || already_set
+    {
+      self.validate_parameter_on_set(name,&value)?;
+      self.execute_parameter_set_actions(name,&value)?;
+
+      // no errors, prepare for sending notificaiton
+      let p = raw::Parameter{ name: name.to_string(), 
+                              value: value.clone().into() };
+      let (new_parameters, changed_parameters) =
+        if already_set {
+          (vec![], vec![p])
+        } else {(vec![p], vec![])};
+
+      // actually set the parameter
+      self.parameters.lock().unwrap().insert(name.to_owned(), value); 
+      // and notify
+      self.parameter_events_writer.publish(raw::ParameterEvent{
+        timestamp: rustdds::Timestamp::now(), // differs from version in Node!!!
+        node: self.fully_qualified_node_name.clone(),
+        new_parameters,
+        changed_parameters,
+        deleted_parameters: vec![],
+      }).unwrap_or_else(|e| warn!("undeclare_parameter: {e:?}"));
+      Ok(())
+    } else {
+      Err("Setting undeclared parameter '".to_owned() + name + "' is not allowed.")
+    }
+  }
+
 
 } // impl Spinner
 
@@ -575,8 +597,9 @@ pub struct Node {
   rosout_writer: Option<Publisher<Log>>,
   rosout_reader: Option<Subscription<Log>>,
 
-  // Parameter Topics and Services
-  parameter_events_writer: Publisher<raw::ParameterEvent>,
+  // Parameter events (rcl_interfaces)
+  // Parameter Services are inside Spinner
+  parameter_events_writer: Arc<Publisher<raw::ParameterEvent>>,
 
   // Parameter store
   parameters: Arc<Mutex<BTreeMap<String, ParameterValue>>>,
@@ -636,7 +659,7 @@ impl Node {
       status_event_senders: Arc::new(Mutex::new(Vec::new())),
       rosout_writer: None, // Set below
       rosout_reader: None,
-      parameter_events_writer,
+      parameter_events_writer: Arc::new(parameter_events_writer),
       parameters: Arc::new(Mutex::new(parameters)),
       parameter_validator,
       parameter_set_action,
@@ -792,10 +815,12 @@ impl Node {
       sim_time: Arc::clone(&self.sim_time),
       clock_topic,
       parameter_servers,
+      parameter_events_writer: Arc::clone(&self.parameter_events_writer),
       parameters: Arc::clone(&self.parameters),
       allow_undeclared_parameters: self.options.allow_undeclared_parameters,
       parameter_validator: self.parameter_validator.as_ref().map(Arc::clone),
       parameter_set_action: self.parameter_set_action.as_ref().map(Arc::clone),
+      fully_qualified_node_name: self.fully_qualified_name(),
     })
   }
 
@@ -837,14 +862,14 @@ impl Node {
 
   fn add_reader(&mut self, reader: Gid) {
     self.readers.insert(reader);
-    if self.suppress_node_info_updates.load(Ordering::SeqCst) == false {
+    if ! self.suppress_node_info_updates.load(Ordering::SeqCst) {
       self.ros_context.update_node(self.generate_node_info());
     }
   }
 
   fn add_writer(&mut self, writer: Gid) {
     self.writers.insert(writer);
-    if self.suppress_node_info_updates.load(Ordering::SeqCst) == false {
+    if ! self.suppress_node_info_updates.load(Ordering::SeqCst) {
       self.ros_context.update_node(self.generate_node_info());
     }
   }
@@ -872,8 +897,19 @@ impl Node {
   // ///////////////////////////////////////////////
   // Parameters
 
-  pub fn undeclare_parameter(&self, _name: &str) {
-    todo!()
+  pub fn undeclare_parameter(&self, name: &str) {
+    let prev_value = self.parameters.lock().unwrap().remove(name);
+
+    if let Some(deleted_param) = prev_value {
+      // a parameter was actually undeclared. Let others know.
+      self.parameter_events_writer.publish(raw::ParameterEvent{
+        timestamp: self.time_now().into(),
+        node: self.fully_qualified_name(),
+        new_parameters: vec![],
+        changed_parameters: vec![],
+        deleted_parameters: vec![raw::Parameter{name: name.to_string(), value: deleted_param.into()}],
+      }).unwrap_or_else(|e| warn!("undeclare_parameter: {e:?}"));
+    }
   }
 
   /// Does the parameter exist?
@@ -882,13 +918,39 @@ impl Node {
   }
 
   /// Sets a parameter value. Parameter must be declared before setting.
+  //
+  // TODO: This code is duplicated in Spinner. Not good.
+  // Find a way to de-duplicate. 
+  // Same for validate_parameter_on_set and execute_parameter_set_actions.
+  // TODO: This does not account for built-in parameters e.g. "use_sim_time". 
+  // It thinks they are new on first set.
+  // TODO: Setting Parameter to type NotSet counts as parameter deletion. Maybe
+  // that needs special handling? At least for notifications.
   pub fn set_parameter(&self, name: &str, value: ParameterValue) -> Result<(), String> {
-    if self.options.allow_undeclared_parameters || 
-      self.parameters.lock().unwrap().contains_key(name) 
+    let already_set = self.parameters.lock().unwrap().contains_key(name);
+    if self.options.allow_undeclared_parameters || already_set
     {
       self.validate_parameter_on_set(name,&value)?;
       self.execute_parameter_set_actions(name,&value)?;
+
+      // no errors, prepare for sending notificaiton
+      let p = raw::Parameter{ name: name.to_string(), 
+                              value: value.clone().into() };
+      let (new_parameters, changed_parameters) =
+        if already_set {
+          (vec![], vec![p])
+        } else {(vec![p], vec![])};
+
+      // actually set the parameter
       self.parameters.lock().unwrap().insert(name.to_owned(), value); 
+      // and notify
+      self.parameter_events_writer.publish(raw::ParameterEvent{
+        timestamp: self.time_now().into(),
+        node: self.fully_qualified_name(),
+        new_parameters,
+        changed_parameters,
+        deleted_parameters: vec![],
+      }).unwrap_or_else(|e| warn!("undeclare_parameter: {e:?}"));
       Ok(())
     } else {
       Err("Setting undeclared parameter '".to_owned() + name + "' is not allowed.")
@@ -914,6 +976,11 @@ impl Node {
   }
 
   // Keep this function in sync with the same function in Spinner.
+  // TODO: This should refuse to change parameter type, unless
+  // there is a ParamaterDescription defined and it allows
+  // changing type.
+  // TODO: Setting Parameter to type NotSet counts as parameter deletion. Maybe
+  // that needs special handling?
   fn validate_parameter_on_set(&self, name: &str, value: &ParameterValue) -> SetParametersResult {
     match name {
       // built-in parameter check
