@@ -110,7 +110,7 @@ where
 
   pub fn take_seed<'de, S>(&self, seed: S) -> ReadResult<Option<(M, MessageInfo)>>
   where
-    S: serde::de::DeserializeSeed<'de, Value = M>,
+    S: serde::de::DeserializeSeed<'de, Value = M> + Clone,
     M: 'static,
   {
     self.datareader.drain_read_notifications();
