@@ -300,14 +300,14 @@ pub mod raw {
     pub const STRING_ARRAY: u8 = 9;
   }
 
-  /// https://github.com/ros2/rcl_interfaces/blob/rolling/rcl_interfaces/msg/SetParametersResult.msg
+  /// [SetParameersResult](https://github.com/ros2/rcl_interfaces/blob/rolling/rcl_interfaces/msg/SetParametersResult.msg)
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct SetParametersResult {
     pub successful: bool,
     pub reason: String,
   }
 
-  // https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/ParameterDescriptor.msg
+  /// [ParameterDescriptor](https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/ParameterDescriptor.msg)
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct ParameterDescriptor {
     pub name: String,
@@ -320,7 +320,7 @@ pub mod raw {
     pub integer_range: Vec<IntegerRange>,
   }
 
-  // https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/IntegerRange.msg
+  /// [IntegerRange](https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/IntegerRange.msg)
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct IntegerRange {
     pub from_value: i64,
@@ -328,7 +328,7 @@ pub mod raw {
     pub step: i64,
   }
 
-  // https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/FloatingPointRange.msg
+  /// [FloatingPointRange](https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/FloatingPointRange.msg)
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct FloatingPointRange {
     pub from_value: f64,
