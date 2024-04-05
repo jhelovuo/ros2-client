@@ -10,7 +10,7 @@ pub fn main() {
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
-      NodeName::new("", "time_broadcaster").unwrap(),
+      NodeName::new("/", "time_broadcaster").unwrap(),
       NodeOptions::new()
         .enable_rosout(true)
         .declare_parameter("my_param", ParameterValue::String("foo".to_owned()))

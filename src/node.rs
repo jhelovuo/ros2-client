@@ -135,6 +135,7 @@ pub struct Spinner {
   writers_to_remote_readers: Arc<Mutex<BTreeMap<GUID, BTreeSet<GUID>>>>,
   // Keep track of ros_discovery_info
   external_nodes: Arc<Mutex<BTreeMap<Gid, Vec<NodeEntitiesInfo>>>>,
+  //suppress_node_info_updates: Arc<AtomicBool>, // temporarily suppress sending updates
 
   status_event_senders: Arc<Mutex<Vec<async_channel::Sender<NodeEvent>>>>,
 
@@ -470,6 +471,7 @@ pub enum ParameterError {
   InvalidName,
 }
 
+
 /// Node in ROS2 network. Holds necessary readers and writers for rosout and
 /// parameter events topics internally.
 ///
@@ -487,6 +489,8 @@ pub struct Node {
   // These indicate what has been created locally.
   readers: BTreeSet<Gid>,
   writers: BTreeSet<Gid>,
+  suppress_node_info_updates: Arc<AtomicBool>, // temporarily suppress sending updates
+  // to prevent flood of messages
 
   // Keep track of who is matched via DDS Discovery
   // Map keys are lists of local Subscriptions and Publishers.
@@ -528,19 +532,9 @@ impl Node {
     let paramtopic = ros_context.get_parameter_events_topic();
     let rosout_topic = ros_context.get_rosout_topic();
 
-    let rosout_writer = if options.enable_rosout {
-      Some(
-        // topic already has QoS defined
-        ros_context.create_publisher(&rosout_topic, None)?,
-      )
-    } else {
-      None
-    };
-    let rosout_reader = if options.enable_rosout_reading {
-      Some(ros_context.create_subscription(&rosout_topic, None)?)
-    } else {
-      None
-    };
+    let enable_rosout = options.enable_rosout;
+    let rosout_reader = options.enable_rosout_reading;
+
 
     let parameter_events_writer = ros_context.create_publisher(&paramtopic, None)?;
 
@@ -562,7 +556,7 @@ impl Node {
       .take()
       .map(|b| Arc::new(Mutex::new(b)) );
 
-    let node = Node {
+    let mut node = Node {
       node_name,
       options,
       ros_context,
@@ -571,16 +565,33 @@ impl Node {
       readers_to_remote_writers: Arc::new(Mutex::new(BTreeMap::new())),
       writers_to_remote_readers: Arc::new(Mutex::new(BTreeMap::new())),
       external_nodes: Arc::new(Mutex::new(BTreeMap::new())),
+      suppress_node_info_updates: Arc::new(AtomicBool::new(false)),
       stop_spin_sender: None,
       status_event_senders: Arc::new(Mutex::new(Vec::new())),
-      rosout_writer,
-      rosout_reader,
+      rosout_writer: None, // Set below
+      rosout_reader: None,
       parameter_events_writer,
       parameters: Arc::new(Mutex::new(parameters)),
       parameter_validator,
       parameter_set_action,
       use_sim_time: Arc::new(AtomicBool::new(false)),
       sim_time: Arc::new(Mutex::new(ROSTime::ZERO)),
+    };
+
+    node.suppress_node_info_updates(true);
+
+    node.rosout_writer = if enable_rosout {
+      Some(
+        // topic already has QoS defined
+        node.create_publisher(&rosout_topic, None)?,
+      )
+    } else {
+      None
+    };
+    node.rosout_reader = if rosout_reader {
+      Some(node.create_subscription(&rosout_topic, None)?)
+    } else {
+      None
     };
 
     // returns `Err` if some parameter does not validate.
@@ -591,6 +602,8 @@ impl Node {
         Ok(())
       })
       .map_err(NodeCreateError::BadParameter) ?;
+
+    node.suppress_node_info_updates(false);
 
     Ok(node)
   }
@@ -634,6 +647,8 @@ impl Node {
       .build();
 
     let node_name = self.node_name.fully_qualified_name();
+
+    self.suppress_node_info_updates(true);
 
     let parameter_servers = if self.options.start_parameter_services {
       let service_mapping = ServiceMapping::Enhanced; //TODO: parameterize
@@ -682,12 +697,15 @@ impl Node {
         MessageTypeName::new("builtin_interfaces","Time"), 
         &DEFAULT_SUBSCRIPTION_QOS)?;
 
+    self.suppress_node_info_updates(false);
+
     Ok(Spinner {
       ros_context: self.ros_context.clone(),
       stop_spin_receiver,
       readers_to_remote_writers: Arc::clone(&self.readers_to_remote_writers),
       writers_to_remote_readers: Arc::clone(&self.writers_to_remote_readers),
       external_nodes: Arc::clone(&self.external_nodes),
+      //suppress_node_info_updates: Arc::clone(&self.suppress_node_info_updates),
       status_event_senders: Arc::clone(&self.status_event_senders),
       use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
@@ -727,14 +745,27 @@ impl Node {
     node_info
   }
 
+  fn suppress_node_info_updates(&mut self, suppress: bool) {
+    self.suppress_node_info_updates.store(suppress,  Ordering::SeqCst);
+
+    // Send updates when suppression ends
+    if ! suppress {
+      self.ros_context.update_node(self.generate_node_info());  
+    }
+  }
+
   fn add_reader(&mut self, reader: Gid) {
     self.readers.insert(reader);
-    self.ros_context.update_node(self.generate_node_info());
+    if self.suppress_node_info_updates.load(Ordering::SeqCst) == false {
+      self.ros_context.update_node(self.generate_node_info());
+    }
   }
 
   fn add_writer(&mut self, writer: Gid) {
     self.writers.insert(writer);
-    self.ros_context.update_node(self.generate_node_info());
+    if self.suppress_node_info_updates.load(Ordering::SeqCst) == false {
+      self.ros_context.update_node(self.generate_node_info());
+    }
   }
 
   pub fn base_name(&self) -> &str {
@@ -1071,7 +1102,9 @@ impl Node {
     D: 'static,
     DA: rustdds::no_key::DeserializerAdapter<D> + 'static,
   {
-    self.ros_context.create_simpledatareader(topic, qos)
+    let r = self.ros_context.create_simpledatareader(topic, qos)?;
+    self.add_reader(r.guid().into());
+    Ok(r)
   }
 
   pub(crate) fn create_datawriter<D, SA>(
@@ -1082,7 +1115,9 @@ impl Node {
   where
     SA: rustdds::no_key::SerializerAdapter<D>,
   {
-    self.ros_context.create_datawriter(topic, qos)
+    let w = self.ros_context.create_datawriter(topic, qos)?;
+    self.add_writer(w.guid().into());
+    Ok(w)
   }
 
   /// Creates ROS2 Service Client

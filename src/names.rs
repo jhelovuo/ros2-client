@@ -34,14 +34,22 @@ impl NodeName {
     }
 
     match namespace.chars().next() {
-      None => { /* ok */ } // but what does this mean? Same as global namespace "/" ?
+      None => 
+        return Err(NameError::BadSlash(
+          "<empty_namespace>".to_owned(), 
+          base_name.to_owned()) ),
       Some(c) if c.is_ascii_alphabetic() || c == '/' => { /*ok*/ }
       // Character '~' is not accepted, because we do not know what that would mean in a Node's
       // name.
       Some(other) => return Err(NameError::BadChar(other)),
     }
 
-    // TODO: Should we require first char to be exactly '/' ?
+    if namespace.starts_with('/') {
+      // This is what we expect
+    } else {
+      return Err(NameError::BadSlash(namespace.to_owned(),base_name.to_owned()) )
+    }
+
     // Otherwise, what would be the absolute node name?
     if let Some(bad) = namespace
       .chars()
@@ -69,7 +77,11 @@ impl NodeName {
 
   pub fn fully_qualified_name(&self) -> String {
     let mut fqn = self.namespace.clone();
-    fqn.push('/');
+    if fqn.ends_with('/') {
+      // do nothing, it already ends with slash, i.e. is exactly "/"
+    } else {
+      fqn.push('/');
+    }
     fqn.push_str(&self.base_name);
     fqn
   }

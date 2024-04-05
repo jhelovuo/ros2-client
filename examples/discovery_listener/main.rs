@@ -10,11 +10,12 @@ pub fn main() {
     )
     .unwrap();
 
+  smol::spawn(node.spinner().unwrap().spin()).detach();
+
   let status_event_stream = node.status_receiver().for_each(|event| async move {
     println!("{:?}", event);
   });
 
-  smol::spawn(node.spinner().unwrap().spin()).detach();
 
   smol::block_on(status_event_stream);
 }

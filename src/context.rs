@@ -419,28 +419,3 @@ impl Drop for ContextInner {
   }
 }
 
-// impl Evented for Context {
-//   fn register(
-//     &self,
-//     poll: &mio::Poll,
-//     token: mio::Token,
-//     interest: mio::Ready,
-//     opts: mio::PollOpt,
-//   ) -> std::io::Result<()> { poll.register(
-//     &self.inner.lock().unwrap().node_reader, token, interest, opts, )
-//   }
-
-//   fn reregister(
-//     &self,
-//     poll: &mio::Poll,
-//     token: mio::Token,
-//     interest: mio::Ready,
-//     opts: mio::PollOpt,
-//   ) -> std::io::Result<()> { poll.reregister(
-//     &self.inner.lock().unwrap().node_reader, token, interest, opts, )
-//   }
-
-//   fn deregister(&self, poll: &mio::Poll) -> std::io::Result<()> {
-//     poll.deregister(&self.inner.lock().unwrap().node_reader)
-//   }
-// }
