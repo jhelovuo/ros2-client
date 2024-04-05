@@ -313,6 +313,10 @@ struct ContextInner {
   // ROS Discovery: topic, reader and writer
   ros_discovery_topic: Topic,
   node_writer: Publisher<ParticipantEntitiesInfo>,
+  // Corresponding ParticipantEntitiesInfo Subscriber is 
+  // (optionally) in Node --> Spinner, if it is
+  // activated. Context does not have its own thread of control, so
+  // it cannot do reading.
 
   domain_participant: DomainParticipant,
   // DDS Requires Publisher and Subscriber to create (and group)
@@ -354,16 +358,11 @@ impl ContextInner {
       TopicKind::NoKey,
     )?;
 
-    // let node_reader =
-    //   Subscription::new(ros_default_subscriber
-    //     .create_simple_datareader_no_key(&ros_discovery_topic, None)?);
-
     let node_writer =
       Publisher::new(ros_default_publisher.create_datawriter_no_key(&ros_discovery_topic, None)?);
 
     Ok(ContextInner {
       local_nodes: HashMap::new(),
-      //node_reader,
       node_writer,
 
       domain_participant,
@@ -386,7 +385,6 @@ impl ContextInner {
   // Adds new NodeEntitiesInfo and updates our ContextInfo to ROS2 network
   fn update_node(&mut self, mut node_info: NodeEntitiesInfo) {
     // Each node connects also to the ROS discovery topic
-    //node_info.add_reader(Gid::from(self.node_reader.guid()));
     node_info.add_writer(Gid::from(self.node_writer.guid()));
 
     self

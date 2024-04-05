@@ -10,9 +10,11 @@ pub type GetParameterTypesService = AService<GetParameterTypesRequest, GetParame
 
 pub type SetParametersService = AService<SetParametersRequest, SetParametersResponse>;
 
-// type DescribeParametersService = (); // TODO
-// type GetParameterTypesService = (); // TODO
-// type SetParametersAtomicallyService = (); // TODO
+pub type DescribeParametersService = AService<DescribeParametersRequest, DescribeParametersResponse>;
+
+// This is structurally identical to SetParamtersService, but the operation
+// of the service is slightly different.
+pub type SetParametersAtomicallyService = AService<SetParametersRequest, SetParametersResponse>;
 
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,3 +77,19 @@ pub struct SetParametersResponse {
   pub results: Vec<parameters::raw::SetParametersResult>,
 }
 impl Message for SetParametersResponse {}
+
+pub type SetParametersAtomicallyResponse = SetParametersResponse;
+
+
+// https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/srv/DescribeParameters.srv
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DescribeParametersRequest {
+  pub names: Vec<String>,
+}
+impl Message for DescribeParametersRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DescribeParametersResponse {
+  pub values: Vec<parameters::raw::ParameterDescriptor>,
+}
+impl Message for DescribeParametersResponse {}

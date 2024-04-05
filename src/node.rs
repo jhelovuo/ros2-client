@@ -118,6 +118,8 @@ struct ParameterServers {
   get_parameter_types_server: Server<rcl_interfaces::GetParameterTypesService>,
   list_parameters_server: Server<rcl_interfaces::ListParametersService>,
   set_parameters_server: Server<rcl_interfaces::SetParametersService>,
+  set_parameters_atomically_server: Server<rcl_interfaces::SetParametersAtomicallyService>,
+  describe_parameters_server: Server<rcl_interfaces::DescribeParametersService>,
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -180,7 +182,7 @@ impl Spinner {
     pin_mut!(ros_clock_stream);
 
     // These are Option< impl Stream<_>>
-    let mut get_parameter_stream_opt = self
+    let mut get_parameters_stream_opt = self
       .parameter_servers
       .as_ref()
       .map(|s| s.get_parameters_server.receive_request_stream());
@@ -188,14 +190,22 @@ impl Spinner {
       .parameter_servers
       .as_ref()
       .map(|s| s.get_parameter_types_server.receive_request_stream());
-    let mut set_parameter_stream_opt = self
+    let mut set_parameters_stream_opt = self
       .parameter_servers
       .as_ref()
       .map(|s| s.set_parameters_server.receive_request_stream());
+    let mut set_parameters_atomically_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.set_parameters_atomically_server.receive_request_stream());
     let mut list_parameter_stream_opt = self
       .parameter_servers
       .as_ref()
       .map(|s| s.list_parameters_server.receive_request_stream());
+    let mut describe_parameters_stream_opt = self
+      .parameter_servers
+      .as_ref()
+      .map(|s| s.describe_parameters_server.receive_request_stream());
 
     loop {
       futures::select! {
@@ -215,8 +225,8 @@ impl Spinner {
         }
 
 
-        get_parameter_request = next_if_some(&mut get_parameter_stream_opt).fuse() => {
-          match get_parameter_request {
+        get_parameters_request = next_if_some(&mut get_parameters_stream_opt).fuse() => {
+          match get_parameters_request {
             Ok( (req_id, req) ) => {
               info!("Get parameter request {req:?}");
               let values = {
@@ -249,7 +259,7 @@ impl Spinner {
                 req.names.iter()
                   .map(|name| param_db.get(name.as_str())
                     .unwrap_or(&ParameterValue::NotSet))
-                  .map( ParameterValue::to_parameter_type_enum )
+                  .map(ParameterValue::to_parameter_type_raw)
                   .collect()
               };
               info!("Get parameter types response: {values:?}");
@@ -263,8 +273,8 @@ impl Spinner {
           }
         }
 
-        set_parameter_request = next_if_some(&mut set_parameter_stream_opt).fuse() => {
-          match set_parameter_request {
+        set_parameters_request = next_if_some(&mut set_parameters_stream_opt).fuse() => {
+          match set_parameters_request {
             Ok( (req_id, req) ) => {
               info!("Set parameter request {req:?}");
               let results = 
@@ -297,6 +307,31 @@ impl Spinner {
           }
         }
 
+        set_parameters_atomically_request = next_if_some(&mut set_parameters_atomically_stream_opt).fuse() => {
+          match set_parameters_atomically_request {
+            Ok( (req_id, req) ) => {
+              warn!("Set parameters atomically request {req:?}");
+              let results = 
+                req.parameter.iter()
+                  .cloned()
+                  .map( Parameter::from ) // convert from "raw::Parameter"
+                  .map( |Parameter{ .. } | 
+                      // TODO: Implement atomic setting.
+                      Err("Setting parameters atomically is not implemented.".to_owned())
+                    )
+                  .map(|r| r.into()) // to "raw" Result for serialization
+                  .collect();
+              warn!("Set parameters atomically response: {results:?}");
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().set_parameters_atomically_server
+                .async_send_response(req_id, rcl_interfaces::SetParametersAtomicallyResponse{ results })
+                .await
+                .unwrap_or_else(|e| warn!("SetParameters response error {e:?}"));
+            }
+            Err(e) => warn!("SetParametersAtomically request error {e:?}"),
+          }
+        }
+
         list_parameter_request = next_if_some(&mut list_parameter_stream_opt).fuse() => {
           match list_parameter_request {
             Ok( (req_id, req) ) => {
@@ -325,6 +360,35 @@ impl Spinner {
                 .unwrap_or_else(|e| warn!("ListParameter response error {e:?}"));
             }
             Err(e) => warn!("ListParameter request error {e:?}"),
+          }
+        }
+
+        describe_parameters_request = next_if_some(&mut describe_parameters_stream_opt).fuse() => {
+          match describe_parameters_request {
+            Ok( (req_id, req) ) => {
+              info!("Describe parameters request {req:?}");
+              let values = {
+                let parameters = self.parameters.lock().unwrap();
+                req.names.iter()
+                  .map( |name| 
+                    {
+                      if let Some(value) = parameters.get(name) {
+                        ParameterDescriptor::from_value(name, value)
+                      } else {
+                        ParameterDescriptor::unknown(name)
+                      }
+                    })
+                  .map(|r| r.into()) // to "raw" Result for serialization
+                  .collect()
+              };
+              info!("Describe parameters response: {values:?}");
+              // .unwrap() below should be safe, as we would not be here if the Server did not exist
+              self.parameter_servers.as_ref().unwrap().describe_parameters_server
+                .async_send_response(req_id, rcl_interfaces::DescribeParametersResponse{ values })
+                .await
+                .unwrap_or_else(|e| warn!("DescribeParameters response error {e:?}"));
+            }
+            Err(e) => warn!("DescribeParameters request error {e:?}"),
           }
         }
 
@@ -489,8 +553,10 @@ pub struct Node {
   // These indicate what has been created locally.
   readers: BTreeSet<Gid>,
   writers: BTreeSet<Gid>,
-  suppress_node_info_updates: Arc<AtomicBool>, // temporarily suppress sending updates
-  // to prevent flood of messages
+  
+  suppress_node_info_updates: Arc<AtomicBool>, 
+  // temporarily suppress sending updates
+  // to prevent flood of messages. TODO: not shared: need not be atomic or Arc.
 
   // Keep track of who is matched via DDS Discovery
   // Map keys are lists of local Subscriptions and Publishers.
@@ -673,10 +739,24 @@ impl Node {
         service_qos.clone(),
         service_qos.clone(),
       )?;
+      let set_parameters_atomically_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "set_parameters_atomically").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "SetParametersAtomically"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
       let list_parameters_server = self.create_server(
         service_mapping,
         &Name::new(&node_name, "list_parameters").unwrap(),
         &ServiceTypeName::new("rcl_interfaces", "ListParameters"),
+        service_qos.clone(),
+        service_qos.clone(),
+      )?;
+      let describe_parameters_server = self.create_server(
+        service_mapping,
+        &Name::new(&node_name, "describe_parameters").unwrap(),
+        &ServiceTypeName::new("rcl_interfaces", "DescribeParameters"),
         service_qos.clone(),
         service_qos.clone(),
       )?;
@@ -686,6 +766,8 @@ impl Node {
         get_parameter_types_server,
         list_parameters_server,
         set_parameters_server,
+        set_parameters_atomically_server,
+        describe_parameters_server,
       })
     } else {
       None // No parameter services
@@ -705,7 +787,6 @@ impl Node {
       readers_to_remote_writers: Arc::clone(&self.readers_to_remote_writers),
       writers_to_remote_readers: Arc::clone(&self.writers_to_remote_readers),
       external_nodes: Arc::clone(&self.external_nodes),
-      //suppress_node_info_updates: Arc::clone(&self.suppress_node_info_updates),
       status_event_senders: Arc::clone(&self.status_event_senders),
       use_sim_time: Arc::clone(&self.use_sim_time),
       sim_time: Arc::clone(&self.sim_time),
@@ -1399,7 +1480,7 @@ impl Drop for Node {
 /// # let context = Context::new().unwrap();
 /// # let mut node = context
 /// #     .new_node(
-/// #       NodeName::new("", "some_node").unwrap(),
+/// #       NodeName::new("/", "some_node").unwrap(),
 /// #       NodeOptions::new().enable_rosout(true),
 /// #     )
 /// #     .unwrap();

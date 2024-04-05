@@ -21,21 +21,40 @@ pub enum ParameterValue {
   StringArray(Vec<String>),
 }
 
+// https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/ParameterType.msg
+pub enum ParameterType {
+  NotSet = 0,
+  Bool = 1,
+  Integer = 2,
+  Double = 3,
+  String = 4,
+  ByteArray = 5,
+  BoolArray = 6,
+  IntegerArray = 7,
+  DoubleArray = 8,
+  StringArray = 9,
+}
+
+
 impl ParameterValue {
   // https://github.com/ros2/rcl_interfaces/blob/rolling/rcl_interfaces/msg/ParameterType.msg
-  pub fn to_parameter_type_enum(p: &ParameterValue) -> u8 {
-    match p {
-      ParameterValue::NotSet => 0, 
-      ParameterValue::Boolean(_) => 1,
-      ParameterValue::Integer(_) => 2,
-      ParameterValue::Double(_d) => 3,
-      ParameterValue::String(_s) => 4,
-      ParameterValue::ByteArray(_a) => 5,
-      ParameterValue::BooleanArray(_a) => 6,
-      ParameterValue::IntegerArray(_a) => 7,
-      ParameterValue::DoubleArray(_a) => 8,
-      ParameterValue::StringArray(_a) => 9,
+  pub fn to_parameter_type(&self) -> ParameterType {
+    match self {
+      ParameterValue::NotSet => ParameterType::NotSet, 
+      ParameterValue::Boolean(_) => ParameterType::Bool,
+      ParameterValue::Integer(_) => ParameterType::Integer,
+      ParameterValue::Double(_d) => ParameterType::Double,
+      ParameterValue::String(_s) => ParameterType::String,
+      ParameterValue::ByteArray(_a) => ParameterType::ByteArray,
+      ParameterValue::BooleanArray(_a) => ParameterType::BoolArray,
+      ParameterValue::IntegerArray(_a) => ParameterType::IntegerArray,
+      ParameterValue::DoubleArray(_a) => ParameterType::DoubleArray,
+      ParameterValue::StringArray(_a) => ParameterType::StringArray,
     }
+  }
+
+  pub fn to_parameter_type_raw(p: &ParameterValue) -> u8 {
+    Self::to_parameter_type(p) as u8
   }
 }
 
@@ -154,6 +173,75 @@ impl From<SetParametersResult> for raw::SetParametersResult {
 }
 
 
+pub struct ParameterDescriptor {
+  pub name: String,
+  pub param_type: ParameterType, // ParameterType.msg defines enum
+  pub description: String, // Description of the parameter, visible from introspection tools.
+  pub additional_constraints: String, // Plain English description of additional constraints which cannot be expressed..
+  pub read_only: bool, // If 'true' then the value cannot change after it has been initialized.
+  pub dynamic_typing: bool, // If true, the parameter is allowed to change type.
+  pub range: NumericRange,
+}
+
+impl ParameterDescriptor {
+  pub fn unknown(name:&str) -> Self {
+    ParameterDescriptor {
+      name: name.to_string(),
+      param_type: ParameterType::NotSet,
+      description: "unknown parameter".to_string(),
+      additional_constraints: "".to_string(),
+      read_only: true,
+      dynamic_typing: false,
+      range: NumericRange::NotSpecified,
+    }
+  }
+
+  pub fn from_value(name: &str, value: &ParameterValue) -> Self {
+    ParameterDescriptor {
+      name: name.to_string(),
+      param_type: value.to_parameter_type(),
+      description: "(description missing, not implemented)".to_string(),
+      additional_constraints: "".to_string(),
+      read_only: false,
+      dynamic_typing: false,
+      range: NumericRange::NotSpecified,
+    }    
+  }
+}
+
+pub enum NumericRange {
+  NotSpecified,
+  IntegerRange{ from_value: i64, to_value: i64, step: i64 },
+  FloatingPointRange{ from_value: f64, to_value: f64, step: f64 },
+}
+
+impl From<ParameterDescriptor> for raw::ParameterDescriptor {
+  fn from(p: ParameterDescriptor) -> raw::ParameterDescriptor {
+    let (integer_range,floating_point_range) =
+      match p.range {
+        NumericRange::NotSpecified =>
+          (vec![], vec![]),
+
+        NumericRange::IntegerRange{from_value, to_value, step} =>
+          ( vec![raw::IntegerRange{from_value, to_value, step}], vec![] ),
+
+        NumericRange::FloatingPointRange{from_value, to_value, step} =>
+          ( vec![], vec![raw::FloatingPointRange{from_value, to_value, step}]),
+      };
+
+    raw::ParameterDescriptor {
+      name: p.name,
+      r#type: p.param_type as u8,
+      description: p.description,
+      additional_constraints: p.additional_constraints,
+      read_only: p.read_only,
+      dynamic_typing: p.dynamic_typing,
+      integer_range,
+      floating_point_range,
+    }
+  }
+}
+
 
 // This submodule contains raw, ROS2 -compatible Parameters.
 // These are for sending over the wire.
@@ -218,4 +306,34 @@ pub mod raw {
     pub successful: bool,
     pub reason: String,
   }
+
+  // https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/ParameterDescriptor.msg
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub struct ParameterDescriptor {
+    pub name: String,
+    pub r#type: u8, // ParameterType.msg defines enum
+    pub description: String, // Description of the parameter, visible from introspection tools.
+    pub additional_constraints: String, // Plain English description of additional constraints which cannot be expressed..
+    pub read_only: bool, // If 'true' then the value cannot change after it has been initialized.
+    pub dynamic_typing: bool, // If true, the parameter is allowed to change type.
+    pub floating_point_range: Vec<FloatingPointRange>,
+    pub integer_range: Vec<IntegerRange>,
+  }
+
+  // https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/IntegerRange.msg
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub struct IntegerRange {
+    pub from_value: i64,
+    pub to_value: i64,
+    pub step: i64,
+  }
+
+  // https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/FloatingPointRange.msg
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub struct FloatingPointRange {
+    pub from_value: f64,
+    pub to_value: f64,
+    pub step: f64,
+  }
+
 }

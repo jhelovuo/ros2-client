@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use ros2_client::*;
+use ros2_client::ros2::policy;
 
 pub fn main() {
   let context = Context::new().unwrap();
@@ -10,6 +11,14 @@ pub fn main() {
     )
     .unwrap();
 
+  let reliable_qos = ros2::QosPolicyBuilder::new()
+      .history(policy::History::KeepLast { depth: 10 })
+      .reliability(policy::Reliability::Reliable {
+        max_blocking_time: ros2::Duration::from_millis(100),
+      })
+      .durability(policy::Durability::TransientLocal)
+      .build();
+
   let chatter_topic = node
     .create_topic(
       &Name::new("/", "topic").unwrap(),
@@ -18,7 +27,7 @@ pub fn main() {
     )
     .unwrap();
   let chatter_subscription = node
-    .create_subscription::<String>(&chatter_topic, None)
+    .create_subscription::<String>(&chatter_topic, Some(reliable_qos))
     .unwrap();
 
   let subscription_stream = chatter_subscription

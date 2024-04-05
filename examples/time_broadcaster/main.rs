@@ -16,6 +16,7 @@ pub fn main() {
         .declare_parameter("my_param", ParameterValue::String("foo".to_owned()))
 
         // example parameter validator function
+        // Requirement to have exactly 3 chars is just an arbitrary restriction.
         .parameter_validator( Box::new(|name,value| {
           match name {
             "my_param" => match value {
@@ -38,6 +39,14 @@ pub fn main() {
   //
   // read back:
   // ros2 service call /time_broadcaster/get_parameters rcl_interfaces/srv/GetParameters '{names: ['my_param']}'
+  //
+  // or, more simply:
+  //
+  // ros2 param get --spin-time=5 /time_broadcaster my_param
+  //
+  // ros2 param set --spin-time=5 /time_broadcaster my_param bar
+  //
+  // ros2 param describe --spin-time=5 /time_broadcaster my_param
 
   let clock_publisher = node.create_publisher::<builtin_interfaces::Time>( 
     &node.create_topic(
