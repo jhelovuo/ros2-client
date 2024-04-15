@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, marker::PhantomData};
 
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 use futures::{
@@ -114,7 +114,7 @@ where
     M: 'static,
   {
     self.datareader.drain_read_notifications();
-    let decoder = CdrDeserializeSeedDecoder::from(seed);
+    let decoder = CdrDeserializeSeedDecoder::new(seed, PhantomData::<()>);
     let ds: Option<no_key::DeserializedCacheChange<M>> =
       self.datareader.try_take_one_with(decoder)?;
     Ok(ds.map(dcc_to_value_and_messageinfo))
@@ -129,7 +129,7 @@ where
     S: serde::de::DeserializeSeed<'de, Value = M> + Clone + 'a,
     M: 'static,
   {
-    let decoder = CdrDeserializeSeedDecoder::from(seed);
+    let decoder = CdrDeserializeSeedDecoder::new(seed, PhantomData::<()>);
     self
       .datareader
       .as_async_stream_with(decoder)

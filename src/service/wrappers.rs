@@ -334,14 +334,14 @@ impl<RW> ServiceDeserializerAdapter<RW> {
 
 impl<RW: Wrapper> no_key::DeserializerAdapter<RW> for ServiceDeserializerAdapter<RW> {
   type Error = ReadError;
-  type Deserialized = RW;
+  type Decoded = RW;
 
   fn supported_encodings() -> &'static [RepresentationIdentifier] {
     &Self::REPR_IDS
   }
 
-  fn transform_deserialized(deserialized: Self::Deserialized) -> RW {
-    deserialized
+  fn transform_decoded(decoded: Self::Decoded) -> RW {
+    decoded
   }
 }
 
