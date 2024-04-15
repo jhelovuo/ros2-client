@@ -34,6 +34,10 @@ Please see the included examples on how to use the various features.
 * Parameter support, incl. Paramater services
 * Time support
 
+### 0.7.1
+* Subscribers can `take()` samples with deserialization "seed" value. 
+This allows more run-time control of deserialization. Upgrade to RustDDS 0.10.0.
+
 ## New in Version 0.6:
 
 * Reworked ROS 2 Discovery implementation. Now `Node` has `.status_receiver()`
