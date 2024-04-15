@@ -3,12 +3,13 @@ use std::{io, marker::PhantomData};
 use mio::{Evented, Poll, PollOpt, Ready, Token};
 use futures::{
   pin_mut,
-  stream::{FusedStream, StreamExt}, Stream,
+  stream::{FusedStream, StreamExt},
+  Stream,
 };
 use rustdds::{
   dds::{ReadError, ReadResult, WriteResult},
-  *,
   serialization::CdrDeserializeSeedDecoder,
+  *,
 };
 use serde::{de::DeserializeOwned, Serialize};
 

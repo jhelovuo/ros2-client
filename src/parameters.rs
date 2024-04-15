@@ -177,9 +177,9 @@ impl From<SetParametersResult> for raw::SetParametersResult {
 
 pub struct ParameterDescriptor {
   pub name: String,
-  pub param_type: ParameterType,      // ParameterType.msg defines enum
-  pub description: String,            /* Description of the parameter, visible from
-                                       * introspection tools. */
+  pub param_type: ParameterType, // ParameterType.msg defines enum
+  pub description: String,       /* Description of the parameter, visible from
+                                  * introspection tools. */
   pub additional_constraints: String, /* Plain English description of additional constraints
                                        * which cannot be expressed.. */
   pub read_only: bool, // If 'true' then the value cannot change after it has been initialized.
@@ -340,9 +340,9 @@ pub mod raw {
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct ParameterDescriptor {
     pub name: String,
-    pub r#type: u8,                     // ParameterType.msg defines enum
-    pub description: String,            /* Description of the parameter, visible from
-                                         * introspection tools. */
+    pub r#type: u8, // ParameterType.msg defines enum
+    pub description: String, /* Description of the parameter, visible from
+                     * introspection tools. */
     pub additional_constraints: String, /* Plain English description of additional constraints
                                          * which cannot be expressed.. */
     pub read_only: bool, // If 'true' then the value cannot change after it has been initialized.
