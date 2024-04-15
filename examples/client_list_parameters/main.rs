@@ -1,10 +1,11 @@
 use std::{env, time::Duration};
+
 use futures::TryFutureExt;
 use smol::future::FutureExt;
-
 use ros2_client::{
   rcl_interfaces::{ListParametersRequest, ListParametersResponse},
-  service::CallServiceError, ros2::WriteError,
+  ros2::WriteError,
+  service::CallServiceError,
   AService, Context, Name, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{policy, QosPolicies, QosPolicyBuilder};
@@ -20,7 +21,7 @@ fn main() {
   }
 
   let mut node = create_node();
-  
+
   // Start background spinner.
   // E.g. waiting for server does not work without this.
   smol::spawn(node.spinner().unwrap().spin()).detach();
@@ -31,7 +32,7 @@ fn main() {
 
   let target_node = &args[1];
   println!(">>> target node is '{target_node}'");
-  let service_name = Name::new(target_node,"list_parameters").unwrap();
+  let service_name = Name::new(target_node, "list_parameters").unwrap();
   println!(">>> connecting service {service_name:?}");
 
   let client = node
@@ -44,13 +45,12 @@ fn main() {
     )
     .unwrap();
 
- let request = ListParametersRequest {
-   depth: 0,
-   prefixes: vec![],
- };
+  let request = ListParametersRequest {
+    depth: 0,
+    prefixes: vec![],
+  };
 
-
-  smol::block_on( async {
+  smol::block_on(async {
     println!(">>> Waiting for ListParameters server to appear.");
     client.wait_for_service(&node).await;
     println!(">>> Connected to ListParameters server.");
@@ -58,24 +58,25 @@ fn main() {
     match client.async_send_request(request).await {
       Ok(req_id) => {
         println!(">>> request sent {req_id:?}");
-        match client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
-               .or(async {
-                    smol::Timer::after(Duration::from_secs(15)).await;
-                    println!(">>> Response timeout!!");
-                    Err(WriteError::WouldBlock { data: () }.into() )
-                  }).await
+        match client
+          .async_receive_response(req_id)
+          .map_err(CallServiceError::<()>::from)
+          .or(async {
+            smol::Timer::after(Duration::from_secs(15)).await;
+            println!(">>> Response timeout!!");
+            Err(WriteError::WouldBlock { data: () }.into())
+          })
+          .await
         {
           Ok(response) => {
             println!("<<< response: {:?}", response);
           }
           Err(e) => println!("<<< response error {:?}", e),
-        }    
+        }
       }
       Err(e) => println!(">>> request sending error {e:?}"),
     }
-
   });
-
 }
 
 fn create_qos() -> QosPolicies {

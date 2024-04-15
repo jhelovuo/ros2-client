@@ -64,7 +64,7 @@ impl ROSTime {
 
 impl From<chrono::DateTime<Utc>> for ROSTime {
   fn from(chrono_time: chrono::DateTime<Utc>) -> ROSTime {
-    ROSTime{ chrono_time }
+    ROSTime { chrono_time }
   }
 }
 
@@ -74,17 +74,14 @@ impl From<ROSTime> for chrono::DateTime<Utc> {
   }
 }
 
-
 impl From<ROSTime> for rustdds::Timestamp {
   fn from(rt: ROSTime) -> rustdds::Timestamp {
-    rustdds::Timestamp::try_from(rt.chrono_time)
-      .unwrap_or_else(|e| {
-        error!("Time conversion error: {} source={:?}", e, rt);
-        rustdds::Timestamp::INVALID
-      })
+    rustdds::Timestamp::try_from(rt.chrono_time).unwrap_or_else(|e| {
+      error!("Time conversion error: {} source={:?}", e, rt);
+      rustdds::Timestamp::INVALID
+    })
   }
 }
-
 
 impl Sub for ROSTime {
   type Output = ROSDuration;

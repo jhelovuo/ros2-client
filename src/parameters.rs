@@ -35,12 +35,11 @@ pub enum ParameterType {
   StringArray = 9,
 }
 
-
 impl ParameterValue {
   // https://github.com/ros2/rcl_interfaces/blob/rolling/rcl_interfaces/msg/ParameterType.msg
   pub fn to_parameter_type(&self) -> ParameterType {
     match self {
-      ParameterValue::NotSet => ParameterType::NotSet, 
+      ParameterValue::NotSet => ParameterType::NotSet,
       ParameterValue::Boolean(_) => ParameterType::Bool,
       ParameterValue::Integer(_) => ParameterType::Integer,
       ParameterValue::Double(_d) => ParameterType::Double,
@@ -159,32 +158,37 @@ impl From<ParameterValue> for raw::ParameterValue {
 } // impl From
 
 // more Rust-like version of SetParamtersResult
-pub type SetParametersResult = Result<(),String>;
+pub type SetParametersResult = Result<(), String>;
 
 impl From<SetParametersResult> for raw::SetParametersResult {
   fn from(s: SetParametersResult) -> raw::SetParametersResult {
     match s {
-      Ok(_) => 
-        raw::SetParametersResult { successful: true, reason: "".to_string() },
-      Err(reason) =>
-        raw::SetParametersResult { successful: false, reason },
+      Ok(_) => raw::SetParametersResult {
+        successful: true,
+        reason: "".to_string(),
+      },
+      Err(reason) => raw::SetParametersResult {
+        successful: false,
+        reason,
+      },
     }
   }
 }
 
-
 pub struct ParameterDescriptor {
   pub name: String,
-  pub param_type: ParameterType, // ParameterType.msg defines enum
-  pub description: String, // Description of the parameter, visible from introspection tools.
-  pub additional_constraints: String, // Plain English description of additional constraints which cannot be expressed..
+  pub param_type: ParameterType,      // ParameterType.msg defines enum
+  pub description: String,            /* Description of the parameter, visible from
+                                       * introspection tools. */
+  pub additional_constraints: String, /* Plain English description of additional constraints
+                                       * which cannot be expressed.. */
   pub read_only: bool, // If 'true' then the value cannot change after it has been initialized.
   pub dynamic_typing: bool, // If true, the parameter is allowed to change type.
   pub range: NumericRange,
 }
 
 impl ParameterDescriptor {
-  pub fn unknown(name:&str) -> Self {
+  pub fn unknown(name: &str) -> Self {
     ParameterDescriptor {
       name: name.to_string(),
       param_type: ParameterType::NotSet,
@@ -205,29 +209,55 @@ impl ParameterDescriptor {
       read_only: false,
       dynamic_typing: false,
       range: NumericRange::NotSpecified,
-    }    
+    }
   }
 }
 
 pub enum NumericRange {
   NotSpecified,
-  IntegerRange{ from_value: i64, to_value: i64, step: i64 },
-  FloatingPointRange{ from_value: f64, to_value: f64, step: f64 },
+  IntegerRange {
+    from_value: i64,
+    to_value: i64,
+    step: i64,
+  },
+  FloatingPointRange {
+    from_value: f64,
+    to_value: f64,
+    step: f64,
+  },
 }
 
 impl From<ParameterDescriptor> for raw::ParameterDescriptor {
   fn from(p: ParameterDescriptor) -> raw::ParameterDescriptor {
-    let (integer_range,floating_point_range) =
-      match p.range {
-        NumericRange::NotSpecified =>
-          (vec![], vec![]),
+    let (integer_range, floating_point_range) = match p.range {
+      NumericRange::NotSpecified => (vec![], vec![]),
 
-        NumericRange::IntegerRange{from_value, to_value, step} =>
-          ( vec![raw::IntegerRange{from_value, to_value, step}], vec![] ),
+      NumericRange::IntegerRange {
+        from_value,
+        to_value,
+        step,
+      } => (
+        vec![raw::IntegerRange {
+          from_value,
+          to_value,
+          step,
+        }],
+        vec![],
+      ),
 
-        NumericRange::FloatingPointRange{from_value, to_value, step} =>
-          ( vec![], vec![raw::FloatingPointRange{from_value, to_value, step}]),
-      };
+      NumericRange::FloatingPointRange {
+        from_value,
+        to_value,
+        step,
+      } => (
+        vec![],
+        vec![raw::FloatingPointRange {
+          from_value,
+          to_value,
+          step,
+        }],
+      ),
+    };
 
     raw::ParameterDescriptor {
       name: p.name,
@@ -241,7 +271,6 @@ impl From<ParameterDescriptor> for raw::ParameterDescriptor {
     }
   }
 }
-
 
 // This submodule contains raw, ROS2 -compatible Parameters.
 // These are for sending over the wire.
@@ -311,9 +340,11 @@ pub mod raw {
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct ParameterDescriptor {
     pub name: String,
-    pub r#type: u8, // ParameterType.msg defines enum
-    pub description: String, // Description of the parameter, visible from introspection tools.
-    pub additional_constraints: String, // Plain English description of additional constraints which cannot be expressed..
+    pub r#type: u8,                     // ParameterType.msg defines enum
+    pub description: String,            /* Description of the parameter, visible from
+                                         * introspection tools. */
+    pub additional_constraints: String, /* Plain English description of additional constraints
+                                         * which cannot be expressed.. */
     pub read_only: bool, // If 'true' then the value cannot change after it has been initialized.
     pub dynamic_typing: bool, // If true, the parameter is allowed to change type.
     pub floating_point_range: Vec<FloatingPointRange>,
@@ -335,5 +366,4 @@ pub mod raw {
     pub to_value: f64,
     pub step: f64,
   }
-
 }

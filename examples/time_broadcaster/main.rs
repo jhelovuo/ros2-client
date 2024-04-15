@@ -1,7 +1,6 @@
-use std::time::Duration;
-use std::convert::TryInto;
-use chrono::{DateTime, Utc};
+use std::{convert::TryInto, time::Duration};
 
+use chrono::{DateTime, Utc};
 use ros2_client::*;
 
 pub fn main() {
@@ -14,31 +13,31 @@ pub fn main() {
       NodeOptions::new()
         .enable_rosout(true)
         .declare_parameter("my_param", ParameterValue::String("foo".to_owned()))
-
         // example parameter validator function
         // Requirement to have exactly 3 chars is just an arbitrary restriction.
-        .parameter_validator( Box::new(|name,value| {
-          match name {
-            "my_param" => match value {
-              ParameterValue::String(s) if s.len() == 3 => Ok(()),
-              _ => Err("my_param must be a string of 3 chars".to_string()),
-            },
-            _ => Ok(()),
-          }
-        } ))
+        .parameter_validator(Box::new(|name, value| match name {
+          "my_param" => match value {
+            ParameterValue::String(s) if s.len() == 3 => Ok(()),
+            _ => Err("my_param must be a string of 3 chars".to_string()),
+          },
+          _ => Ok(()),
+        }))
         // parameter set handler.
-        .parameter_set_action( Box::new(|name,value| {
+        .parameter_set_action(Box::new(|name, value| {
           println!("Setting {}={:?}", name, value);
           Ok(())
-        }))
+        })),
     )
     .unwrap();
 
   // "my_param" can be changed using
-  // ros2 service call /time_broadcaster/set_parameters rcl_interfaces/srv/SetParameters '{parameters: [{name: "my_param", value: {type: 4, string_value: "bar"}}]}'
+  // ros2 service call /time_broadcaster/set_parameters
+  // rcl_interfaces/srv/SetParameters '{parameters: [{name: "my_param", value:
+  // {type: 4, string_value: "bar"}}]}'
   //
   // read back:
-  // ros2 service call /time_broadcaster/get_parameters rcl_interfaces/srv/GetParameters '{names: ['my_param']}'
+  // ros2 service call /time_broadcaster/get_parameters
+  // rcl_interfaces/srv/GetParameters '{names: ['my_param']}'
   //
   // or, more simply:
   //
@@ -48,14 +47,18 @@ pub fn main() {
   //
   // ros2 param describe --spin-time=5 /time_broadcaster my_param
 
-  let clock_publisher = node.create_publisher::<builtin_interfaces::Time>( 
-    &node.create_topic(
-      &Name::new("/","clock").unwrap(), 
-      MessageTypeName::new("builtin_interfaces","Time"),
-      &DEFAULT_PUBLISHER_QOS  
-    ).unwrap(), 
-    None)
-  .unwrap();
+  let clock_publisher = node
+    .create_publisher::<builtin_interfaces::Time>(
+      &node
+        .create_topic(
+          &Name::new("/", "clock").unwrap(),
+          MessageTypeName::new("builtin_interfaces", "Time"),
+          &DEFAULT_PUBLISHER_QOS,
+        )
+        .unwrap(),
+      None,
+    )
+    .unwrap();
 
   smol::spawn(node.spinner().unwrap().spin()).detach();
 
@@ -69,9 +72,9 @@ pub fn main() {
 
   smol::block_on(async move {
     loop {
-      println!("tick {:?}", DateTime::<Utc>::from( sim_time ) );
+      println!("tick {:?}", DateTime::<Utc>::from(sim_time));
       clock_publisher.publish(sim_time.into()).unwrap();
-      sim_time = sim_time + sim_time_tick.try_into().unwrap() ;
+      sim_time = sim_time + sim_time_tick.try_into().unwrap();
       smol::Timer::after(real_time_tick).await;
     }
   });

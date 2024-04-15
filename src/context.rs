@@ -23,8 +23,8 @@ use crate::{
   gid::Gid,
   names::*,
   node::{Node, NodeOptions},
-  NodeCreateError,
   pubsub::{Publisher, Subscription},
+  NodeCreateError,
 };
 
 lazy_static! {
@@ -160,7 +160,11 @@ impl Context {
   }
 
   /// Create a new ROS2 [`Node`]
-  pub fn new_node(&self, node_name: NodeName, options: NodeOptions) -> Result<Node, NodeCreateError> {
+  pub fn new_node(
+    &self,
+    node_name: NodeName,
+    options: NodeOptions,
+  ) -> Result<Node, NodeCreateError> {
     Node::new(node_name, options, self.clone())
   }
 
@@ -313,11 +317,10 @@ struct ContextInner {
   // ROS Discovery: topic, reader and writer
   ros_discovery_topic: Topic,
   node_writer: Publisher<ParticipantEntitiesInfo>,
-  // Corresponding ParticipantEntitiesInfo Subscriber is 
+  // Corresponding ParticipantEntitiesInfo Subscriber is
   // (optionally) in Node --> Spinner, if it is
   // activated. Context does not have its own thread of control, so
   // it cannot do reading.
-
   domain_participant: DomainParticipant,
   // DDS Requires Publisher and Subscriber to create (and group)
   // DataWriters and DataReaders, so we create one of each.
@@ -416,4 +419,3 @@ impl Drop for ContextInner {
     self.broadcast_node_infos();
   }
 }
-

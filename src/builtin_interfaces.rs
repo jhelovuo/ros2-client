@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use log::error;
 
-use crate::{
-  message::Message,
-  ros_time::ROSTime,
-};
+use crate::{message::Message, ros_time::ROSTime};
 
 // https://index.ros.org/p/builtin_interfaces/
 //
@@ -57,20 +54,18 @@ impl Time {
   }
 }
 
-
 // NOTE:
-// This may panic, if the source ROSTime is unreasonably far in the past or future.
-// If this is not ok, then TryFrom should be implemented and used.
+// This may panic, if the source ROSTime is unreasonably far in the past or
+// future. If this is not ok, then TryFrom should be implemented and used.
 impl From<ROSTime> for Time {
   fn from(rt: ROSTime) -> Time {
-    Time::from_nanos( rt.to_nanos().unwrap() )
+    Time::from_nanos(rt.to_nanos().unwrap())
   }
 }
 
-
 impl From<Time> for ROSTime {
   fn from(t: Time) -> ROSTime {
-    ROSTime::from_nanos( t.to_nanos() )
+    ROSTime::from_nanos(t.to_nanos())
   }
 }
 

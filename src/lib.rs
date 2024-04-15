@@ -75,6 +75,8 @@ pub mod pubsub;
 pub mod rcl_interfaces;
 pub mod ros_time;
 pub mod service;
+
+/// Corresponds to RCL's `RCL_STEADY_TIME`
 pub mod steady_time;
 mod wide_string;
 

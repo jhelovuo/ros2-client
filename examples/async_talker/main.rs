@@ -1,6 +1,4 @@
-use ros2_client::
-  { Context, MessageTypeName, Name, NodeName, 
-    NodeOptions, ros2, ros2::policy};
+use ros2_client::{ros2, ros2::policy, Context, MessageTypeName, Name, NodeName, NodeOptions};
 use async_io::Timer;
 
 fn main() {
@@ -17,12 +15,12 @@ fn main() {
     .unwrap();
 
   let reliable_qos = ros2::QosPolicyBuilder::new()
-      .history(policy::History::KeepLast { depth: 10 })
-      .reliability(policy::Reliability::Reliable {
-        max_blocking_time: ros2::Duration::from_millis(100),
-      })
-      .durability(policy::Durability::TransientLocal)
-      .build();
+    .history(policy::History::KeepLast { depth: 10 })
+    .reliability(policy::Reliability::Reliable {
+      max_blocking_time: ros2::Duration::from_millis(100),
+    })
+    .durability(policy::Durability::TransientLocal)
+    .build();
 
   let chatter_topic = node
     .create_topic(

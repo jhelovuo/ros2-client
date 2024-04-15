@@ -16,6 +16,5 @@ pub fn main() {
     println!("{:?}", event);
   });
 
-
   smol::block_on(status_event_stream);
 }
