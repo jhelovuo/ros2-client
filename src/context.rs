@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 //use mio::Evented;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 use rustdds::{
   dds::CreateResult,
   no_key::{DeserializerAdapter, SerializerAdapter},
@@ -255,7 +255,7 @@ impl Context {
     qos: Option<QosPolicies>,
   ) -> dds::CreateResult<Subscription<M>>
   where
-    M: 'static + DeserializeOwned,
+    M: 'static,
   {
     let datareader = self
       .get_ros_default_subscriber()
