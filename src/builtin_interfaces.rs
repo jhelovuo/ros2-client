@@ -1,58 +1,171 @@
+//! https://index.ros.org/p/builtin_interfaces/
+//!
+//! Defines message types Duration and Time .
+//!
+//! The name "builtin_interfaces" is not very descriptive, but that is how
+//! it is in ROS.
+
 use serde::{Deserialize, Serialize};
-use log::error;
+use log::{error, warn};
 
 use crate::{message::Message, ros_time::ROSTime};
 
-// https://index.ros.org/p/builtin_interfaces/
-//
-// Defines message types Duration and Time .
-//
-// The name "builtin_interfaces" is not very descriptive, but that is how
-// it is in ROS.
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd)]
+///
+/// Type "Time" in ROS 2 can mean either 
+/// * `builtin_interfaces::msg::Time`, which is the
+///    message type over the wire, or
+/// * `rclcpp::Time`, which is a wrapper for `rcl_time_point_value_t` (in RCL), which
+///   again is a typedef for `rcutils_time_point_value_t`, which is in package `rclutils`
+///   and is a typedef for `int64_t`. Comment specifies this to be 
+///   "A single point in time, measured in nanoseconds since the Unix epoch."
+/// 
+/// Since this is Rust, we can cheat and define
+/// `builtin_interfaces::Time` that actually corresponds to `rclcpp::Time`,
+/// and thus has some useful operations. 
+/// But it serializes like `builtin_interfaces::msg::Time`. So this type is both.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(from = "repr::Time", into = "repr::Time")]
 pub struct Time {
-  pub sec: i32,
-  pub nanosec: u32,
+  /// Nanoseconds since the Unix epoch
+  pub nanos_since_epoch: i64,
 }
-impl Message for Time {}
 
 impl Time {
-  pub const ZERO: Time = Time { sec: 0, nanosec: 0 };
+  pub const ZERO: Time = Time { nanos_since_epoch: 0 };
 
-  pub const DUMMY: Time = Time {
-    sec: 1234567890,
-    nanosec: 1234567890,
-  };
+  pub const DUMMY: Time = Time { nanos_since_epoch: 1234567890123 };
 
   /// Returns the current time for the system clock.
   ///
   /// To use simulation-capable time, ask from `Node`.
   pub(crate) fn now() -> Self {
-    match chrono::Utc::now().timestamp_nanos_opt() {
-      None => {
+    chrono::Utc::now()
+      .timestamp_nanos_opt()
+      .map( Self::from_nanos )
+      .unwrap_or_else(|| {
         error!("Timestamp out of range.");
         Time::ZERO // Since we have to return something
-      }
-      Some(negative) if negative < 0 => {
-        error!("Timestamp out of range (negative).");
-        Time::ZERO // Since we have to return something
-      }
-      Some(non_negative) => Self::from_nanos(non_negative),
-    }
+        // But your clock would have to rather far from year 2024 AD in order to
+        // trigger this default.
+      })
   }
 
   pub fn from_nanos(nanos_since_epoch: i64) -> Self {
-    Self {
-      sec: (nanos_since_epoch / 1_000_000_000) as i32,
-      nanosec: (nanos_since_epoch % 1_000_000_000) as u32,
-    }
+    Self { nanos_since_epoch }
   }
 
   pub fn to_nanos(&self) -> i64 {
-    (self.sec as i64) * 1_000_000_000 + (self.nanosec as i64)
+    self.nanos_since_epoch
   }
 }
+
+
+// Conversions between `Time` and `repr::Time`. 
+//
+// These are non-trivial, because
+// the fractional part of `repr::Time`is (by definition) always positive, whereas
+// the integer part is signed and may be negative.
+
+impl From<repr::Time> for Time {
+  fn from(rt: repr::Time) -> Time {
+    // sanity check
+    if rt.nanosec >= 1_000_000_000 {
+      warn!("builtin_interfaces::Time fractional part at 1 or greater: {} / 10^9 ", 
+        rt.nanosec);
+    }
+
+    // But convert in any case
+    Time::from_nanos( (rt.sec as i64) * 1_000_000_000 + (rt.nanosec as i64) )
+
+    // This same conversion formula works for both positive and negative Times.
+    // 
+    // Positive numbers: No surprise, this is what you would expect.
+    //
+    // Negative: E.g. -1.5 sec is represented as -2 whole and 0.5 *10^9 nanosec fractional.
+    // Then we have -2 * 10^9 + 0.5 * 10^9 = -1.5 * 10^9 .
+  }
+}
+
+// Algorithm from https://github.com/ros2/rclcpp/blob/rolling/rclcpp/src/rclcpp/time.cpp#L278
+// function `convert_rcl_time_to_sec_nanos`
+impl From<Time> for repr::Time {
+  fn from(t: Time) -> repr::Time {
+    let t = t.to_nanos();
+    let quot = t / 1_000_000_000;
+    let rem = t % 1_000_000_000;
+    
+    // https://doc.rust-lang.org/reference/expressions/operator-expr.html#arithmetic-and-logical-binary-operators
+    // "Rust uses a remainder defined with truncating division. 
+    // Given remainder = dividend % divisor, 
+    // the remainder will have the same sign as the dividend."
+
+    if rem >= 0 {
+      // positive time, no surprise here
+      // OR, negative time, but a whole number of seconds, fractional part is zero
+      repr::Time {
+        // Saturate seconds to i32. This is different from C++ implementation
+        // in rclcpp, which just uses 
+        // `ret.sec = static_cast<std::int32_t>(result.quot)`.
+        sec: 
+          if quot > (i32::MAX as i64) { 
+            warn!("rcl_interfaces::Time conversion overflow");
+            i32::MAX 
+          } 
+          else if quot < (i32::MIN as i64) { 
+            warn!("rcl_interfaces::Time conversion underflow");
+            i32::MIN 
+          }
+          else { quot as i32 },
+        nanosec: rem as u32,
+      }
+    } else {
+      // Now `t` is negative AND `rem` is non-zero.
+      // We do some non-obvious arithmetic:
+
+      // saturate whole seconds
+      let quot_sat = if quot >= (i32::MIN as i64) {
+        quot as i32
+      } else {
+        warn!("rcl_interfaces::Time conversion underflow");
+        i32::MIN
+      };
+
+      // Now, `rem` is between -999_999_999 and -1, inclusive.
+      // Case rem = 0 is included in the positive branch.
+      //
+      // Adding 1_000_000_000 will make it positive, so cast to u32 is ok.
+      //
+      // It is also the right thing to do, because
+      // * 0.0 sec = 0 sec and 0 nanosec
+      // * -0.000_000_001 sec = -1 sec and 999_999_999 nanosec
+      // * ...
+      // * -0.99999999999 sec = -1 sec and 000_000_001 nanosec
+      // * -1.0           sec = -1 sec and 0 nanosec
+      // * -1.00000000001 sec = -2 sec and 999_999_999 nanosec
+      repr::Time {
+        sec: quot_sat - 1, // note -1
+        nanosec: (1_000_000_000 + rem) as u32,
+      }
+    }
+
+  }
+}
+
+
+// This private module defines the wire representation of Time
+mod repr {
+  use serde::{Deserialize, Serialize};
+  use crate::message::Message;
+
+  #[derive(Clone, Copy, Serialize, Deserialize, Debug,)]
+  pub struct Time {
+    pub sec: i32,
+    pub nanosec: u32,
+  }
+  impl Message for Time {}
+}
+
 
 // NOTE:
 // This may panic, if the source ROSTime is unreasonably far in the past or
@@ -175,4 +288,40 @@ impl Duration {
 
     1_000_000_000 * s + ns
   }
+}
+
+#[cfg(test)]
+mod test {
+  use super::{Time, repr};
+
+  fn repr_conv_test(t:Time){
+    let rt : repr::Time = t.into();
+    println!("{rt:?}");
+    assert_eq!(t, Time::from(rt))
+  }
+
+  #[test]
+  fn repr_conversion(){
+
+    repr_conv_test(Time::from_nanos(0_999_999_999));
+    repr_conv_test(Time::from_nanos(1_000_000_000));
+    repr_conv_test(Time::from_nanos(1_000_000_001));
+
+    repr_conv_test(Time::from_nanos(1_999_999_999));
+    repr_conv_test(Time::from_nanos(2_000_000_000));
+    repr_conv_test(Time::from_nanos(2_000_000_001));
+
+    repr_conv_test(Time::from_nanos(-0_999_999_999));
+    repr_conv_test(Time::from_nanos(-1_000_000_000));
+    repr_conv_test(Time::from_nanos(-1_000_000_001));
+
+    repr_conv_test(Time::from_nanos(-1_999_999_999));
+    repr_conv_test(Time::from_nanos(-2_000_000_000));
+    repr_conv_test(Time::from_nanos(-2_000_000_001));
+
+    repr_conv_test(Time::from_nanos(0));
+    repr_conv_test(Time::from_nanos(1));
+    repr_conv_test(Time::from_nanos(-1));
+  }
+
 }
