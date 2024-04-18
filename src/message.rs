@@ -1,4 +1,6 @@
-//! Defines [`Message`] trait
+//! Defines [`Message`] trait, which defines data that is to be sent over
+//! Topics.
+
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Trait to ensure Messages can be (de)serialized

@@ -81,11 +81,18 @@ where
 // --------------------------------------------
 // --------------------------------------------
 
+/// Selects how Service Requests and Responses are to be mapped to DDS.
+///
 /// There are different and incompatible ways to map Services onto DDS Topics.
-/// The mapping used by ROS2 depends on the DDS implementation used and its
-/// configuration. For details, see OMG Specification
-/// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/) Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS"
-/// RPC over DDS" . which defines Service Mappings "Basic" and "Enhanced"
+/// In order to interoperate with ROS 2, you have to select the same mapping it
+/// uses. The mapping used by ROS2 depends on the DDS implementation used and
+/// its configuration.
+///
+/// For details, see OMG Specification
+/// [RPC over DDS](https://www.omg.org/spec/DDS-RPC/1.0/About-DDS-RPC/)
+/// Section "7.2.4 Basic and Enhanced Service Mapping for RPC over DDS",
+/// which defines Service Mappings "Basic" and "Enhanced".
+///
 /// ServiceMapping::Cyclone represents a third mapping used by RMW for
 /// CycloneDDS.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

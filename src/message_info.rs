@@ -1,3 +1,4 @@
+//! Metadata for received `Message`s, such as `Timestamp`s and publisher id.
 use rustdds::{rpc::SampleIdentity, *};
 
 /// Message metadata

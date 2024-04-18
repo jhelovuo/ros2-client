@@ -1,3 +1,7 @@
+//! Corresponds to package [rcl_interfaces](https://index.ros.org/p/rcl_interfaces/). Defines message types for Parameter manipulation.
+//!
+//! For logging, see [`log`](crate::log).
+
 use serde::{Deserialize, Serialize};
 
 use crate::{parameters, service::AService, Message};

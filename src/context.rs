@@ -28,6 +28,10 @@ use crate::{
 };
 
 lazy_static! {
+/// Basic BestEffort QoS for subscribers
+///
+/// Note: If you want Reliable communication, both publisher and Subscriber
+/// must specify QoS Reliability = Reliable.
   pub static ref DEFAULT_SUBSCRIPTION_QOS: QosPolicies = QosPolicyBuilder::new()
     .durability(Durability::Volatile) // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
     .deadline(Deadline(Duration::INFINITE)) // default per table in DDS Spec v1.4 Section 2.2.3 Supported QoS
@@ -42,6 +46,7 @@ lazy_static! {
 }
 
 lazy_static! {
+/// Basic Reliable QoS for publishing.
   pub static ref DEFAULT_PUBLISHER_QOS: QosPolicies = QosPolicyBuilder::new()
     .durability(Durability::Volatile)
     .deadline(Deadline(Duration::INFINITE))

@@ -1,4 +1,6 @@
-//! ROS 2 interface using RustDDS
+//! ROS 2 client library, similar to the [rclcpp](https://docs.ros.org/en/rolling/p/rclcpp/) or
+//! [rclpy](https://docs.ros.org/en/rolling/p/rclpy/) libraries, in native Rust. The underlying DDS
+//! implementation, [RustDDS](https://atostek.com/en/products/rustdds/), is also native Rust.
 //!
 //! # Example
 //!
@@ -52,13 +54,20 @@ extern crate lazy_static;
 /// Some convenience topic infos for ROS2 communication
 pub mod builtin_topics;
 
-pub mod action_msgs;
+#[doc(hidden)]
+pub mod action_msgs; // action mechanism implementation
+
 /// Some builtin interfaces for ROS2 communication
 pub mod builtin_interfaces;
+
 #[doc(hidden)]
 pub mod context;
+
+#[doc(hidden)] // needed for actions implementation
 pub mod unique_identifier_msgs;
 
+#[doc(hidden)]
+#[deprecated] // we should remove the rest of these
 pub mod interfaces;
 
 /// ROS 2 Action machinery
@@ -76,7 +85,6 @@ pub mod rcl_interfaces;
 pub mod ros_time;
 pub mod service;
 
-/// Corresponds to RCL's `RCL_STEADY_TIME`
 pub mod steady_time;
 mod wide_string;
 

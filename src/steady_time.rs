@@ -18,6 +18,7 @@
 
 use std::{
   cmp::Ordering,
+  convert::TryFrom,
   fmt,
   ops::{Add, Sub},
   time::{Duration, Instant},
@@ -46,7 +47,10 @@ impl Time {
   /// returns the current time in two formats: Time and ROSTime
   pub fn now_with_ros_time() -> (Time, ROSTime) {
     let (st, ct) = Self::now_with_utc();
-    (st, ct.into())
+    let ros_time = ROSTime::try_from(ct)
+      // try_from conversion already logs an error
+      .unwrap_or(ROSTime::ZERO);
+    (st, ros_time)
   }
 
   #[doc(hidden)]

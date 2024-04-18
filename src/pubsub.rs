@@ -4,7 +4,6 @@ use mio::{Evented, Poll, PollOpt, Ready, Token};
 use futures::{
   pin_mut,
   stream::{FusedStream, StreamExt},
-  Stream,
 };
 use rustdds::{
   dds::{ReadError, ReadResult, WriteResult},
@@ -125,7 +124,7 @@ where
   pub fn async_stream_seed<'a, 'de, S>(
     &'a self,
     seed: S,
-  ) -> impl Stream<Item = ReadResult<(M, MessageInfo)>> + FusedStream + 'a
+  ) -> impl FusedStream<Item = ReadResult<(M, MessageInfo)>> + 'a
   where
     S: serde::de::DeserializeSeed<'de, Value = M> + Clone + 'a,
     M: 'static,

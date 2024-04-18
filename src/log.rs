@@ -3,9 +3,11 @@
 use serde::{Deserialize, Serialize};
 use rustdds::*;
 
-/// Rosout message structure, received from RosParticipant
+/// Log message structure, communicated over the rosout Topic.
 ///
 /// [Log](https://github.com/ros2/rcl_interfaces/blob/master/rcl_interfaces/msg/Log.msg)
+///
+/// To write log messages, use the [`rosout`](crate::rosout!) macro.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Log {
   pub timestamp: Timestamp,

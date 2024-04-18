@@ -1,4 +1,14 @@
-/// Rust-like representation of ROS2 Parameter
+//! Rust-like representation of ROS2 Parameters
+//!
+//! Parameters are key-value paris that can be set in application code, on the
+//! command line (not yet implemented), from environment variables (not
+//! implemented), or remotely.
+//!
+//! Paramters can be queried and set remotely using e.g. the `ros2 param` or
+//! `rqt` tools from ROS 2. This only works for [`Node`](crate::Node)s that have
+//! enabled Parameter Services and are running a `Spinner`.
+
+/// Named parameter
 #[derive(Debug, Clone)]
 pub struct Parameter {
   pub name: String,
@@ -21,7 +31,8 @@ pub enum ParameterValue {
   StringArray(Vec<String>),
 }
 
-// https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/ParameterType.msg
+/// List of Parameter types supported by ROS 2.
+/// <https://github.com/ros2/rcl_interfaces/blob/humble/rcl_interfaces/msg/ParameterType.msg>
 pub enum ParameterType {
   NotSet = 0,
   Bool = 1,
@@ -157,7 +168,7 @@ impl From<ParameterValue> for raw::ParameterValue {
   }
 } // impl From
 
-// more Rust-like version of SetParamtersResult
+/// Result from attempt to set a Parameter value (remotely).
 pub type SetParametersResult = Result<(), String>;
 
 impl From<SetParametersResult> for raw::SetParametersResult {
@@ -175,6 +186,7 @@ impl From<SetParametersResult> for raw::SetParametersResult {
   }
 }
 
+/// Documentation and constraints for a [`Parameter`]
 pub struct ParameterDescriptor {
   pub name: String,
   pub param_type: ParameterType, // ParameterType.msg defines enum
@@ -213,6 +225,7 @@ impl ParameterDescriptor {
   }
 }
 
+/// Optional Limits for a numeric [`Parameter`]
 pub enum NumericRange {
   NotSpecified,
   IntegerRange {
@@ -272,8 +285,8 @@ impl From<ParameterDescriptor> for raw::ParameterDescriptor {
   }
 }
 
-// This submodule contains raw, ROS2 -compatible Parameters.
-// These are for sending over the wire.
+/// Raw, ROS2-compatible Parameters for sending over the wire.
+/// Not for use in a Rust application.
 pub mod raw {
   use rustdds::*;
   use serde::{Deserialize, Serialize};

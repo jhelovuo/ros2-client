@@ -553,6 +553,7 @@ impl Spinner {
 // ----------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------
 
+/// What went wrong in `Node` creation
 #[derive(Debug)]
 pub enum NodeCreateError {
   DDS(CreateError),
@@ -565,6 +566,7 @@ impl From<CreateError> for NodeCreateError {
   }
 }
 
+/// Error when setting `Parameter`s
 pub enum ParameterError {
   AlreadyDeclared,
   InvalidName,
