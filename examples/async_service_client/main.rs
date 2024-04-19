@@ -98,13 +98,12 @@ fn main() {
             match client.async_send_request(AddTwoIntsRequest { a, b }).await {
               Ok(req_id) => {
                 println!(">>> request sent a={} b={}, {:?}", a, b, req_id.sequence_number);
-                match
-                  client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
-                    .or(async {
-                          smol::Timer::after(Duration::from_secs(2)).await;
-                          Err(WriteError::WouldBlock { data: () }.into() )
-                        }).await
-
+                let response = client.async_receive_response(req_id).map_err(CallServiceError::<()>::from)
+                      .or(async {
+                            smol::Timer::after(Duration::from_secs(2)).await;
+                            Err(WriteError::WouldBlock { data: () }.into() )
+                          });
+                match response.await
                 {
                   Ok(response) => {
                     println!("<<< response: {:?}", response);

@@ -184,7 +184,7 @@ impl UiController {
     let mut turtle_id = 1;
 
     let mut pen_index = 0;
-    let pen_requests = vec![
+    let pen_requests = [
       PenRequest {
         r: 255,
         b: 0,

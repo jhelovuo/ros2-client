@@ -108,12 +108,14 @@ fn main() {
           println!(">>> Sending goal: {order}");
           // Send a goal for the action server.
           // Wait for the server to accept or reject the goal or timeout
-          match fibonacci_action_client.async_send_goal(order)
-                .or(async {
-                  smol::Timer::after(Duration::from_secs(5)).await;
-                  println!(">>> No goal response. Is action server running?");
-                  Err(WriteError::WouldBlock { data: () }.into())
-                }).await
+          let goal_response_or_timeout =
+            fibonacci_action_client.async_send_goal(order)
+              .or(async {
+                smol::Timer::after(Duration::from_secs(5)).await;
+                println!(">>> No goal response. Is action server running?");
+                Err(WriteError::WouldBlock { data: () }.into())
+              });
+          match goal_response_or_timeout.await
           {
             Ok((goal_id, goal_response)) => {
               // Server responded to goal request.
