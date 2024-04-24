@@ -7,7 +7,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use rustdds::{
   dds::{ReadError, ReadResult, WriteError, WriteResult},
   rpc::*,
-  serialization::deserialize_from_cdr,
+  serialization::deserialize_from_cdr_with_rep_id,
   *,
 };
 
@@ -56,12 +56,13 @@ impl<R: Message> RequestWrapper<R> {
         // 2. decode Request
         let mut bytes = self.serialized_message.clone(); // ref copy only
         let (header, header_size) =
-          deserialize_from_cdr::<BasicRequestHeader>(&bytes, self.encoding)?;
+          deserialize_from_cdr_with_rep_id::<BasicRequestHeader>(&bytes, self.encoding)?;
         if bytes.len() < header_size {
           read_error_deserialization!("Service request too short")
         } else {
           let _header_bytes = bytes.split_off(header_size);
-          let (request, _request_bytes) = deserialize_from_cdr::<R>(&bytes, self.encoding)?;
+          let (request, _request_bytes) =
+            deserialize_from_cdr_with_rep_id::<R>(&bytes, self.encoding)?;
           Ok((RmwRequestId::from(header.request_id), request))
         }
       }
@@ -69,7 +70,7 @@ impl<R: Message> RequestWrapper<R> {
         // Enhanced mode does not use any header in the DDS payload.
         // Therefore, we use a wrapper that is identical to the payload.
         let (request, _request_bytes) =
-          deserialize_from_cdr::<R>(&self.serialized_message, self.encoding)?;
+          deserialize_from_cdr_with_rep_id::<R>(&self.serialized_message, self.encoding)?;
         Ok((RmwRequestId::from(message_info.sample_identity()), request))
       }
       ServiceMapping::Cyclone => cyclone_unwrap::<R>(
@@ -93,18 +94,18 @@ impl<R: Message> RequestWrapper<R> {
     match service_mapping {
       ServiceMapping::Basic => {
         let basic_header = BasicRequestHeader::new(r_id.into());
-        serialization::to_writer_endian(&mut ser_buffer, &basic_header, encoding)?;
+        serialization::to_writer_with_rep_id(&mut ser_buffer, &basic_header, encoding)?;
       }
       ServiceMapping::Enhanced => {
         // This mapping does not use any header, so nothing to do here.
       }
       ServiceMapping::Cyclone => {
         let cyclone_header = CycloneHeader::new(r_id);
-        serialization::to_writer_endian(&mut ser_buffer, &cyclone_header, encoding)?;
+        serialization::to_writer_with_rep_id(&mut ser_buffer, &cyclone_header, encoding)?;
       }
     }
     // Second, write request
-    serialization::to_writer_endian(&mut ser_buffer, &request, encoding)?;
+    serialization::to_writer_with_rep_id(&mut ser_buffer, &request, encoding)?;
     // Ok, assemble result
     Ok(RequestWrapper {
       serialized_message: ser_buffer.into_inner().freeze(),
@@ -146,12 +147,12 @@ impl<R: Message> ResponseWrapper<R> {
       ServiceMapping::Basic => {
         let mut bytes = self.serialized_message.clone(); // ref copy only
         let (header, header_size) =
-          deserialize_from_cdr::<BasicReplyHeader>(&bytes, self.encoding)?;
+          deserialize_from_cdr_with_rep_id::<BasicReplyHeader>(&bytes, self.encoding)?;
         if bytes.len() < header_size {
           read_error_deserialization!("Service response too short")
         } else {
           let _header_bytes = bytes.split_off(header_size);
-          let (response, _bytes) = deserialize_from_cdr::<R>(&bytes, self.encoding)?;
+          let (response, _bytes) = deserialize_from_cdr_with_rep_id::<R>(&bytes, self.encoding)?;
           Ok((RmwRequestId::from(header.related_request_id), response))
         }
       }
@@ -159,7 +160,7 @@ impl<R: Message> ResponseWrapper<R> {
         // Enhanced mode does not use any header in the DDS payload.
         // Therefore, we use a wrapper that is identical to the payload.
         let (response, _response_bytes) =
-          deserialize_from_cdr::<R>(&self.serialized_message, self.encoding)?;
+          deserialize_from_cdr_with_rep_id::<R>(&self.serialized_message, self.encoding)?;
         let related_sample_identity = match message_info.related_sample_identity() {
           Some(rsi) => rsi,
           None => {
@@ -200,17 +201,17 @@ impl<R: Message> ResponseWrapper<R> {
     match service_mapping {
       ServiceMapping::Basic => {
         let basic_header = BasicReplyHeader::new(r_id.into());
-        serialization::to_writer_endian(&mut ser_buffer, &basic_header, encoding)?;
+        serialization::to_writer_with_rep_id(&mut ser_buffer, &basic_header, encoding)?;
       }
       ServiceMapping::Enhanced => {
         // No header, nothing to write here.
       }
       ServiceMapping::Cyclone => {
         let cyclone_header = CycloneHeader::new(r_id);
-        serialization::to_writer_endian(&mut ser_buffer, &cyclone_header, encoding)?;
+        serialization::to_writer_with_rep_id(&mut ser_buffer, &cyclone_header, encoding)?;
       }
     }
-    serialization::to_writer_endian(&mut ser_buffer, &response, encoding)?;
+    serialization::to_writer_with_rep_id(&mut ser_buffer, &response, encoding)?;
     let serialized_message = ser_buffer.into_inner().freeze();
     Ok(ResponseWrapper {
       serialized_message,
@@ -294,12 +295,12 @@ fn cyclone_unwrap<R: Message>(
   // 1. decode "CycloneHeader" and
   // 2. decode Request/response
   let mut bytes = serialized_message; // ref copy only, to make "mutable"
-  let (header, header_size) = deserialize_from_cdr::<CycloneHeader>(&bytes, encoding)?;
+  let (header, header_size) = deserialize_from_cdr_with_rep_id::<CycloneHeader>(&bytes, encoding)?;
   if bytes.len() < header_size {
     read_error_deserialization!("Service message too short")
   } else {
     let _header_bytes = bytes.split_off(header_size);
-    let (response, _response_bytes) = deserialize_from_cdr::<R>(&bytes, encoding)?;
+    let (response, _response_bytes) = deserialize_from_cdr_with_rep_id::<R>(&bytes, encoding)?;
     let req_id = RmwRequestId {
       writer_guid, // TODO: This seems to be completely wrong!!!
       // When we are the client, we get half of Client GUID on the CycloneHeader, other half from
