@@ -1,6 +1,6 @@
 [package]
 name = "ros2-client"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2018"
 authors = ["Juhana Helovuo <juhana.helovuo@atostek.com>"]
 description = "ROS2 client library based on RustDDS"
@@ -23,8 +23,8 @@ security = [
 [dependencies]
 
 # rustdds = {  path = "../RustDDS"  } # dev setting
-rustdds = {   git = "https://github.com/jhelovuo/RustDDS.git" }
-# rustdds = {  version = "~0.10.1"  } # release setting
+# rustdds = {   git = "https://github.com/jhelovuo/RustDDS.git" }
+rustdds = {  version = "~0.10.2"  } # release setting
 
 mio = "^0.6.23"
 mio-extras = "2.0.6"

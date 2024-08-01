@@ -101,12 +101,11 @@ impl TryFrom<repr::NodeEntitiesInfo> for NodeEntitiesInfo {
   type Error = NameError;
 
   fn try_from(r: repr::NodeEntitiesInfo) -> Result<NodeEntitiesInfo, NameError> {
-    let name = NodeName::new(&r.node_namespace, &r.node_name).map_err(|e| {
+    let name = NodeName::new(&r.node_namespace, &r.node_name).inspect_err(|_e| {
       error!(
         "Offending node name:  namespace={:?} name={:?}",
         r.node_namespace, r.node_name
-      );
-      e
+      )
     })?;
     Ok(NodeEntitiesInfo {
       name,
