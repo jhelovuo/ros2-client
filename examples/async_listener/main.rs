@@ -2,6 +2,10 @@ use futures::StreamExt;
 use ros2_client::{ros2::policy, *};
 
 pub fn main() {
+  // Here is a fixed path, so this example must be started from
+  // RustDDS main directory
+  log4rs::init_file("examples/async_listener/log4rs.yaml", Default::default()).unwrap();
+
   let context = Context::new().unwrap();
   let mut node = context
     .new_node(
