@@ -1090,10 +1090,9 @@ impl Node {
   }
 
   // reader waits for at least one writer to be present
-  pub(crate) async fn wait_for_writer(&self, reader: GUID) {
+  pub(crate) fn wait_for_writer(&self, reader: GUID) -> impl Future<Output = ()> {
     // TODO: This may contain some synchrnoization hazard
     let status_receiver = self.status_receiver();
-    pin_mut!(status_receiver);
 
     let already_present = self
       .readers_to_remote_writers
@@ -1104,29 +1103,18 @@ impl Node {
       .unwrap_or(false); // we do not even know the reader
 
     if already_present {
-      info!("wait_for_writer: Already have matched a writer.");
+      WriterWait::Ready
     } else {
-      loop {
-        // waiting loop
-        debug!("wait_for_writer: Waiting for a writer.");
-        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched {
-          local_reader,
-          remote_writer,
-        }) = status_receiver.select_next_some().await
-        {
-          if local_reader == reader {
-            info!("wait_for_writer: Matched remote writer {remote_writer:?}");
-            break; // we got a match
-          }
-        }
+      WriterWait::Wait {
+        this_reader: reader,
+        status_receiver,
       }
     }
   }
 
   pub(crate) fn wait_for_reader(&self, writer: GUID) -> impl Future<Output = ()> {
-    // TODO: This may contain some synchrnoization hazard
+    // TODO: This may contain some synchrnoization hazard.
     let status_receiver = self.status_receiver();
-    //pin_mut!(status_receiver);
 
     let already_present = self
       .writers_to_remote_readers
@@ -1135,6 +1123,9 @@ impl Node {
       .get(&writer)
       .map(|readers| !readers.is_empty()) // there is someone matched
       .unwrap_or(false); // we do not even know who is asking
+
+    // TODO: Is is possible to miss reader events if they appear after the check
+    // above, but do not somehow end up in the status_receiver stream?
 
     if already_present {
       info!("wait_for_reader: Already have matched a reader.");
@@ -1651,6 +1642,60 @@ impl Future for ReaderWait {
             if local_writer == this_writer =>
           {
             info!("wait_for_reader: Matched remote reader {remote_reader:?}.");
+            Poll::Ready(())
+          }
+
+          Poll::Ready(_) =>
+          // Received something else, such as other event or error
+          {
+            Poll::Pending
+          }
+
+          Poll::Pending => Poll::Pending,
+        }
+      }
+    }
+  }
+}
+
+/// Future type for waiting Writers to appear over ROS2 Topic.
+///
+/// Produced by `node.wait_for_writeer(writer_guid)`
+//
+// This is implemented as a separate struct instead of just async function in
+// Node so that it does not borrow the node and thus can be Send.
+pub enum WriterWait {
+  // We need to wait for an event that is for us
+  Wait {
+    this_reader: GUID,
+    status_receiver: Receiver<NodeEvent>,
+  },
+  // No need to wait, can resolve immediately.
+  Ready,
+}
+
+impl Future for WriterWait {
+  type Output = ();
+
+  fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+    match *self {
+      WriterWait::Ready => Poll::Ready(()),
+
+      WriterWait::Wait {
+        this_reader,
+        ref status_receiver,
+      } => {
+        debug!("wait_for_writer: Waiting for a writer.");
+        let mut pinned_recv = pin!(status_receiver.recv());
+        match pinned_recv.as_mut().poll(cx) {
+          // Check if we have RemoteWriterMatched event and it is for this_writer
+          Poll::Ready(Ok(NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched {
+            local_reader,
+            remote_writer,
+          })))
+            if local_reader == this_reader =>
+          {
+            info!("wait_for_writer: Matched remote writer {remote_writer:?}.");
             Poll::Ready(())
           }
 

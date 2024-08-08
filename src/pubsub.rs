@@ -4,6 +4,7 @@ use mio::{Evented, Poll, PollOpt, Ready, Token};
 use futures::{
   pin_mut,
   stream::{FusedStream, StreamExt},
+  Future,
 };
 use rustdds::{
   dds::{ReadError, ReadResult, WriteResult},
@@ -65,8 +66,8 @@ impl<M: Serialize> Publisher<M> {
   ///
   /// `my_node` must be the Node that created this Subscription, or the length
   /// of the wait is undefined.
-  pub async fn wait_for_subscription(&self, my_node: &Node) {
-    my_node.wait_for_reader(self.guid()).await
+  pub fn wait_for_subscription(&self, my_node: &Node) -> impl Future<Output = ()> + Send {
+    my_node.wait_for_reader(self.guid())
   }
 
   pub async fn async_publish(&self, message: M) -> WriteResult<(), M> {
@@ -191,8 +192,8 @@ where
   ///
   /// `my_node` must be the Node that created this Subscription, or the length
   /// of the wait is undefined.
-  pub async fn wait_for_publisher(&self, my_node: &Node) {
-    my_node.wait_for_writer(self.guid()).await
+  pub fn wait_for_publisher(&self, my_node: &Node) -> impl Future<Output = ()> + Send {
+    my_node.wait_for_writer(self.guid())
   }
 }
 
