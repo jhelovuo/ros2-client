@@ -1,12 +1,15 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
+  pin::{pin, Pin},
   sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
   },
 };
 
-use futures::{pin_mut, stream::FusedStream, FutureExt, Stream, StreamExt};
+use futures::{
+  pin_mut, stream::FusedStream, task, task::Poll, Future, FutureExt, Stream, StreamExt,
+};
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -1071,6 +1074,7 @@ impl Node {
   /// Get an async Receiver for discovery events.
   ///
   /// There must be an async task executing `spin` to get any data.
+  /// This function may panic if there is no Spinner running.
   pub fn status_receiver(&self) -> Receiver<NodeEvent> {
     if self.have_spinner() {
       let (status_event_sender, status_event_receiver) = async_channel::bounded(8);
@@ -1119,9 +1123,10 @@ impl Node {
     }
   }
 
-  pub(crate) async fn wait_for_reader(&self, writer: GUID) {
+  pub(crate) fn wait_for_reader(&self, writer: GUID) -> impl Future<Output = ()> {
+    // TODO: This may contain some synchrnoization hazard
     let status_receiver = self.status_receiver();
-    pin_mut!(status_receiver);
+    //pin_mut!(status_receiver);
 
     let already_present = self
       .writers_to_remote_readers
@@ -1133,19 +1138,11 @@ impl Node {
 
     if already_present {
       info!("wait_for_reader: Already have matched a reader.");
+      ReaderWait::Ready
     } else {
-      loop {
-        debug!("wait_for_reader: Waiting for a reader.");
-        if let NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched {
-          local_writer,
-          remote_reader,
-        }) = status_receiver.select_next_some().await
-        {
-          if local_writer == writer {
-            info!("wait_for_reader: Matched remote reader {remote_reader:?}.");
-            break; // we got a match
-          }
-        }
+      ReaderWait::Wait {
+        this_writer: writer,
+        status_receiver,
       }
     }
   }
@@ -1614,4 +1611,58 @@ macro_rules! rosout {
             std::line!(),
         );
     );
+}
+
+/// Future type for waiting Readers to appear over ROS2 Topic.
+///
+/// Produced by `node.wait_for_reader(writer_guid)`
+//
+// This is implemented as a separate struct instead of just async function in
+// Node so that it does not borrow the node and thus can be Send.
+pub enum ReaderWait {
+  // We need to wait for an event that is for us
+  Wait {
+    this_writer: GUID, // Writer who is waiting for Readers to appear
+    status_receiver: Receiver<NodeEvent>,
+  },
+  // No need to wait, can resolve immediately.
+  Ready,
+}
+
+impl Future for ReaderWait {
+  type Output = ();
+
+  fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+    match *self {
+      ReaderWait::Ready => Poll::Ready(()),
+
+      ReaderWait::Wait {
+        this_writer,
+        ref status_receiver,
+      } => {
+        debug!("wait_for_writer: Waiting for a writer.");
+        let mut pinned_recv = pin!(status_receiver.recv());
+        match pinned_recv.as_mut().poll(cx) {
+          // Check if we have RemoteReaderMatched event and it is for this_writer
+          Poll::Ready(Ok(NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched {
+            local_writer,
+            remote_reader,
+          })))
+            if local_writer == this_writer =>
+          {
+            info!("wait_for_reader: Matched remote reader {remote_reader:?}.");
+            Poll::Ready(())
+          }
+
+          Poll::Ready(_) =>
+          // Received something else, such as other event or error
+          {
+            Poll::Pending
+          }
+
+          Poll::Pending => Poll::Pending,
+        }
+      }
+    }
+  }
 }
