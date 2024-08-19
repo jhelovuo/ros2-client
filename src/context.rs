@@ -424,3 +424,19 @@ impl Drop for ContextInner {
     self.broadcast_node_infos();
   }
 }
+
+// -------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------
+
+#[test]
+fn test_node_create() {
+  use crate::ParameterValue;
+
+  let context = Context::new().unwrap();
+  let _node = context
+    .new_node(
+      NodeName::new("/rustdds", "test_node").unwrap(),
+      NodeOptions::new().declare_parameter("foo", ParameterValue::Boolean(true)),
+    )
+    .is_ok();
+}

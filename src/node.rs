@@ -1,5 +1,7 @@
 use std::{
   collections::{BTreeMap, BTreeSet},
+  error::Error,
+  fmt,
   pin::{pin, Pin},
   sync::{
     atomic::{AtomicBool, Ordering},
@@ -566,6 +568,24 @@ pub enum NodeCreateError {
 impl From<CreateError> for NodeCreateError {
   fn from(c: CreateError) -> NodeCreateError {
     NodeCreateError::DDS(c)
+  }
+}
+
+impl fmt::Display for NodeCreateError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      Self::DDS(create_error) => write!(f, "NodeCreateError::DDS : {create_error}"),
+      Self::BadParameter(s) => write!(f, "NodeCreateError::BadParameter : {s}"),
+    }
+  }
+}
+
+impl Error for NodeCreateError {
+  fn source(&self) -> Option<&(dyn Error + 'static)> {
+    match self {
+      Self::DDS(create_error) => Some(create_error),
+      Self::BadParameter(_) => None,
+    }
   }
 }
 

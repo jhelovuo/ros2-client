@@ -115,6 +115,8 @@ impl fmt::Display for NameError {
   }
 }
 
+impl std::error::Error for NameError {}
+
 /// Names for Topics, Services
 ///
 /// See [Names](https://wiki.ros.org/Names) for ROS 1.
