@@ -2,7 +2,7 @@ use std::{
   collections::{BTreeMap, BTreeSet},
   error::Error,
   fmt,
-  pin::{pin, Pin},
+  pin::Pin,
   sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -11,6 +11,7 @@ use std::{
 
 use futures::{
   pin_mut, stream::FusedStream, task, task::Poll, Future, FutureExt, Stream, StreamExt,
+  stream,
 };
 use async_channel::Receiver;
 #[allow(unused_imports)]
@@ -458,11 +459,18 @@ impl Spinner {
     let mut sender_array = self.status_event_senders.lock().unwrap();
     for (i, sender) in sender_array.iter().enumerate() {
       match sender.try_send(event.clone()) {
-        Ok(()) => {}
+        Ok(()) => {
+          // expected result
+        }
         Err(async_channel::TrySendError::Closed(_)) => {
+          // trace!("Closing {i}");
           closed.push(i) // mark for deletion
         }
-        Err(_) => {}
+        Err(e) => {
+         debug!("send_status_event: Send error for {i}: {e:?}");
+         // We do not do anything about the error. It may be that the receiver
+         // is not interested and the channel is full.
+        }
       }
     }
 
@@ -1127,7 +1135,7 @@ impl Node {
     } else {
       WriterWait::Wait {
         this_reader: reader,
-        status_receiver,
+        status_event_stream: Box::pin(status_receiver),
       }
     }
   }
@@ -1153,7 +1161,7 @@ impl Node {
     } else {
       ReaderWait::Wait {
         this_writer: writer,
-        status_receiver,
+        status_event_stream: Box::pin(status_receiver),
       }
     }
   }
@@ -1630,48 +1638,51 @@ macro_rules! rosout {
 //
 // This is implemented as a separate struct instead of just async function in
 // Node so that it does not borrow the node and thus can be Send.
-pub enum ReaderWait {
+//use pin_project::pin_project;
+
+pub enum ReaderWait<'a> {
   // We need to wait for an event that is for us
   Wait {
     this_writer: GUID, // Writer who is waiting for Readers to appear
-    status_receiver: Receiver<NodeEvent>,
+    status_event_stream: stream::BoxStream<'a,NodeEvent>,
+
   },
   // No need to wait, can resolve immediately.
   Ready,
 }
 
-impl Future for ReaderWait {
+
+impl Future for ReaderWait<'_> {
   type Output = ();
 
-  fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+  fn poll(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
     match *self {
       ReaderWait::Ready => Poll::Ready(()),
 
       ReaderWait::Wait {
         this_writer,
-        ref status_receiver,
+        ref mut status_event_stream,
       } => {
-        debug!("wait_for_writer: Waiting for a writer.");
-        let mut pinned_recv = pin!(status_receiver.recv());
-        match pinned_recv.as_mut().poll(cx) {
-          // Check if we have RemoteReaderMatched event and it is for this_writer
-          Poll::Ready(Ok(NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched {
-            local_writer,
-            remote_reader,
-          })))
-            if local_writer == this_writer =>
-          {
-            info!("wait_for_reader: Matched remote reader {remote_reader:?}.");
-            Poll::Ready(())
-          }
+        debug!("wait_for_reader: Waiting for a reader.");
+        loop {
+          match status_event_stream.poll_next_unpin(cx) {
+            // Check if we have RemoteReaderMatched event and it is for this_writer
+            Poll::Ready(Some(NodeEvent::DDS(DomainParticipantStatusEvent::RemoteReaderMatched {
+              local_writer, remote_reader
+            })))
+              if local_writer == this_writer => {
+                debug!("wait_for_reader: Matched remote reader {remote_reader:?}.");
+                return Poll::Ready(())
+              }
 
-          Poll::Ready(_) =>
-          // Received something else, such as other event or error
-          {
-            Poll::Pending
-          }
+            Poll::Ready(_) => {
+              // Received something else, such as other event or error
+              debug!("wait_for_reader: other event. Continue polling.");
+              // So we do nothing but go to the next iteration.
+            }
 
-          Poll::Pending => Poll::Pending,
+            Poll::Pending => return Poll::Pending,
+          }
         }
       }
     }
@@ -1680,52 +1691,57 @@ impl Future for ReaderWait {
 
 /// Future type for waiting Writers to appear over ROS2 Topic.
 ///
-/// Produced by `node.wait_for_writeer(writer_guid)`
+/// Produced by `node.wait_for_writer(writer_guid)`
 //
 // This is implemented as a separate struct instead of just async function in
 // Node so that it does not borrow the node and thus can be Send.
-pub enum WriterWait {
+pub enum WriterWait<'a> {
   // We need to wait for an event that is for us
   Wait {
     this_reader: GUID,
-    status_receiver: Receiver<NodeEvent>,
+    status_event_stream: stream::BoxStream<'a,NodeEvent>,
   },
   // No need to wait, can resolve immediately.
   Ready,
 }
 
-impl Future for WriterWait {
+impl Future for WriterWait<'_> {
   type Output = ();
 
-  fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+  fn poll(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
     match *self {
       WriterWait::Ready => Poll::Ready(()),
 
       WriterWait::Wait {
         this_reader,
-        ref status_receiver,
+        ref mut status_event_stream,
       } => {
         debug!("wait_for_writer: Waiting for a writer.");
-        let mut pinned_recv = pin!(status_receiver.recv());
-        match pinned_recv.as_mut().poll(cx) {
-          // Check if we have RemoteWriterMatched event and it is for this_writer
-          Poll::Ready(Ok(NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched {
-            local_reader,
-            remote_writer,
-          })))
-            if local_reader == this_reader =>
-          {
-            info!("wait_for_writer: Matched remote writer {remote_writer:?}.");
-            Poll::Ready(())
-          }
+        loop {
+          // We loop to pump events out of the stream until we get the desired event
+          // or "Pending". If we stop at the first event, then there is no waker
+          // installed and we are stuck.
+          match status_event_stream.poll_next_unpin(cx) {
+            // Check if we have RemoteWriterMatched event and it is for this_writer
+            Poll::Ready(Some(NodeEvent::DDS(DomainParticipantStatusEvent::RemoteWriterMatched {
+              local_reader,
+              remote_writer,
+            })))
+              if local_reader == this_reader =>
+            {
+              debug!("wait_for_writer: Matched remote writer {remote_writer:?}.");
+              return Poll::Ready(())
+            }
 
-          Poll::Ready(_) =>
-          // Received something else, such as other event or error
-          {
-            Poll::Pending
-          }
+            Poll::Ready(_) =>
+            {
+              // Received something else, such as other event or error
+              trace!("=== other writer. Continue polling.");
+              // No return, go to next iteration.
+            }
 
-          Poll::Pending => Poll::Pending,
+            Poll::Pending => return Poll::Pending,
+          }
         }
       }
     }
