@@ -29,6 +29,18 @@ Please see the included examples on how to use the various features.
 * Message generation: from `.msg` to `.rs`- experimental
 * ROS 2 Security - experimental
 
+## ROS 2 Releases Compatibility
+
+This is what is expected to work. There are no routine tests against older releases.
+
+| ROS 2 Release | `ros2-client` should interoperate? |
+| ------------- | :------------ |
+| A - E         | Maybe. Not tested. |
+| Foxy, Galactic, Humble | Yes. Enable feature `pre-iron-gid` when building `ros2-client` 0.7.5 or newer |
+| Iron  | Yes. Not well tested. Requires `ros2-client` 0.7.5 or newer |
+| Jazzy | Yes. Requires `ros2-client` 0.7.5 or newer | 
+
+
 ## New in Version 0.7:
 * `NodeName` namespace is no longer allowed to be the empty string, because it confuses ROS 2 tools. Minimum namespace is "/".
 * Parameter support, incl. Paramater services
