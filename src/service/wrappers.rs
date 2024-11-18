@@ -71,7 +71,32 @@ impl<R: Message> RequestWrapper<R> {
         // Therefore, we use a wrapper that is identical to the payload.
         let (request, _request_bytes) =
           deserialize_from_cdr_with_rep_id::<R>(&self.serialized_message, self.encoding)?;
-        Ok((RmwRequestId::from(message_info.sample_identity()), request))
+        let mut rmw_req_id = RmwRequestId::from(
+          message_info.related_sample_identity()
+            .unwrap_or_else(|| {
+              // ServiceMapping::Enhanced is supposed to contain related sample identity as 
+              // inline QoS parameter.
+              //
+              // Use the identity of the incoming request as a default, if there was no
+              // related sample identity specified in inline QoS.
+              let backup_identity = message_info.sample_identity();
+              warn!("RequestWrapper::unwrap: related_sample_identity missing. Using sample_identity = {backup_identity:?}");
+              backup_identity
+            })
+        );
+
+        // Logic added for eProsima FastDDS compatibility:
+        //
+        // If the SequenceNumber in related_sample_identity (presumable from inline QoS)
+        // is SEQUENCENUMBER_UNKNOWN, then it cannot refer to a real and valid DATA submessage.
+        // We patch the situation by using the actual SequenceNumber of the Request DATA submessage.
+        //
+        // Maybe FastDDS just forgets to set the field in RELATED_SAMPLE_IDENTITY inline QoS parameter?
+        if rmw_req_id.sequence_number == SequenceNumber::UNKNOWN {
+          rmw_req_id.sequence_number = message_info.sample_identity().sequence_number;
+        }
+
+        Ok((rmw_req_id, request))
       }
       ServiceMapping::Cyclone => cyclone_unwrap::<R>(
         self.serialized_message.clone(),

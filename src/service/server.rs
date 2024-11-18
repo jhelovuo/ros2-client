@@ -118,6 +118,7 @@ where
         let mi = MessageInfo::from(&dcc);
         let req_wrapper = dcc.into_value();
         let (ri, req) = req_wrapper.unwrap(self.service_mapping, &mi)?;
+        debug!("async_receive_request: {ri:?}");
         Ok((ri, req))
       }
       // This should never occur, because topic do not "end".
@@ -138,6 +139,7 @@ where
           Ok(dcc) => {
             let mi = MessageInfo::from(&dcc);
             let req_wrapper = dcc.into_value();
+            debug!("receive_request_stream: messageinfo={mi:?}");
             req_wrapper.unwrap(self.service_mapping, &mi)
           }
         } // match
@@ -157,6 +159,8 @@ where
       RepresentationIdentifier::CDR_LE,
       response,
     )?;
+    debug!("async_send_response: rmw_req_id = {rmw_req_id:?}");
+    debug!("async_send_response: related_sample_identity = {:?}", SampleIdentity::from(rmw_req_id));
     let write_opts = WriteOptionsBuilder::new()
       .source_timestamp(Timestamp::now()) // always add source timestamp
       .related_sample_identity(SampleIdentity::from(rmw_req_id))
